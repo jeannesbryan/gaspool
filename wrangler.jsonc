@@ -1,0 +1,62 @@
+/**
+ * For more details on how to configure Wrangler, refer to:
+ * https://developers.cloudflare.com/workers/wrangler/configuration/
+ */
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "gaspool",
+  "main": "src/index.ts",
+  "compatibility_date": "2024-04-03", // Gunakan tanggal stabil saat ini
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "assets": {
+    "binding": "ASSETS",
+    "directory": "./public"
+  },
+  "observability": {
+    "enabled": true
+  },
+  "upload_source_maps": true,
+  
+  // DATABASE PUSAT
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "gaspool-db",
+      "database_id": "ISI_DENGAN_DATABASE_ID_D1_ANDA"
+    }
+  ],
+  
+  // SATELIT MEDIA (R2)
+  "r2_buckets": [
+    {
+      "binding": "R2_BUCKET",
+      "bucket_name": "ISI_DENGAN_NAMA_BUCKET_R2_ANDA"
+    }
+  ],
+  
+  // RADAR PELETON (KV)
+  "kv_namespaces": [
+    {
+      "binding": "GASPOOL_RADAR",
+      "id": "ISI_DENGAN_KV_NAMESPACE_ID_ANDA"
+    }
+  ],
+
+  // JALUR LALU LINTAS VIP (Custom Domain)
+  // Hapus tanda /* dan */ di bawah ini jika ingin menggunakan domain sendiri
+  /*
+  "routes": [
+    {
+      "pattern": "yourdomain.com",
+      "custom_domain": true
+    }
+  ],
+  */
+  
+  // VARIABEL LINGKUNGAN
+  "vars": {
+    "TURNSTILE_SITE_KEY": "ISI_DENGAN_SITE_KEY_CLOUDFLARE_TURNSTILE_ANDA" 
+  }
+}
