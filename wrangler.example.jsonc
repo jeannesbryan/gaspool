@@ -1,0 +1,70 @@
+/**
+ * Example Wrangler config for Gaspool.
+ *
+ * Copy this file to `wrangler.jsonc`, then replace all placeholder values
+ * with your own Cloudflare resources.
+ *
+ * Do not commit your real `wrangler.jsonc`.
+ *
+ * Docs:
+ * https://developers.cloudflare.com/workers/wrangler/configuration/
+ */
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+
+  "name": "gaspool",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-05-16",
+  "compatibility_flags": ["nodejs_compat"],
+
+  "assets": {
+    "binding": "ASSETS",
+    "directory": "./public"
+  },
+
+  "observability": {
+    "enabled": true
+  },
+
+  "upload_source_maps": true,
+
+  // D1 database for users, rides, activities, and app data.
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "YOUR_D1_DATABASE_NAME",
+      "database_id": "YOUR_D1_DATABASE_ID"
+    }
+  ],
+
+  // R2 bucket for route JSON files and peleton radio audio.
+  "r2_buckets": [
+    {
+      "binding": "R2_BUCKET",
+      "bucket_name": "YOUR_R2_BUCKET_NAME"
+    }
+  ],
+
+  // KV namespace for live peleton radar.
+  "kv_namespaces": [
+    {
+      "binding": "GASPOOL_RADAR",
+      "id": "YOUR_KV_NAMESPACE_ID"
+    }
+  ],
+
+  // Optional custom domain.
+  // Remove this block if you do not use a custom domain.
+  "routes": [
+    {
+      "pattern": "YOUR_DOMAIN.com",
+      "custom_domain": true
+    }
+  ],
+
+  // Public variables.
+  // TURNSTILE_SITE_KEY is public and safe to expose.
+  "vars": {
+    "TURNSTILE_SITE_KEY": "YOUR_CLOUDFLARE_TURNSTILE_SITE_KEY"
+  }
+}

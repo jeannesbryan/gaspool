@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Gaspool Offline</title>
+
+    <style>
+      :root {
+        --primary: #ff5f00;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: #000;
+        color: #fff;
+        font-family: Inter, sans-serif;
+        min-height: 100vh;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        padding: 20px;
+      }
+
+      .panel {
+        width: 100%;
+        max-width: 500px;
+        border: 1px solid rgba(255, 95, 0, 0.3);
+        border-radius: 20px;
+        padding: 30px;
+        background: rgba(255, 255, 255, 0.03);
+        backdrop-filter: blur(20px);
+      }
+
+      .logo {
+        font-size: 4rem;
+        text-align: center;
+        margin-bottom: 10px;
+      }
+
+      .title {
+        color: var(--primary);
+        font-weight: 900;
+        font-style: italic;
+        text-align: center;
+        margin-bottom: 20px;
+      }
+
+      .line {
+        color: #aaa;
+        font-size: 14px;
+        margin: 8px 0;
+      }
+
+      .btn {
+        margin-top: 25px;
+        width: 100%;
+        padding: 15px;
+        border: none;
+        border-radius: 12px;
+        background: var(--primary);
+        color: #fff;
+        font-weight: 900;
+        cursor: pointer;
+      }
+    </style>
+  </head>
+
+  <body>
+    <div class="panel">
+      <div class="logo">📡</div>
+
+      <div class="title">GASPOOL OFFLINE</div>
+
+      <div class="line">> CONNECTION LOST</div>
+
+      <div class="line">> SATELLITE LINK UNAVAILABLE</div>
+
+      <div class="line">> CHECK NETWORK STATUS</div>
+
+      <div class="line">> RETRY WHEN SIGNAL RETURNS</div>
+
+      <button class="btn" onclick="location.reload()">RECONNECT</button>
+    </div>
+  </body>
+</html>

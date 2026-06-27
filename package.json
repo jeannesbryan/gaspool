@@ -1,0 +1,19 @@
+{
+  "name": "gaspool",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy --minify",
+    "cf-typegen": "wrangler types --env-interface CloudflareBindings"
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "hono": "^4.12.27"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.2",
+    "prettier": "^3.8.5",
+    "typescript": "^6.0.3",
+    "wrangler": "^4.105.0"
+  }
+}
