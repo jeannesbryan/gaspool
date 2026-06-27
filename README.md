@@ -64,29 +64,6 @@ Gaspool is designed to run serverlessly on Cloudflare using **Workers**, **D1**,
 
 ---
 
-## Project Structure
-
-```text
-gaspool/
-├── public/
-│   ├── assets/
-│   ├── manifest.json
-│   ├── offline.html
-│   └── sw.js
-├── src/
-│   ├── index.ts
-│   ├── routes/
-│   └── ...
-├── .gitignore
-├── package.json
-├── package-lock.json
-├── README.md
-├── tsconfig.json
-└── wrangler.example.jsonc
-```
-
----
-
 ## Requirements
 
 Before running this project, make sure you have:
@@ -107,7 +84,7 @@ Before running this project, make sure you have:
 Clone the repository:
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/gaspool.git
+git clone https://github.com/jeannesbryan/gaspool.git
 cd gaspool
 ```
 
@@ -203,32 +180,6 @@ The file is generated automatically and should not be committed.
 
 ---
 
-## Development
-
-Run the local development server:
-
-```bash
-npm run dev
-```
-
-Then open the local URL shown by Wrangler.
-
-Common pages:
-
-```text
-/login
-/
-/record?type=ride
-/record?type=run
-/record?type=walk
-/record?type=hike
-/detail/:id
-/video_flex/:id
-/radar/:room
-```
-
----
-
 ## Deployment
 
 Deploy to Cloudflare Workers:
@@ -317,142 +268,8 @@ TURNSTILE_SECRET_KEY
 
 ---
 
-## Available Scripts
-
-```bash
-npm run dev
-```
-
-Run the app locally with Wrangler.
-
-```bash
-npm run deploy
-```
-
-Deploy the Worker to Cloudflare.
-
-```bash
-npm run cf-typegen
-```
-
-Generate Cloudflare Worker binding types.
-
----
-
-## Recommended `.gitignore`
-
-Make sure these files and folders are not committed:
-
-```gitignore
-# Dependencies
-node_modules/
-
-# Wrangler local state
-.wrangler/
-
-# Real Cloudflare config
-wrangler.jsonc
-
-# Generated Cloudflare types
-worker-configuration.d.ts
-
-# Env / secrets
-.env
-.env.*
-.dev.vars
-.dev.vars.*
-
-# Logs
-*.log
-npm-debug.log*
-
-# OS / editor
-.DS_Store
-Thumbs.db
-.vscode/
-.idea/
-```
-
----
-
-## Files That Should Be Committed
-
-Recommended files for the public repository:
-
-```text
-src/
-public/
-package.json
-package-lock.json
-tsconfig.json
-README.md
-.gitignore
-wrangler.example.jsonc
-```
-
----
-
-## Files That Should Not Be Committed
-
-Do not commit:
-
-```text
-node_modules/
-.wrangler/
-wrangler.jsonc
-worker-configuration.d.ts
-.env
-.dev.vars
-```
-
-Also never commit:
-
-```text
-JWT_SECRET
-TURNSTILE_SECRET_KEY
-real Cloudflare database IDs
-real KV namespace IDs
-private API keys
-private tokens
-```
-
----
-
 ## Open Source Notes
 
 This repository does not include private Cloudflare resource IDs or production secrets.
 
 To run your own instance, you need to create your own Cloudflare resources and update `wrangler.jsonc` based on `wrangler.example.jsonc`.
-
----
-
-## Repository Topics
-
-Suggested GitHub topics:
-
-```text
-cloudflare-workers
-hono
-typescript
-pwa
-d1
-r2
-kv
-serverless
-cycling
-running
-gps-tracking
-live-tracking
-leaflet
-gpx
-turnstile
-fitness
-route-tracking
-webapp
-```
-
----
-
-## About
-
-Cloudflare Workers + Hono PWA for cycling/running tracking, live peleton radar, GPX export, route sharing, and cinematic video recap.
