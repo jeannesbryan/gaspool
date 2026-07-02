@@ -15,6 +15,8 @@ export type Bindings = {
   R2_BUCKET: R2Bucket;
   GASPOOL_RADAR: KVNamespace;
   JWT_SECRET: string;
+  ORS_API_KEY: string;
+  ROUTING_PROVIDER?: string;
   TURNSTILE_SITE_KEY: string;
   TURNSTILE_SECRET_KEY: string;
 };

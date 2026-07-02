@@ -83,6 +83,7 @@ dashboard.get("/", async (c) => {
           <div class="btn-grid">
             <button class="btn btn-orange" onclick="window.location.href='/record?type=ride'">🚴 GOWES SOLO</button>
             <button class="btn btn-accent" onclick="openModal('peletonModal')">👥 GOWES PELETON</button>
+            <button class="btn btn-outline" style="grid-column: span 2; border-color: var(--primary); color: var(--primary);" onclick="window.location.href='/route_plan'">🧭 RUTE PLAN</button>
             <button class="btn btn-orange" style="grid-column: span 2;" onclick="openModal('runModal')">🏃 PACE MODE</button>
             <button class="btn btn-outline" onclick="window.location.href='/sync_strava'">🧡 STRAVA SYNC</button>
             <button class="btn btn-outline" onclick="window.location.href='/gpx_import'">📥 GPX IMPORT</button>
@@ -521,7 +522,314 @@ let bunkerSyncRunning = false;
 });
 
 // ==========================================
-// 2. FITUR: HEATMAP OMNI-TRACKER
+// 2. FITUR: ROUTE PLAN BUILDER
+// ==========================================
+dashboard.get("/route_plan", async (c) => {
+  const token = getCookie(c, "gaspool_session");
+  if (!token) return c.redirect("/login");
+
+  return c.html(`
+    <!DOCTYPE html>
+    <html lang="id">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+        <title>Route Plan - Gaspool</title>
+        <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+        <style>
+            :root { --primary: #FF5F00; --bg: #0a0a12; --panel: rgba(10,10,18,0.9); --muted: #94a3b8; --line: rgba(255,255,255,0.1); --route: #3498db; }
+            * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+            html, body { margin: 0; height: 100%; background: #000; color: #fff; font-family: 'Inter', sans-serif; overflow: hidden; }
+            #map { position: fixed; inset: 0; z-index: 1; background: #000; }
+            .topbar { position: fixed; top: 0; left: 0; right: 0; z-index: 1000; padding: 14px; display: flex; justify-content: space-between; align-items: center; gap: 10px; pointer-events: none; }
+            .brand, .back-btn { pointer-events: auto; background: var(--panel); border: 1px solid var(--line); backdrop-filter: blur(14px); border-radius: 14px; }
+            .brand { padding: 12px 14px; min-width: 0; }
+            .brand h1 { margin: 0; color: var(--primary); font-style: italic; font-size: 1.2rem; line-height: 1; font-weight: 900; }
+            .brand div { margin-top: 4px; color: var(--muted); font-size: 0.68rem; font-weight: 900; letter-spacing: 1px; }
+            .back-btn { color: #fff; text-decoration: none; padding: 12px 14px; font-weight: 900; font-size: 0.78rem; }
+            .panel { position: fixed; left: 12px; right: 12px; bottom: 12px; z-index: 1000; background: var(--panel); border: 1px solid var(--line); border-radius: 18px; padding: 14px; backdrop-filter: blur(18px); box-shadow: 0 20px 50px rgba(0,0,0,0.55); max-height: 58vh; overflow: auto; }
+            .row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; }
+            .row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 8px; }
+            .input, .select { width: 100%; background: rgba(255,255,255,0.06); border: 1px solid var(--line); color: #fff; border-radius: 12px; padding: 12px; font-size: 0.85rem; font-weight: 800; outline: none; }
+            .select option { background: #0a0a12; color: #fff; }
+            .btn { border: none; border-radius: 12px; padding: 12px 10px; font-size: 0.75rem; font-weight: 900; cursor: pointer; color: #fff; background: rgba(255,255,255,0.08); text-transform: uppercase; }
+            .btn:active { transform: scale(0.97); }
+            .btn-primary { background: var(--primary); }
+            .btn-route { background: var(--route); }
+            .btn-danger { background: rgba(231,76,60,0.85); }
+            .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+            .summary { display: none; border-top: 1px solid var(--line); margin-top: 10px; padding-top: 12px; }
+            .summary-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 10px; }
+            .stat { background: rgba(255,255,255,0.06); border: 1px solid var(--line); border-radius: 12px; padding: 10px; text-align: center; }
+            .stat-val { color: var(--primary); font-size: 1.2rem; font-weight: 900; font-style: italic; }
+            .stat-lbl { color: var(--muted); font-size: 0.62rem; font-weight: 900; letter-spacing: 1px; margin-top: 3px; }
+            .points { display: flex; gap: 6px; flex-wrap: wrap; margin: 8px 0 10px; min-height: 28px; }
+            .point-pill { border: 1px solid var(--line); background: rgba(255,255,255,0.06); color: #fff; border-radius: 999px; padding: 7px 9px; font-size: 0.68rem; font-weight: 900; }
+            .hint { color: var(--muted); font-size: 0.72rem; line-height: 1.35; font-weight: 700; margin: 7px 2px 10px; }
+            .status { color: var(--muted); font-size: 0.75rem; font-weight: 800; min-height: 18px; margin: 2px 2px 9px; }
+            .leaflet-control-attribution { display: none; }
+            @media (min-width: 720px) {
+                .panel { left: auto; right: 20px; bottom: 20px; width: 430px; max-height: calc(100vh - 40px); }
+                .topbar { padding: 20px; }
+            }
+        </style>
+    </head>
+    <body>
+        <div id="map"></div>
+
+        <div class="topbar">
+            <div class="brand">
+                <h1>ROUTE PLAN</h1>
+                <div>GASPOOL NAVIGATOR</div>
+            </div>
+            <a class="back-btn" href="/">KEMBALI</a>
+        </div>
+
+        <div class="panel">
+            <input id="routeName" class="input" value="Gowes Route Plan" maxlength="80" style="margin-bottom:8px;">
+            <div class="row">
+                <select id="routeProfile" class="select">
+                    <option value="cycling-regular">RIDE REGULAR</option>
+                    <option value="cycling-road">ROAD BIKE</option>
+                    <option value="cycling-mountain">MTB</option>
+                    <option value="cycling-electric">E-BIKE</option>
+                    <option value="foot-walking">WALK / RUN</option>
+                    <option value="foot-hiking">HIKE</option>
+                </select>
+                <button class="btn" onclick="useCurrentLocation()">PAKAI LOKASI</button>
+            </div>
+
+            <div class="hint">Ketuk peta untuk menambah titik. Titik pertama menjadi start, titik terakhir menjadi tujuan, titik di tengah menjadi waypoint.</div>
+            <div id="status" class="status">Belum ada titik rute.</div>
+            <div id="points" class="points"></div>
+
+            <div class="row-3">
+                <button class="btn btn-primary" id="btnGenerate" onclick="generateRoute()">GENERATE</button>
+                <button class="btn btn-danger" onclick="resetPlan()">RESET</button>
+                <button class="btn btn-route" id="btnStart" onclick="startRoute()" disabled>MULAI</button>
+            </div>
+
+            <div id="summary" class="summary">
+                <div class="summary-grid">
+                    <div class="stat">
+                        <div class="stat-val" id="statDist">0.0</div>
+                        <div class="stat-lbl">KM</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-val" id="statTime">0</div>
+                        <div class="stat-lbl">MENIT</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-val" id="statTurns">0</div>
+                        <div class="stat-lbl">ARAHAN</div>
+                    </div>
+                </div>
+                <div class="hint" id="routeInfo">Rute siap dipakai.</div>
+            </div>
+        </div>
+
+        <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+        <script>
+            let map;
+            let points = [];
+            let markers = [];
+            let guideLine = null;
+            let routeLine = null;
+            let savedRoute = null;
+
+            const primaryColor = '#FF5F00';
+            const routeColor = '#3498db';
+
+            function initMap() {
+                map = L.map('map', { zoomControl: false }).setView([-7.25, 112.76], 13);
+                L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+                    maxZoom: 19
+                }).addTo(map);
+
+                map.on('click', function(e) {
+                    addPoint(e.latlng.lat, e.latlng.lng);
+                });
+
+                if (navigator.geolocation) {
+                    navigator.geolocation.getCurrentPosition(function(pos) {
+                        const latlng = [pos.coords.latitude, pos.coords.longitude];
+                        map.setView(latlng, 15);
+                    }, function() {}, { enableHighAccuracy: true, timeout: 8000 });
+                }
+            }
+
+            function setStatus(text, isError) {
+                const el = document.getElementById('status');
+                el.innerText = text;
+                el.style.color = isError ? '#e74c3c' : '#94a3b8';
+            }
+
+            function addPoint(lat, lng) {
+                points.push({ lat: lat, lng: lng });
+                savedRoute = null;
+                document.getElementById('btnStart').disabled = true;
+                document.getElementById('summary').style.display = 'none';
+                drawPoints();
+            }
+
+            function drawPoints() {
+                markers.forEach(function(marker) { map.removeLayer(marker); });
+                markers = [];
+
+                if (guideLine) {
+                    map.removeLayer(guideLine);
+                    guideLine = null;
+                }
+
+                if (routeLine) {
+                    map.removeLayer(routeLine);
+                    routeLine = null;
+                }
+
+                const list = document.getElementById('points');
+                list.innerHTML = '';
+
+                points.forEach(function(point, index) {
+                    const label = index === 0 ? 'START' : (index === points.length - 1 ? 'TUJUAN' : 'VIA ' + index);
+                    const marker = L.circleMarker([point.lat, point.lng], {
+                        radius: 8,
+                        color: '#fff',
+                        fillColor: index === 0 ? '#2ecc71' : (index === points.length - 1 ? '#e74c3c' : primaryColor),
+                        fillOpacity: 1
+                    }).addTo(map).bindTooltip(label, { permanent: true, direction: 'top' });
+                    markers.push(marker);
+
+                    const pill = document.createElement('div');
+                    pill.className = 'point-pill';
+                    pill.innerText = label;
+                    list.appendChild(pill);
+                });
+
+                if (points.length > 1) {
+                    guideLine = L.polyline(points.map(function(p) { return [p.lat, p.lng]; }), {
+                        color: primaryColor,
+                        weight: 3,
+                        opacity: 0.45,
+                        dashArray: '6, 10'
+                    }).addTo(map);
+                    map.fitBounds(guideLine.getBounds(), { padding: [40, 40] });
+                }
+
+                if (points.length === 0) setStatus('Belum ada titik rute.', false);
+                else if (points.length === 1) setStatus('Start sudah dipasang. Ketuk peta untuk menambah tujuan.', false);
+                else setStatus(points.length + ' titik siap digenerate.', false);
+            }
+
+            function useCurrentLocation() {
+                if (!navigator.geolocation) {
+                    setStatus('Browser tidak mendukung GPS.', true);
+                    return;
+                }
+
+                setStatus('Mengambil lokasi GPS...', false);
+                navigator.geolocation.getCurrentPosition(function(pos) {
+                    addPoint(pos.coords.latitude, pos.coords.longitude);
+                    map.setView([pos.coords.latitude, pos.coords.longitude], 16);
+                }, function() {
+                    setStatus('Gagal mengambil lokasi. Pastikan izin GPS aktif.', true);
+                }, { enableHighAccuracy: true, timeout: 12000 });
+            }
+
+            function resetPlan() {
+                points = [];
+                savedRoute = null;
+                document.getElementById('btnStart').disabled = true;
+                document.getElementById('summary').style.display = 'none';
+                drawPoints();
+            }
+
+            async function generateRoute() {
+                if (points.length < 2) {
+                    setStatus('Minimal butuh start dan tujuan.', true);
+                    return;
+                }
+
+                const btn = document.getElementById('btnGenerate');
+                btn.disabled = true;
+                btn.innerText = 'MEMPROSES...';
+                setStatus('Meminta rute ke satelit ORS...', false);
+
+                try {
+                    const res = await fetch('/api/route_plan', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            name: document.getElementById('routeName').value,
+                            profile: document.getElementById('routeProfile').value,
+                            waypoints: points
+                        })
+                    });
+
+                    const data = await res.json();
+
+                    if (!res.ok || !data.success) {
+                        throw new Error(data.message || 'Route planner gagal.');
+                    }
+
+                    savedRoute = data.route;
+                    drawRoute(data.route.data.coordinates || []);
+
+                    document.getElementById('statDist').innerText = Number(data.route.distance || 0).toFixed(1);
+                    document.getElementById('statTime').innerText = Math.max(1, Math.round((data.route.duration || 0) / 60));
+                    document.getElementById('statTurns').innerText = data.route.instructions_count || 0;
+                    document.getElementById('routeInfo').innerText = 'Route ID #' + data.route.id + ' siap. Sprint berikutnya akan memuat rute ini di tracker.';
+                    document.getElementById('summary').style.display = 'block';
+                    document.getElementById('btnStart').disabled = false;
+                    setStatus('Rute berhasil dibuat dan disimpan.', false);
+                } catch (err) {
+                    console.error(err);
+                    setStatus(err.message || 'Gagal generate rute.', true);
+                } finally {
+                    btn.disabled = false;
+                    btn.innerText = 'GENERATE';
+                }
+            }
+
+            function drawRoute(coords) {
+                if (guideLine) {
+                    map.removeLayer(guideLine);
+                    guideLine = null;
+                }
+                if (routeLine) {
+                    map.removeLayer(routeLine);
+                    routeLine = null;
+                }
+
+                const latlngs = coords.map(function(p) {
+                    return [Number(p.lat), Number(p.lng)];
+                }).filter(function(p) {
+                    return !isNaN(p[0]) && !isNaN(p[1]);
+                });
+
+                if (latlngs.length > 1) {
+                    routeLine = L.polyline(latlngs, {
+                        color: routeColor,
+                        weight: 6,
+                        opacity: 0.95
+                    }).addTo(map);
+                    map.fitBounds(routeLine.getBounds(), { padding: [45, 45] });
+                }
+            }
+
+            function startRoute() {
+                if (!savedRoute || !savedRoute.id) return;
+                window.location.href = '/record?type=ride&route=' + encodeURIComponent(savedRoute.id);
+            }
+
+            window.onload = initMap;
+        </script>
+    </body>
+    </html>
+  `);
+});
+
+// ==========================================
+// 3. FITUR: HEATMAP OMNI-TRACKER
 // ==========================================
 dashboard.get("/heatmap", async (c) => {
   const token = getCookie(c, "gaspool_session");
@@ -1046,6 +1354,7 @@ dashboard.get("/:username", async (c, next) => {
     "record",
     "detail",
     "video_flex",
+    "route_plan",
     "heatmap",
     "gpx_import",
     "sync_strava",

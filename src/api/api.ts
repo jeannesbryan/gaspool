@@ -5,6 +5,127 @@ import { Bindings } from "../index";
 import { verify } from "hono/jwt";
 
 const api = new Hono<{ Bindings: Bindings }>();
+const R2_PUBLIC_BASE_URL =
+  "https://pub-13cc00374110455e9437c511bcbdf007.r2.dev";
+
+type RoutePoint = {
+  lat: number;
+  lng: number;
+  ele?: number;
+};
+
+type RouteInstruction = {
+  text: string;
+  distance_m: number;
+  duration_s: number;
+  type?: number;
+  way_points?: [number, number];
+  point?: RoutePoint | null;
+};
+
+type PlannedRoutePayload = {
+  version: 1;
+  provider: "ors";
+  profile: string;
+  name: string;
+  distance_km: number;
+  distance_m: number;
+  duration_s: number;
+  waypoints: RoutePoint[];
+  coordinates: RoutePoint[];
+  instructions: RouteInstruction[];
+  created_at: string;
+};
+
+const normalizeProfile = (activityType: string = "ride") => {
+  const type = activityType.toLowerCase();
+
+  if (type === "run" || type === "walk") return "foot-walking";
+  if (type === "hike") return "foot-hiking";
+
+  return "cycling-regular";
+};
+
+const normalizeRoutePoint = (point: any): RoutePoint | null => {
+  const lat = Number(point?.lat);
+  const lng = Number(point?.lng ?? point?.lon);
+
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return null;
+
+  return { lat, lng };
+};
+
+const normalizeORSRoute = (data: any, options: {
+  name: string;
+  profile: string;
+  waypoints: RoutePoint[];
+}): PlannedRoutePayload => {
+  const feature = data?.features?.[0];
+  const coordinatesRaw = feature?.geometry?.coordinates || [];
+  const properties = feature?.properties || {};
+  const summary = properties.summary || {};
+
+  const coordinates = coordinatesRaw
+    .map((coord: any[]) => {
+      const lng = Number(coord?.[0]);
+      const lat = Number(coord?.[1]);
+      const ele = Number(coord?.[2]);
+
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+
+      return Number.isFinite(ele) ? { lat, lng, ele } : { lat, lng };
+    })
+    .filter(Boolean) as RoutePoint[];
+
+  if (coordinates.length < 2) {
+    throw new Error("Routing provider tidak mengembalikan koordinat rute.");
+  }
+
+  const instructions = (properties.segments || [])
+    .flatMap((segment: any) => segment?.steps || [])
+    .map((step: any) => {
+      const wayPoints = Array.isArray(step?.way_points)
+        ? step.way_points
+        : undefined;
+      const pointIndex = wayPoints ? Number(wayPoints[0]) : NaN;
+      const point =
+        Number.isFinite(pointIndex) && coordinates[pointIndex]
+          ? coordinates[pointIndex]
+          : null;
+
+      return {
+        text: String(step?.instruction || "Lanjutkan rute"),
+        distance_m: Number(step?.distance || 0),
+        duration_s: Number(step?.duration || 0),
+        type:
+          step?.type === undefined || step?.type === null
+            ? undefined
+            : Number(step.type),
+        way_points: wayPoints
+          ? [Number(wayPoints[0]), Number(wayPoints[1])]
+          : undefined,
+        point,
+      };
+    });
+
+  const distanceM = Number(summary.distance || 0);
+  const durationS = Number(summary.duration || 0);
+
+  return {
+    version: 1,
+    provider: "ors",
+    profile: options.profile,
+    name: options.name,
+    distance_km: distanceM / 1000,
+    distance_m: distanceM,
+    duration_s: durationS,
+    waypoints: options.waypoints,
+    coordinates,
+    instructions,
+    created_at: new Date().toISOString(),
+  };
+};
 
 // ==========================================
 // MIDDLEWARE PERTAHANAN API
@@ -74,6 +195,247 @@ api.get("/rides", protectAPI, async (c) => {
   }
 });
 
+// 2. Route Planner: generate rute via OpenRouteService, simpan JSON ke R2, metadata ke D1
+api.post("/route_plan", protectAPI, async (c) => {
+  try {
+    if (!c.env.ORS_API_KEY) {
+      return c.json(
+        {
+          success: false,
+          message: "ORS_API_KEY belum dipasang di Worker secret.",
+        },
+        500,
+      );
+    }
+
+    const body = await c.req.json();
+    const rawWaypoints = Array.isArray(body?.waypoints)
+      ? body.waypoints
+      : Array.isArray(body?.points)
+        ? body.points
+        : [];
+    const waypoints = rawWaypoints
+      .map(normalizeRoutePoint)
+      .filter(Boolean) as RoutePoint[];
+
+    if (waypoints.length < 2) {
+      return c.json(
+        {
+          success: false,
+          message: "Minimal butuh titik start dan tujuan.",
+        },
+        400,
+      );
+    }
+
+    if (waypoints.length > 50) {
+      return c.json(
+        {
+          success: false,
+          message: "Waypoint terlalu banyak. Maksimal 50 titik.",
+        },
+        400,
+      );
+    }
+
+    const allowedProfiles = new Set([
+      "cycling-regular",
+      "cycling-road",
+      "cycling-mountain",
+      "cycling-electric",
+      "foot-walking",
+      "foot-hiking",
+    ]);
+    const requestedProfile = String(body?.profile || "");
+    const profile = allowedProfiles.has(requestedProfile)
+      ? requestedProfile
+      : normalizeProfile(String(body?.activity_type || "ride"));
+    const name =
+      String(body?.name || "").trim().slice(0, 80) ||
+      "Route Plan " + new Date().toLocaleDateString("id-ID");
+
+    const orsRes = await fetch(
+      `https://api.openrouteservice.org/v2/directions/${profile}/geojson`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: c.env.ORS_API_KEY,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          coordinates: waypoints.map((p) => [p.lng, p.lat]),
+          elevation: true,
+          instructions: true,
+        }),
+      },
+    );
+
+    if (!orsRes.ok) {
+      const details = await orsRes.text();
+
+      return c.json(
+        {
+          success: false,
+          message: "Routing provider gagal membuat rute.",
+          status: orsRes.status,
+          details: details.slice(0, 500),
+        },
+        502,
+      );
+    }
+
+    const orsData = await orsRes.json();
+    const routeData = normalizeORSRoute(orsData, {
+      name,
+      profile,
+      waypoints,
+    });
+    const fileName = `gaspool/routes/route_${Date.now()}_${Math.floor(
+      Math.random() * 1000,
+    )}.json`;
+
+    await c.env.R2_BUCKET.put(fileName, JSON.stringify(routeData), {
+      httpMetadata: {
+        contentType: "application/json",
+      },
+    });
+
+    const publicUrl = `${R2_PUBLIC_BASE_URL}/${fileName}`;
+    const inserted = await c.env.DB.prepare(
+      `INSERT INTO planned_routes (
+        name,
+        distance,
+        duration,
+        route_url,
+        provider,
+        profile,
+        waypoints
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    )
+      .bind(
+        name,
+        routeData.distance_km,
+        Math.round(routeData.duration_s),
+        publicUrl,
+        routeData.provider,
+        routeData.profile,
+        JSON.stringify(waypoints),
+      )
+      .run();
+    const routeId = Number((inserted.meta as any)?.last_row_id || 0);
+
+    return c.json({
+      success: true,
+      route: {
+        id: routeId,
+        name,
+        distance: routeData.distance_km,
+        duration: Math.round(routeData.duration_s),
+        route_url: publicUrl,
+        provider: routeData.provider,
+        profile: routeData.profile,
+        coordinates_count: routeData.coordinates.length,
+        instructions_count: routeData.instructions.length,
+        data: routeData,
+      },
+    });
+  } catch (e: any) {
+    return c.json(
+      {
+        success: false,
+        message: e.message || "Route planner gagal diproses.",
+      },
+      500,
+    );
+  }
+});
+
+api.get("/route_plans", protectAPI, async (c) => {
+  const limit = Math.min(parseInt(c.req.query("limit") || "20"), 50);
+  const offset = Math.max(parseInt(c.req.query("offset") || "0"), 0);
+
+  try {
+    const { results } = await c.env.DB.prepare(
+      `SELECT
+        id,
+        name,
+        distance,
+        duration,
+        route_url,
+        provider,
+        profile,
+        created_at
+      FROM planned_routes
+      ORDER BY created_at DESC
+      LIMIT ? OFFSET ?`,
+    )
+      .bind(limit, offset)
+      .all();
+
+    return c.json({ success: true, routes: results });
+  } catch (e: any) {
+    return c.json(
+      {
+        success: false,
+        message: e.message,
+      },
+      500,
+    );
+  }
+});
+
+api.get("/route_plan/:id", protectAPI, async (c) => {
+  try {
+    const route: any = await c.env.DB.prepare(
+      "SELECT * FROM planned_routes WHERE id = ?",
+    )
+      .bind(c.req.param("id"))
+      .first();
+
+    if (!route) {
+      return c.json(
+        {
+          success: false,
+          message: "Route plan tidak ditemukan.",
+        },
+        404,
+      );
+    }
+
+    const routeRes = await fetch(route.route_url);
+
+    if (!routeRes.ok) {
+      return c.json(
+        {
+          success: false,
+          message: "Metadata ada, tapi file rute gagal dibaca dari R2.",
+          route,
+        },
+        502,
+      );
+    }
+
+    const data = await routeRes.json();
+
+    return c.json({
+      success: true,
+      route: {
+        ...route,
+        data,
+      },
+    });
+  } catch (e: any) {
+    return c.json(
+      {
+        success: false,
+        message: e.message,
+      },
+      500,
+    );
+  }
+});
+
 // 2. Simpan Rekaman Baru (Save Ride Chunking) ke R2 dan D1
 api.post("/save_ride", protectAPI, async (c) => {
   try {
@@ -90,6 +452,10 @@ api.post("/save_ride", protectAPI, async (c) => {
       avg_temp,
       total_elevation,
     } = b;
+    const plannedRouteId =
+      b.planned_route_id === undefined || b.planned_route_id === null
+        ? null
+        : Number(b.planned_route_id);
 
     if (!uuid || chunk_index === undefined) {
       return c.json(
@@ -165,7 +531,7 @@ api.post("/save_ride", protectAPI, async (c) => {
         },
       });
 
-      const publicUrl = `https://pub-13cc00374110455e9437c511bcbdf007.r2.dev/${fileName}`;
+      const publicUrl = `${R2_PUBLIC_BASE_URL}/${fileName}`;
 
       const query = `INSERT INTO rides (
       name,
@@ -179,9 +545,10 @@ api.post("/save_ride", protectAPI, async (c) => {
       start_date,
       polyline,
       activity_type,
-      source
+      source,
+      planned_route_id
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
 
       await c.env.DB.prepare(query)
         .bind(
@@ -197,6 +564,7 @@ api.post("/save_ride", protectAPI, async (c) => {
           publicUrl,
           activity_type || "ride",
           b.source || "GASPOOL",
+          Number.isFinite(plannedRouteId) ? plannedRouteId : null,
         )
         .run();
 
@@ -348,7 +716,7 @@ api.post("/radio", async (c) => {
     });
 
     // URL Publik file suara
-    const publicUrl = `https://pub-13cc00374110455e9437c511bcbdf007.r2.dev/${fileName}`;
+    const publicUrl = `${R2_PUBLIC_BASE_URL}/${fileName}`;
 
     // Catat link suara ke Radar KV agar teman di room bisa mendengarnya
     await c.env.GASPOOL_RADAR.put(

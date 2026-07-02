@@ -64,7 +64,17 @@
 
   // Public variables.
   // TURNSTILE_SITE_KEY is public and safe to expose.
+  // ROUTING_PROVIDER selects the route planning adapter.
+  // Current supported value: "ors" for OpenRouteService.
   "vars": {
-    "TURNSTILE_SITE_KEY": "YOUR_CLOUDFLARE_TURNSTILE_SITE_KEY"
+    "TURNSTILE_SITE_KEY": "YOUR_CLOUDFLARE_TURNSTILE_SITE_KEY",
+    "ROUTING_PROVIDER": "ors"
   }
+
+  // Required production secrets.
+  // Do not put these values in wrangler.jsonc.
+  //
+  // npx wrangler secret put JWT_SECRET
+  // npx wrangler secret put TURNSTILE_SECRET_KEY
+  // npx wrangler secret put ORS_API_KEY
 }

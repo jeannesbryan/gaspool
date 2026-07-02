@@ -4,7 +4,7 @@
 
 It helps cyclists, runners, walkers, and hikers record routes, share activity summaries, export GPX files, track peleton members live, and generate cinematic route recap videos.
 
-Gaspool is designed to run serverlessly on Cloudflare using **Workers**, **D1**, **R2**, **KV**, and **Turnstile**.
+Gaspool is designed to run serverlessly on Cloudflare using **Workers**, **D1**, **R2**, **KV**, **Turnstile**, and an external routing provider for planned routes.
 
 ---
 
@@ -14,9 +14,20 @@ Gaspool is designed to run serverlessly on Cloudflare using **Workers**, **D1**,
 
 - Record cycling, running, walking, and hiking activities
 - GPS-based route tracking
+- Planned route tracking with route overlay
 - Distance, moving time, speed, pace, elevation, and temperature display
 - Activity detail page with map and statistics
 - Offline-friendly PWA shell
+
+### Route Plan & Navigator
+
+- Create a route plan from map points
+- Use OpenRouteService Directions for cycling, walking, running, and hiking routes
+- Save planned routes to Cloudflare R2 and D1
+- Start tracking from a saved route plan
+- Display planned route and actual GPS track together in the tracker
+- Voice navigation using the browser Web Speech API
+- Basic spoken turn prompts around 300m, 80m, and near the turn point
 
 ### Peleton Mode
 
@@ -44,6 +55,7 @@ Gaspool is designed to run serverlessly on Cloudflare using **Workers**, **D1**,
 - Cloudflare KV for live peleton radar
 - Cloudflare Turnstile for anti-bot protection
 - Cloudflare static assets binding
+- OpenRouteService for route planning
 
 ---
 
@@ -76,6 +88,7 @@ Before running this project, make sure you have:
 - Cloudflare R2 bucket
 - Cloudflare KV namespace
 - Cloudflare Turnstile site
+- OpenRouteService API key
 
 ---
 
@@ -121,6 +134,7 @@ D1 database
 R2 bucket
 KV namespace
 Turnstile site key
+OpenRouteService API key
 Custom domain, optional
 ```
 
@@ -136,15 +150,23 @@ Gaspool uses these bindings and secrets:
 
 ```text
 TURNSTILE_SITE_KEY
+ROUTING_PROVIDER
 ```
 
-This can be placed inside `wrangler.jsonc` under `vars`.
+These can be placed inside `wrangler.jsonc` under `vars`.
+
+Recommended value:
+
+```text
+ROUTING_PROVIDER=ors
+```
 
 ### Secret variables
 
 ```text
 JWT_SECRET
 TURNSTILE_SECRET_KEY
+ORS_API_KEY
 ```
 
 Set production secrets with Wrangler:
@@ -152,6 +174,7 @@ Set production secrets with Wrangler:
 ```bash
 npx wrangler secret put JWT_SECRET
 npx wrangler secret put TURNSTILE_SECRET_KEY
+npx wrangler secret put ORS_API_KEY
 ```
 
 Generate a strong JWT secret:
@@ -163,6 +186,10 @@ node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"
 Use the generated value for `JWT_SECRET`.
 
 `TURNSTILE_SECRET_KEY` must be taken from your Cloudflare Turnstile dashboard.
+
+`ORS_API_KEY` must be taken from your OpenRouteService dashboard.
+
+Do not put `ORS_API_KEY` inside `wrangler.jsonc`.
 
 ---
 
@@ -198,17 +225,20 @@ Recommended object prefix:
 
 ```text
 gaspool/
+gaspool/routes/
 ```
 
 Example object key:
 
 ```text
 gaspool/gaspool_ride_1720000000000_123.json
+gaspool/routes/route_1720000000000_123.json
 ```
 
 R2 is used for:
 
 - Route JSON files
+- Planned route JSON files
 - Peleton radio audio files
 
 The public route JSON URL is stored in D1, so if an object is moved in R2, the related D1 record must also be updated.
@@ -223,10 +253,89 @@ Gaspool uses Cloudflare D1 to store app data such as:
 - Activities
 - Ride statistics
 - Route references
+- Planned route references
 - Participants
 - Activity metadata
 
 Make sure your D1 database is connected to the Worker using the `DB` binding in `wrangler.jsonc`.
+
+Route planning requires a `planned_routes` table and a `planned_route_id` column on `rides`.
+
+If you use Wrangler migrations, apply the migration before deploying the route planner feature:
+
+```bash
+npx wrangler d1 migrations apply gaspool-db --remote
+```
+
+Manual SQL shape:
+
+```sql
+CREATE TABLE IF NOT EXISTS planned_routes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  distance REAL DEFAULT 0,
+  duration INTEGER DEFAULT 0,
+  route_url TEXT NOT NULL,
+  provider TEXT DEFAULT 'ors',
+  profile TEXT DEFAULT 'cycling-regular',
+  waypoints TEXT,
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+ALTER TABLE rides ADD COLUMN planned_route_id INTEGER;
+```
+
+---
+
+## Route Planner
+
+Route planner pages and APIs:
+
+```text
+GET  /route_plan
+POST /api/route_plan
+GET  /api/route_plans
+GET  /api/route_plan/:id
+```
+
+Basic route creation flow:
+
+1. Open `/route_plan`.
+2. Add a start point, destination, and optional waypoints.
+3. Generate the route.
+4. Start tracking from the generated route.
+5. The tracker opens as `/record?type=ride&route=ROUTE_ID`.
+
+The route planner stores normalized route data in R2 and metadata in D1.
+
+Supported routing profiles:
+
+```text
+cycling-regular
+cycling-road
+cycling-mountain
+cycling-electric
+foot-walking
+foot-hiking
+```
+
+---
+
+## Voice Navigation
+
+Gaspool uses the browser Web Speech API for route voice guidance.
+
+The tracker gives spoken prompts when the rider approaches the next instruction:
+
+```text
+Around 300 meters
+Around 80 meters
+Near the turn point
+```
+
+Voice navigation runs locally in the browser. The actual voice quality depends on the rider's device and installed browser voices.
+
+If an Indonesian voice is available, Gaspool tries to use it. Otherwise, the browser default voice is used.
 
 ---
 

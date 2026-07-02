@@ -26,6 +26,7 @@ tracker.get("/record", async (c) => {
   const captainName = userEmail.split("@")[0].toUpperCase();
   const type = c.req.query("type") || "ride";
   const room = (c.req.query("room") || "SINGLE_MODE").toUpperCase();
+  const routeId = (c.req.query("route") || "").replace(/[^0-9]/g, "");
   const isPeleton = room !== "SINGLE_MODE";
 
   return c.html(`
@@ -71,6 +72,8 @@ tracker.get("/record", async (c) => {
             
             #stealthOverlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000; z-index: 99999; display: none; flex-direction: column; justify-content: center; align-items: center; color: #333; user-select: none; }
             .peleton-label { background: rgba(142, 68, 173, 0.8); color: white; padding: 2px 8px; border-radius: 5px; font-size: 10px; font-weight: bold; border: 1px solid #fff; white-space: nowrap; }
+            .route-status { display: none; margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.12); color: #3498db; font-size: 10px; line-height: 1.35; font-weight: 900; max-width: 230px; }
+            .route-status span { display: block; color: #aaa; font-size: 9px; margin-top: 2px; }
             
             .join-overlay { position: fixed; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.9); z-index:9000; display: ${isCaptain ? "none" : "flex"}; flex-direction: column; justify-content: center; align-items: center; padding: 20px;}
             .join-input { width: 100%; padding: 15px; margin: 15px 0; background: #000; border: 1px solid #333; color: white; border-radius: 12px; font-size: 16px; text-align: center; outline: none; max-width: 300px;}
@@ -130,6 +133,7 @@ tracker.get("/record", async (c) => {
 >
   ● ${isPeleton ? "PELETON: " + room : "SATELLITE ACTIVE"}
 </div>
+                <div id="route-status" class="route-status"></div>
             </div>
             <button class="btn-cancel" onclick="cancelRec()">🛑 ABORT</button>
         </div>
@@ -192,6 +196,7 @@ tracker.get("/record", async (c) => {
             <div style="display:flex; gap:10px; margin-bottom:10px; pointer-events:auto;">
 			<button id="btn-recenter" class="btn" style="background:rgba(52,152,219,0.2); border:1px solid #3498db; padding:10px; font-size:10px; color:#3498db; display:none; position:relative; z-index:101;" onclick="recenterMap()">📍 RECENTER</button>
             <button class="btn" style="background:rgba(255,255,255,0.1); padding:10px; font-size:10px; color:#fff;" onclick="enableStealth()">🔒 STEALTH</button>
+            <button id="btn-nav-voice" class="btn" style="background:rgba(52,152,219,0.2); border:1px solid #3498db; padding:10px; font-size:10px; color:#3498db;" onclick="toggleNavVoice()">🔊 NAV</button>
                 ${isPeleton ? `<button class="btn" style="background:rgba(37, 211, 102, 0.2); border: 1px solid #25D366; padding:10px; font-size:10px; color:#2ecc71;" onclick="shareSpectator()">📡 SHARE RADAR</button>` : ""}
             </div>
 
@@ -216,7 +221,17 @@ tracker.get("/record", async (c) => {
 			const isCap = ${isCaptain};
 			const key = 'gaspool_blackbox_session';
 			const roomID = "${room}";
+			const plannedRouteId = "${routeId}";
 			let userName = "${captainName}";
+			let plannedRouteData = null;
+			let plannedRouteLine = null;
+			let plannedRouteInstructions = [];
+			let plannedRouteCoords = [];
+			let routeNextInstructionIndex = 0;
+			let routeInstructionMarks = {};
+			let routeVoiceEnabled = true;
+			let routeVoiceReady = false;
+			let lastRouteSpeech = 0;
 
 			// --- INISIALISASI INDEXEDDB (ANTI NGE-LAG & BUNKER MODE) ---
 			const DB_NAME = "GaspoolDB_TS";
@@ -302,6 +317,231 @@ function clearDB() {
 			L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(map);
 			const line = L.polyline([], { color: '#FF5F00', weight: 6 }).addTo(map);
 			const marker = L.circleMarker([0,0], { radius: 8, color: '#fff', fillColor: '#FF5F00', fillOpacity: 1 }).addTo(map);
+
+			function escapeHTML(str) {
+				return String(str || '')
+					.replace(/&/g, '&amp;')
+					.replace(/</g, '&lt;')
+					.replace(/>/g, '&gt;')
+					.replace(/"/g, '&quot;')
+					.replace(/'/g, '&#39;');
+			}
+
+			function setRouteStatus(title, detail, isError = false) {
+				const el = document.getElementById('route-status');
+				if (!el) return;
+				el.style.display = 'block';
+				el.style.color = isError ? '#e74c3c' : '#3498db';
+				el.innerHTML = escapeHTML(title) + (detail ? '<span>' + escapeHTML(detail) + '</span>' : '');
+			}
+
+			function normalizeRouteCoords(coords) {
+				if (!Array.isArray(coords)) return [];
+
+				return coords.map(p => {
+					if (Array.isArray(p)) return [Number(p[0]), Number(p[1])];
+					if (p && p.lat !== undefined) return [Number(p.lat), Number(p.lng !== undefined ? p.lng : p.lon)];
+					return null;
+				}).filter(p => p && !isNaN(p[0]) && !isNaN(p[1]));
+			}
+
+			function cleanInstructionText(text) {
+				let out = String(text || 'lanjutkan rute').trim();
+
+				out = out
+					.replace(/^Head\\s+/i, 'lurus ke arah ')
+					.replace(/^Continue straight/i, 'lurus terus')
+					.replace(/^Continue/i, 'lanjutkan')
+					.replace(/^Turn left/i, 'belok kiri')
+					.replace(/^Turn right/i, 'belok kanan')
+					.replace(/^Slight left/i, 'agak kiri')
+					.replace(/^Slight right/i, 'agak kanan')
+					.replace(/^Sharp left/i, 'belok tajam kiri')
+					.replace(/^Sharp right/i, 'belok tajam kanan')
+					.replace(/^Keep left/i, 'tetap di kiri')
+					.replace(/^Keep right/i, 'tetap di kanan')
+					.replace(/^Arrive at/i, 'tiba di')
+					.replace(/^Destination/i, 'tujuan')
+					.replace(/\\s+onto\\s+/i, ' ke ')
+					.replace(/\\s+on\\s+/i, ' di ');
+
+				return out;
+			}
+
+			function roundDistanceMeters(distance) {
+				if (distance >= 1000) return (distance / 1000).toFixed(1) + ' kilometer';
+				if (distance >= 100) return Math.round(distance / 50) * 50 + ' meter';
+				return Math.max(10, Math.round(distance / 10) * 10) + ' meter';
+			}
+
+			function pickIndonesianVoice() {
+				if (!('speechSynthesis' in window)) return null;
+				const voices = window.speechSynthesis.getVoices ? window.speechSynthesis.getVoices() : [];
+				return voices.find(v => (v.lang || '').toLowerCase().startsWith('id')) ||
+					voices.find(v => (v.lang || '').toLowerCase().startsWith('ms')) ||
+					null;
+			}
+
+			function speakRoute(text, force = false) {
+				if (!routeVoiceEnabled || !('speechSynthesis' in window)) return;
+
+				const now = Date.now();
+				if (!force && now - lastRouteSpeech < 6500) return;
+
+				try {
+					const utterance = new SpeechSynthesisUtterance(text);
+					const voice = pickIndonesianVoice();
+
+					utterance.lang = voice ? voice.lang : 'id-ID';
+					if (voice) utterance.voice = voice;
+					utterance.rate = 1;
+					utterance.pitch = 1;
+					utterance.volume = 1;
+
+					if (force) window.speechSynthesis.cancel();
+					window.speechSynthesis.speak(utterance);
+					lastRouteSpeech = now;
+					routeVoiceReady = true;
+				} catch (err) {
+					console.warn('TTS navigator gagal:', err);
+				}
+			}
+
+			function unlockRouteVoice() {
+				if (routeVoiceReady || !('speechSynthesis' in window)) return;
+				const utterance = new SpeechSynthesisUtterance('');
+				utterance.lang = 'id-ID';
+				window.speechSynthesis.speak(utterance);
+				routeVoiceReady = true;
+			}
+
+			function toggleNavVoice() {
+				routeVoiceEnabled = !routeVoiceEnabled;
+				const btn = document.getElementById('btn-nav-voice');
+				if (btn) {
+					btn.innerText = routeVoiceEnabled ? '🔊 NAV' : '🔇 NAV';
+					btn.style.color = routeVoiceEnabled ? '#3498db' : '#aaa';
+					btn.style.borderColor = routeVoiceEnabled ? '#3498db' : '#555';
+				}
+
+				if (routeVoiceEnabled) {
+					speakRoute('Navigasi suara aktif.', true);
+				} else if ('speechSynthesis' in window) {
+					window.speechSynthesis.cancel();
+				}
+			}
+
+			function getInstructionPoint(instruction) {
+				if (instruction && instruction.point && instruction.point.lat !== undefined) {
+					const lat = Number(instruction.point.lat);
+					const lng = Number(instruction.point.lng !== undefined ? instruction.point.lng : instruction.point.lon);
+					if (!isNaN(lat) && !isNaN(lng)) return [lat, lng];
+				}
+
+				if (instruction && Array.isArray(instruction.way_points) && plannedRouteCoords.length > 0) {
+					const idx = Number(instruction.way_points[0]);
+					if (!isNaN(idx) && plannedRouteCoords[idx]) return plannedRouteCoords[idx];
+				}
+
+				return null;
+			}
+
+			function updateRouteNavigator(lat, lng) {
+				if (!plannedRouteInstructions.length || !rec) return;
+
+				while (routeNextInstructionIndex < plannedRouteInstructions.length) {
+					const instruction = plannedRouteInstructions[routeNextInstructionIndex];
+					const target = getInstructionPoint(instruction);
+
+					if (!target) {
+						routeNextInstructionIndex++;
+						continue;
+					}
+
+					const distM = map.distance([lat, lng], target);
+					const key = String(routeNextInstructionIndex);
+					if (!routeInstructionMarks[key]) routeInstructionMarks[key] = {};
+
+					const phrase = cleanInstructionText(instruction.text);
+					setRouteStatus('🧭 NEXT ' + roundDistanceMeters(distM), phrase);
+
+					if (distM <= 25) {
+						if (!routeInstructionMarks[key].now) {
+							speakRoute('Sekarang, ' + phrase + '.', true);
+							routeInstructionMarks[key].now = true;
+						}
+						routeNextInstructionIndex++;
+						continue;
+					}
+
+					if (distM <= 80 && !routeInstructionMarks[key].m80) {
+						speakRoute('Sebentar lagi, ' + phrase + '.', true);
+						routeInstructionMarks[key].m80 = true;
+					} else if (distM <= 300 && !routeInstructionMarks[key].m300) {
+						speakRoute('Dalam ' + roundDistanceMeters(distM) + ', ' + phrase + '.', false);
+						routeInstructionMarks[key].m300 = true;
+					}
+
+					break;
+				}
+
+				if (routeNextInstructionIndex >= plannedRouteInstructions.length && plannedRouteInstructions.length > 0) {
+					setRouteStatus('🧭 RUTE SELESAI', 'Semua arahan route plan sudah dilewati.');
+				}
+			}
+
+			async function loadPlannedRoute() {
+				if (!plannedRouteId) return;
+
+				setRouteStatus('🧭 MEMUAT RUTE PLAN', 'Route ID #' + plannedRouteId);
+
+				try {
+					const res = await fetch('/api/route_plan/' + encodeURIComponent(plannedRouteId));
+					const payload = await res.json();
+
+					if (!res.ok || !payload.success || !payload.route || !payload.route.data) {
+						throw new Error(payload.message || 'Route plan gagal dimuat.');
+					}
+
+					plannedRouteData = payload.route.data;
+					plannedRouteInstructions = Array.isArray(plannedRouteData.instructions) ? plannedRouteData.instructions : [];
+					const coords = normalizeRouteCoords(plannedRouteData.coordinates);
+					plannedRouteCoords = coords;
+					routeNextInstructionIndex = 0;
+					routeInstructionMarks = {};
+
+					if (coords.length < 2) {
+						throw new Error('Koordinat route plan kosong.');
+					}
+
+					if (plannedRouteLine) map.removeLayer(plannedRouteLine);
+
+					plannedRouteLine = L.polyline(coords, {
+						color: '#3498db',
+						weight: 5,
+						opacity: 0.9,
+						dashArray: '12, 8',
+						interactive: false
+					}).addTo(map);
+
+					plannedRouteLine.bringToBack();
+					line.bringToFront();
+					marker.bringToFront();
+
+					const routeName = payload.route.name || plannedRouteData.name || 'Route Plan';
+					const routeDistance = Number(payload.route.distance || plannedRouteData.distance_km || 0).toFixed(1);
+					setRouteStatus('🧭 ' + routeName, routeDistance + ' KM • ' + plannedRouteInstructions.length + ' arahan siap');
+
+					setTimeout(() => {
+						map.fitBounds(plannedRouteLine.getBounds(), { padding: [35, 35] });
+					}, 200);
+				} catch (err) {
+					console.warn('Gagal memuat route plan:', err);
+					setRouteStatus('🧭 RUTE PLAN GAGAL DIMUAT', 'Tracking tetap bisa berjalan normal.', true);
+				}
+			}
+
+			loadPlannedRoute();
 
 			if(navigator.geolocation) {
 				navigator.geolocation.getCurrentPosition(p => {
@@ -515,6 +755,11 @@ function gpsQuality(acc) {
 				
 				document.getElementById('btn-start').style.display = 'none';
 				document.getElementById('btn-stop').style.display = 'block';
+				unlockRouteVoice();
+
+				if (plannedRouteData && plannedRouteInstructions.length > 0) {
+					speakRoute('Navigasi rute dimulai.', true);
+				}
 
 				clockInt = setInterval(() => {
 					let now = Date.now();
@@ -631,9 +876,10 @@ if (!gpsStatus) return;
 					
 					document.getElementById('main-val').innerText = dist.toFixed(2);
 					document.getElementById('val-speed').innerText = speedKmh.toFixed(1);
+					updateRouteNavigator(lat, lng);
 
 					let currentKm = Math.floor(dist);
-					if (currentKm > lastAnnouncedKm && currentKm >= 1) {
+					if (currentKm > lastAnnouncedKm && currentKm >= 1 && plannedRouteInstructions.length === 0) {
 						lastAnnouncedKm = currentKm;
 						if ('speechSynthesis' in window) {
 							let avgSpeedVoice = movingTime > 0 ? (dist / (movingTime / 3600)).toFixed(1) : "0.0";
@@ -656,6 +902,7 @@ if (!gpsStatus) return;
   lastAlt,
 
   roomID,
+  plannedRouteId,
   userName,
 
   activityType:
@@ -783,6 +1030,7 @@ if (!gpsStatus) return;
 							duration: dur,
 							activity_type: '${type}',
 							room: roomID,
+							planned_route_id: plannedRouteId ? Number(plannedRouteId) : null,
 							avg_temp: finalAvgTemp,
 							total_elevation: Math.round(totalElevation)
 						});
