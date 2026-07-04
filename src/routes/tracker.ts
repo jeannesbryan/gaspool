@@ -74,6 +74,19 @@ tracker.get("/record", async (c) => {
             .peleton-label { background: rgba(142, 68, 173, 0.8); color: white; padding: 2px 8px; border-radius: 5px; font-size: 10px; font-weight: bold; border: 1px solid #fff; white-space: nowrap; }
             .route-status { display: none; margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.12); color: #3498db; font-size: 10px; line-height: 1.35; font-weight: 900; max-width: 230px; }
             .route-status span { display: block; color: #aaa; font-size: 9px; margin-top: 2px; }
+            .btn-reroute { display:none; background:rgba(231,76,60,0.2); border:1px solid #e74c3c; padding:10px; font-size:10px; color:#e74c3c; }
+            .btn-repeat-nav { background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.18); padding:10px; font-size:10px; color:#fff; }
+            .btn-repeat-nav:disabled { opacity: 0.42; cursor: not-allowed; }
+            .nav-voice-status { margin-top:-4px; margin-bottom:10px; color:#94a3b8; font-size:9px; font-weight:900; letter-spacing:1px; text-transform:uppercase; pointer-events:none; }
+            .privacy-row { display: grid; grid-template-columns: 140px 1fr; gap: 10px; align-items: center; margin-bottom: 10px; pointer-events:auto; }
+            .privacy-hint { color: #94a3b8; font-size: 9px; font-weight: 900; line-height: 1.35; text-transform: uppercase; letter-spacing: 0.8px; }
+            .resume-summary { width: 100%; max-width: 380px; margin: 0 auto 18px; padding: 14px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); border-radius: 16px; text-align: left; }
+            .resume-title { color: #fff; font-size: 12px; font-weight: 900; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 10px; }
+            .resume-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+            .resume-item { padding: 9px; border-radius: 11px; background: rgba(0,0,0,0.28); }
+            .resume-label { color: #94a3b8; font-size: 8px; font-weight: 900; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 4px; }
+            .resume-value { color: #fff; font-size: 12px; font-weight: 900; line-height: 1.3; word-break: break-word; }
+            .resume-warning { display:none; margin-top: 10px; color: #f1c40f; font-size: 10px; font-weight: 900; line-height: 1.35; }
             
             .join-overlay { position: fixed; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.9); z-index:9000; display: ${isCaptain ? "none" : "flex"}; flex-direction: column; justify-content: center; align-items: center; padding: 20px;}
             .join-input { width: 100%; padding: 15px; margin: 15px 0; background: #000; border: 1px solid #333; color: white; border-radius: 12px; font-size: 16px; text-align: center; outline: none; max-width: 300px;}
@@ -89,7 +102,20 @@ tracker.get("/record", async (c) => {
 
         <div id="safeMode">
             <h2 style="color:var(--primary); font-style:italic; font-size: 2.5rem; margin-top:0;">⚠️ BANTING SESI!</h2>
-            <p style="color:#aaa; font-weight:bold; margin-bottom:30px; font-size:14px;">Ditemukan sesi gowes yang belum tersimpan.<br>Lanjutkan misi atau buang data?</p>
+            <p id="resume-copy" style="color:#aaa; font-weight:bold; margin-bottom:16px; font-size:14px;">Ditemukan sesi gowes yang belum tersimpan.<br>Lanjutkan misi atau buang data?</p>
+            <div id="resume-summary" class="resume-summary">
+                <div class="resume-title">Ringkasan Blackbox</div>
+                <div class="resume-grid">
+                    <div class="resume-item"><div class="resume-label">Jarak</div><div class="resume-value" id="resume-distance">-</div></div>
+                    <div class="resume-item"><div class="resume-label">Durasi</div><div class="resume-value" id="resume-duration">-</div></div>
+                    <div class="resume-item"><div class="resume-label">Mulai</div><div class="resume-value" id="resume-started">-</div></div>
+                    <div class="resume-item"><div class="resume-label">Update</div><div class="resume-value" id="resume-saved">-</div></div>
+                    <div class="resume-item"><div class="resume-label">Titik GPS</div><div class="resume-value" id="resume-points">-</div></div>
+                    <div class="resume-item"><div class="resume-label">Status</div><div class="resume-value" id="resume-privacy">PRIVATE</div></div>
+                    <div class="resume-item" style="grid-column:1 / -1;"><div class="resume-label">Rute</div><div class="resume-value" id="resume-route">Tanpa route plan</div></div>
+                </div>
+                <div id="resume-warning" class="resume-warning">Data mungkin tidak lengkap. Cek jarak dan titik GPS sebelum lanjut.</div>
+            </div>
             <button class="btn" style="background:#2ecc71; color:#000; margin-bottom:12px;" onclick="resumeSession()">▶️ RESUME MISSION</button>
             <button class="btn" style="background:#e74c3c; color:#fff;" onclick="discardSession()">🗑️ ABORT & DELETE</button>
         </div>
@@ -195,9 +221,16 @@ tracker.get("/record", async (c) => {
             
             <div style="display:flex; gap:10px; margin-bottom:10px; pointer-events:auto;">
 			<button id="btn-recenter" class="btn" style="background:rgba(52,152,219,0.2); border:1px solid #3498db; padding:10px; font-size:10px; color:#3498db; display:none; position:relative; z-index:101;" onclick="recenterMap()">📍 RECENTER</button>
-            <button class="btn" style="background:rgba(255,255,255,0.1); padding:10px; font-size:10px; color:#fff;" onclick="enableStealth()">🔒 STEALTH</button>
-            <button id="btn-nav-voice" class="btn" style="background:rgba(52,152,219,0.2); border:1px solid #3498db; padding:10px; font-size:10px; color:#3498db;" onclick="toggleNavVoice()">🔊 NAV</button>
+            <button id="btn-stealth" class="btn" style="background:rgba(255,255,255,0.1); padding:10px; font-size:10px; color:#fff;" onclick="enableStealth()">🔒 STEALTH</button>
+            <button id="btn-nav-voice" class="btn" style="background:rgba(52,152,219,0.2); border:1px solid #3498db; padding:10px; font-size:10px; color:#3498db;" onclick="toggleNavVoice()">🔊 SUARA</button>
+            <button id="btn-repeat-nav" class="btn btn-repeat-nav" onclick="repeatLastRouteInstruction()" disabled>ULANGI</button>
+                ${isCaptain ? `<button id="btn-reroute" class="btn btn-reroute" onclick="rerouteToDestination()">↻ REROUTE</button>` : ""}
                 ${isPeleton ? `<button class="btn" style="background:rgba(37, 211, 102, 0.2); border: 1px solid #25D366; padding:10px; font-size:10px; color:#2ecc71;" onclick="shareSpectator()">📡 SHARE RADAR</button>` : ""}
+            </div>
+            <div id="nav-voice-status" class="nav-voice-status">SUARA NAV SIAP</div>
+            <div class="privacy-row">
+                <button id="btn-privacy" class="btn" style="background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.14); padding:10px; font-size:10px; color:#fff;" onclick="toggleRidePrivacy()">🔒 PRIVATE</button>
+                <div id="privacy-hint" class="privacy-hint">Tidak tampil di profil publik.</div>
             </div>
 
             <button class="btn btn-start" id="btn-start" onclick="mulai()">▶️ INITIATE TRACKING</button>
@@ -217,11 +250,16 @@ tracker.get("/record", async (c) => {
 			let playedAudioUrls = new Set();
 			let radarTick = 0; // Untuk hitung throttle radar
 			let autoFollow = true;
+			let isStealthMode = false;
+			let lastVisualUpdate = 0;
+			let lastStealthVoiceHint = 0;
+			let rideIsPublic = false;
 
 			const isCap = ${isCaptain};
 			const key = 'gaspool_blackbox_session';
 			const roomID = "${room}";
 			const plannedRouteId = "${routeId}";
+			let activePlannedRouteId = plannedRouteId;
 			let userName = "${captainName}";
 			let plannedRouteData = null;
 			let plannedRouteLine = null;
@@ -232,6 +270,25 @@ tracker.get("/record", async (c) => {
 			let routeVoiceEnabled = true;
 			let routeVoiceReady = false;
 			let lastRouteSpeech = 0;
+			let routeSpeechQueue = [];
+			let routeSpeechBusy = false;
+			let lastSpokenRouteText = '';
+			let lastInstructionSpeechText = '';
+			let latestPosition = null;
+			let rerouteInProgress = false;
+			let offRouteState = {
+				active: false,
+				warned: false,
+				lastWarn: 0,
+				lastDistance: null
+			};
+
+			const OFF_ROUTE_WARN_M = 80;
+			const OFF_ROUTE_M = 120;
+			const BACK_ON_ROUTE_M = 60;
+			const ROUTE_SPEECH_COOLDOWN = 6500;
+			const STEALTH_VISUAL_INTERVAL = 15000;
+			const NORMAL_VISUAL_INTERVAL = 1000;
 
 			// --- INISIALISASI INDEXEDDB (ANTI NGE-LAG & BUNKER MODE) ---
 			const DB_NAME = "GaspoolDB_TS";
@@ -335,6 +392,135 @@ function clearDB() {
 				el.innerHTML = escapeHTML(title) + (detail ? '<span>' + escapeHTML(detail) + '</span>' : '');
 			}
 
+			function shouldUpdateVisuals(force = false) {
+				if (force) return true;
+				const now = Date.now();
+				const interval = isStealthMode ? STEALTH_VISUAL_INTERVAL : NORMAL_VISUAL_INTERVAL;
+
+				if (now - lastVisualUpdate < interval) return false;
+				lastVisualUpdate = now;
+				return true;
+			}
+
+			function addTrackPointToMap(latlng) {
+				if (!isStealthMode) line.addLatLng(latlng);
+			}
+
+			function refreshTrackVisuals() {
+				line.setLatLngs(path.map(function(point) {
+					return [point.lat, point.lng];
+				}));
+
+				if (path.length > 0) {
+					const last = path[path.length - 1];
+					marker.setLatLng([last.lat, last.lng]);
+				}
+
+				lastVisualUpdate = Date.now();
+			}
+
+			function updateStealthButton() {
+				const btn = document.getElementById('btn-stealth');
+				if (!btn) return;
+				btn.innerText = isStealthMode ? '🔓 BUKA' : '🔒 STEALTH';
+				btn.style.color = isStealthMode ? '#f1c40f' : '#fff';
+				btn.style.border = isStealthMode ? '1px solid #f1c40f' : 'none';
+			}
+
+			function updatePrivacyButton() {
+				const btn = document.getElementById('btn-privacy');
+				const hint = document.getElementById('privacy-hint');
+
+				if (!btn || !hint) return;
+
+				btn.innerText = rideIsPublic ? '🌐 PUBLIC' : '🔒 PRIVATE';
+				btn.style.color = rideIsPublic ? '#2ecc71' : '#fff';
+				btn.style.borderColor = rideIsPublic ? '#2ecc71' : 'rgba(255,255,255,0.14)';
+				hint.innerText = rideIsPublic ? 'Tampil di profil publik.' : 'Tidak tampil di profil publik.';
+			}
+
+			function toggleRidePrivacy() {
+				rideIsPublic = !rideIsPublic;
+				updatePrivacyButton();
+			}
+
+			function setText(id, value) {
+				const el = document.getElementById(id);
+				if (el) el.innerText = value;
+			}
+
+			function formatResumeDuration(seconds) {
+				const total = Math.max(0, Math.floor(Number(seconds || 0)));
+				const hours = Math.floor(total / 3600);
+				const minutes = Math.floor((total % 3600) / 60);
+				const secs = total % 60;
+
+				if (hours > 0) return hours + ' jam ' + minutes + ' menit';
+				if (minutes > 0) return minutes + ' menit ' + secs + ' detik';
+				return secs + ' detik';
+			}
+
+			function formatResumeDate(ts) {
+				const value = Number(ts || 0);
+				if (!value) return 'Tidak diketahui';
+
+				try {
+					return new Date(value).toLocaleString('id-ID', {
+						day: '2-digit',
+						month: 'short',
+						hour: '2-digit',
+						minute: '2-digit'
+					});
+				} catch(e) {
+					return 'Tidak diketahui';
+				}
+			}
+
+			function formatResumeAge(ts) {
+				const value = Number(ts || 0);
+				if (!value) return 'Tidak diketahui';
+
+				const diff = Math.max(0, Date.now() - value);
+				const minutes = Math.floor(diff / 60000);
+				const hours = Math.floor(minutes / 60);
+				const days = Math.floor(hours / 24);
+
+				if (days > 0) return days + ' hari lalu';
+				if (hours > 0) return hours + ' jam lalu';
+				if (minutes > 0) return minutes + ' menit lalu';
+				return 'Baru saja';
+			}
+
+			function renderResumeSummary(data, isCorrupt = false) {
+				const d = data || {};
+				const distance = Number(d.dist || 0);
+				const moving = Number(d.movingTime || 0);
+				const points = Number(d.trackPointCount || 0);
+				const routeName = d.plannedRouteName || (d.plannedRouteId ? 'Route ID #' + d.plannedRouteId : 'Tanpa route plan');
+				const privacy = d.isPublic ? 'PUBLIC' : 'PRIVATE';
+				const warning = document.getElementById('resume-warning');
+				const copy = document.getElementById('resume-copy');
+
+				if (copy) {
+					copy.innerHTML = isCorrupt
+						? 'Sesi lama terdeteksi, tapi metadata blackbox tidak lengkap.<br>Pilih lanjut hanya kalau yakin.'
+						: 'Ditemukan sesi gowes yang belum tersimpan.<br>Cek ringkasannya sebelum lanjut atau buang data.';
+				}
+
+				setText('resume-distance', distance.toFixed(2) + ' km');
+				setText('resume-duration', formatResumeDuration(moving));
+				setText('resume-started', formatResumeDate(d.startT));
+				setText('resume-saved', formatResumeAge(d.savedAt));
+				setText('resume-points', points > 0 ? points + ' titik' : 'Belum terbaca');
+				setText('resume-privacy', privacy);
+				setText('resume-route', routeName);
+
+				if (warning) {
+					const looksIncomplete = isCorrupt || points === 0 || distance === 0 || moving === 0;
+					warning.style.display = looksIncomplete ? 'block' : 'none';
+				}
+			}
+
 			function normalizeRouteCoords(coords) {
 				if (!Array.isArray(coords)) return [];
 
@@ -374,6 +560,132 @@ function clearDB() {
 				return Math.max(10, Math.round(distance / 10) * 10) + ' meter';
 			}
 
+			function projectPointMeters(lat, lng, originLat) {
+				const latRad = originLat * Math.PI / 180;
+				return {
+					x: lng * 111320 * Math.cos(latRad),
+					y: lat * 110540
+				};
+			}
+
+			function distanceToSegmentMeters(point, start, end) {
+				const originLat = point[0];
+				const p = projectPointMeters(point[0], point[1], originLat);
+				const a = projectPointMeters(start[0], start[1], originLat);
+				const b = projectPointMeters(end[0], end[1], originLat);
+				const dx = b.x - a.x;
+				const dy = b.y - a.y;
+				const lenSq = dx * dx + dy * dy;
+
+				if (lenSq === 0) {
+					const ax = p.x - a.x;
+					const ay = p.y - a.y;
+					return Math.sqrt(ax * ax + ay * ay);
+				}
+
+				const t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / lenSq));
+				const closest = {
+					x: a.x + t * dx,
+					y: a.y + t * dy
+				};
+				const px = p.x - closest.x;
+				const py = p.y - closest.y;
+
+				return Math.sqrt(px * px + py * py);
+			}
+
+			function distanceToPlannedRouteMeters(lat, lng) {
+				if (!plannedRouteCoords || plannedRouteCoords.length < 2) return null;
+
+				let minDistance = Infinity;
+				const point = [lat, lng];
+
+				for (let i = 1; i < plannedRouteCoords.length; i++) {
+					const distance = distanceToSegmentMeters(point, plannedRouteCoords[i - 1], plannedRouteCoords[i]);
+					if (distance < minDistance) minDistance = distance;
+				}
+
+				return Number.isFinite(minDistance) ? minDistance : null;
+			}
+
+			function setRerouteButtonVisible(visible) {
+				const btn = document.getElementById('btn-reroute');
+				if (btn) btn.style.display = visible ? 'block' : 'none';
+			}
+
+			function setPlannedRouteAlertStyle(isOffRoute) {
+				if (!plannedRouteLine) return;
+
+				plannedRouteLine.setStyle({
+					color: isOffRoute ? '#e74c3c' : '#3498db',
+					weight: isOffRoute ? 6 : 5,
+					opacity: isOffRoute ? 1 : 0.9,
+					dashArray: isOffRoute ? '4, 10' : '12, 8'
+				});
+			}
+
+			function updateOffRouteStatus(lat, lng, accuracy) {
+				if (!rec || !plannedRouteCoords || plannedRouteCoords.length < 2) return;
+
+				const distanceM = distanceToPlannedRouteMeters(lat, lng);
+				if (distanceM === null) return;
+
+				const now = Date.now();
+				const warnThreshold = Math.max(OFF_ROUTE_WARN_M, Number(accuracy || 0) * 1.5);
+				const offThreshold = Math.max(OFF_ROUTE_M, Number(accuracy || 0) * 2);
+				const backThreshold = Math.max(BACK_ON_ROUTE_M, Number(accuracy || 0) + 25);
+				offRouteState.lastDistance = distanceM;
+
+				if (distanceM >= offThreshold) {
+					offRouteState.active = true;
+					offRouteState.warned = true;
+					setPlannedRouteAlertStyle(true);
+					setRerouteButtonVisible(true);
+					setRouteStatus(
+						'⚠️ KELUAR RUTE',
+						'Jarak dari jalur sekitar ' + roundDistanceMeters(distanceM) + '. ' +
+							(isCap ? 'Kembali ke garis biru atau tekan REROUTE.' : 'Kembali ke garis biru.'),
+						true
+					);
+
+					if (now - offRouteState.lastWarn > 45000) {
+						speakRoute(
+							isCap
+								? 'Kamu keluar dari rute. Kembali ke jalur, atau tekan reroute jika ingin membuat rute baru ke tujuan.'
+								: 'Kamu keluar dari rute. Kembali ke jalur.',
+							true
+						);
+						offRouteState.lastWarn = now;
+					}
+
+					return;
+				}
+
+				if (distanceM >= warnThreshold) {
+					setPlannedRouteAlertStyle(false);
+					setRerouteButtonVisible(false);
+					setRouteStatus('⚠️ MENJAUH DARI RUTE', 'Jarak dari jalur sekitar ' + roundDistanceMeters(distanceM) + '.', true);
+
+					if (!offRouteState.warned && now - offRouteState.lastWarn > 60000) {
+						speakRoute('Kamu mulai menjauh dari rute.', false);
+						offRouteState.warned = true;
+						offRouteState.lastWarn = now;
+					}
+
+					return;
+				}
+
+				if (offRouteState.active && distanceM <= backThreshold) {
+					speakRoute('Kamu kembali ke rute.', true);
+					setRouteStatus('🧭 KEMBALI KE RUTE', 'Lanjut ikuti jalur biru.');
+				}
+
+				offRouteState.active = false;
+				offRouteState.warned = false;
+				setPlannedRouteAlertStyle(false);
+				setRerouteButtonVisible(false);
+			}
+
 			function pickIndonesianVoice() {
 				if (!('speechSynthesis' in window)) return null;
 				const voices = window.speechSynthesis.getVoices ? window.speechSynthesis.getVoices() : [];
@@ -382,12 +694,40 @@ function clearDB() {
 					null;
 			}
 
-			function speakRoute(text, force = false) {
-				if (!routeVoiceEnabled || !('speechSynthesis' in window)) return;
+			function setNavVoiceStatus(text, isError = false) {
+				const el = document.getElementById('nav-voice-status');
+				if (!el) return;
+				el.innerText = text;
+				el.style.color = isError ? '#e74c3c' : '#94a3b8';
+			}
 
-				const now = Date.now();
-				if (!force && now - lastRouteSpeech < 6500) return;
+			function updateNavVoiceControls() {
+				const btn = document.getElementById('btn-nav-voice');
+				const repeatBtn = document.getElementById('btn-repeat-nav');
+				const supported = 'speechSynthesis' in window;
 
+				if (btn) {
+					btn.innerText = routeVoiceEnabled ? '🔊 SUARA' : '🔇 SUARA';
+					btn.style.color = routeVoiceEnabled ? '#3498db' : '#aaa';
+					btn.style.borderColor = routeVoiceEnabled ? '#3498db' : '#555';
+				}
+
+				if (repeatBtn) {
+					repeatBtn.disabled = !supported || !routeVoiceEnabled || !lastInstructionSpeechText;
+				}
+
+				if (!supported) {
+					setNavVoiceStatus('TTS TIDAK DIDUKUNG BROWSER', true);
+				} else if (!routeVoiceEnabled) {
+					setNavVoiceStatus('SUARA NAV MATI');
+				} else if (routeSpeechQueue.length > 0) {
+					setNavVoiceStatus('SUARA NAV ANTRE ' + routeSpeechQueue.length);
+				} else {
+					setNavVoiceStatus(routeVoiceReady ? 'SUARA NAV AKTIF' : 'SUARA NAV SIAP');
+				}
+			}
+
+			function speakRouteNow(text) {
 				try {
 					const utterance = new SpeechSynthesisUtterance(text);
 					const voice = pickIndonesianVoice();
@@ -397,38 +737,114 @@ function clearDB() {
 					utterance.rate = 1;
 					utterance.pitch = 1;
 					utterance.volume = 1;
+					utterance.onend = function() {
+						routeSpeechBusy = false;
+						speakNextRouteQueue();
+					};
+					utterance.onerror = function() {
+						routeSpeechBusy = false;
+						speakNextRouteQueue();
+					};
 
-					if (force) window.speechSynthesis.cancel();
-					window.speechSynthesis.speak(utterance);
-					lastRouteSpeech = now;
+					routeSpeechBusy = true;
+					lastRouteSpeech = Date.now();
+					lastSpokenRouteText = text;
 					routeVoiceReady = true;
+					window.speechSynthesis.speak(utterance);
+					updateNavVoiceControls();
 				} catch (err) {
+					routeSpeechBusy = false;
 					console.warn('TTS navigator gagal:', err);
+					setNavVoiceStatus('TTS NAV GAGAL', true);
 				}
 			}
 
+			function speakNextRouteQueue() {
+				if (!routeVoiceEnabled || !('speechSynthesis' in window)) {
+					routeSpeechQueue = [];
+					updateNavVoiceControls();
+					return;
+				}
+
+				if (routeSpeechQueue.length === 0) {
+					updateNavVoiceControls();
+					return;
+				}
+
+				const next = routeSpeechQueue.shift();
+				speakRouteNow(next.text);
+			}
+
+			function speakRoute(text, force = false) {
+				if (!routeVoiceEnabled || !('speechSynthesis' in window)) {
+					updateNavVoiceControls();
+					return;
+				}
+
+				const phrase = String(text || '').trim();
+				if (!phrase) return;
+				const now = Date.now();
+				if (!force && now - lastRouteSpeech < ROUTE_SPEECH_COOLDOWN) return;
+
+				if (force) {
+					routeSpeechQueue = [];
+					routeSpeechBusy = false;
+					window.speechSynthesis.cancel();
+					speakRouteNow(phrase);
+					return;
+				}
+
+				if (routeSpeechBusy || window.speechSynthesis.speaking || window.speechSynthesis.pending) {
+					if (lastSpokenRouteText !== phrase && !routeSpeechQueue.some(item => item.text === phrase)) {
+						routeSpeechQueue.push({ text: phrase });
+						lastRouteSpeech = now;
+					}
+					updateNavVoiceControls();
+					return;
+				}
+
+				speakRouteNow(phrase);
+			}
+
 			function unlockRouteVoice() {
-				if (routeVoiceReady || !('speechSynthesis' in window)) return;
+				if (!('speechSynthesis' in window)) {
+					updateNavVoiceControls();
+					return;
+				}
+
+				if (routeVoiceReady) {
+					updateNavVoiceControls();
+					return;
+				}
+
 				const utterance = new SpeechSynthesisUtterance('');
 				utterance.lang = 'id-ID';
 				window.speechSynthesis.speak(utterance);
 				routeVoiceReady = true;
+				updateNavVoiceControls();
 			}
 
 			function toggleNavVoice() {
 				routeVoiceEnabled = !routeVoiceEnabled;
-				const btn = document.getElementById('btn-nav-voice');
-				if (btn) {
-					btn.innerText = routeVoiceEnabled ? '🔊 NAV' : '🔇 NAV';
-					btn.style.color = routeVoiceEnabled ? '#3498db' : '#aaa';
-					btn.style.borderColor = routeVoiceEnabled ? '#3498db' : '#555';
-				}
 
 				if (routeVoiceEnabled) {
 					speakRoute('Navigasi suara aktif.', true);
 				} else if ('speechSynthesis' in window) {
+					routeSpeechQueue = [];
+					routeSpeechBusy = false;
 					window.speechSynthesis.cancel();
 				}
+
+				updateNavVoiceControls();
+			}
+
+			function repeatLastRouteInstruction() {
+				if (!lastInstructionSpeechText) {
+					setNavVoiceStatus('BELUM ADA INSTRUKSI UNTUK DIULANG');
+					return;
+				}
+
+				speakRoute('Ulangi instruksi. ' + lastInstructionSpeechText + '.', true);
 			}
 
 			function getInstructionPoint(instruction) {
@@ -463,6 +879,8 @@ function clearDB() {
 					if (!routeInstructionMarks[key]) routeInstructionMarks[key] = {};
 
 					const phrase = cleanInstructionText(instruction.text);
+					lastInstructionSpeechText = phrase;
+					updateNavVoiceControls();
 					setRouteStatus('🧭 NEXT ' + roundDistanceMeters(distM), phrase);
 
 					if (distM <= 25) {
@@ -490,47 +908,58 @@ function clearDB() {
 				}
 			}
 
-			async function loadPlannedRoute() {
-				if (!plannedRouteId) return;
+			function applyPlannedRoute(route) {
+				plannedRouteData = route.data;
+				plannedRouteInstructions = Array.isArray(plannedRouteData.instructions) ? plannedRouteData.instructions : [];
+				const coords = normalizeRouteCoords(plannedRouteData.coordinates);
+				plannedRouteCoords = coords;
+				routeNextInstructionIndex = 0;
+				routeInstructionMarks = {};
+				offRouteState = {
+					active: false,
+					warned: false,
+					lastWarn: 0,
+					lastDistance: null
+				};
+				setRerouteButtonVisible(false);
 
-				setRouteStatus('🧭 MEMUAT RUTE PLAN', 'Route ID #' + plannedRouteId);
+				if (coords.length < 2) {
+					throw new Error('Koordinat route plan kosong.');
+				}
+
+				if (plannedRouteLine) map.removeLayer(plannedRouteLine);
+
+				plannedRouteLine = L.polyline(coords, {
+					color: '#3498db',
+					weight: 5,
+					opacity: 0.9,
+					dashArray: '12, 8',
+					interactive: false
+				}).addTo(map);
+
+				plannedRouteLine.bringToBack();
+				line.bringToFront();
+				marker.bringToFront();
+
+				const routeName = route.name || plannedRouteData.name || 'Route Plan';
+				const routeDistance = Number(route.distance || plannedRouteData.distance_km || 0).toFixed(1);
+				setRouteStatus('🧭 ' + routeName, routeDistance + ' KM • ' + plannedRouteInstructions.length + ' arahan siap');
+			}
+
+			async function loadPlannedRoute() {
+				if (!activePlannedRouteId) return;
+
+				setRouteStatus('🧭 MEMUAT RUTE PLAN', 'Route ID #' + activePlannedRouteId);
 
 				try {
-					const res = await fetch('/api/route_plan/' + encodeURIComponent(plannedRouteId));
+					const res = await fetch('/api/route_plan/' + encodeURIComponent(activePlannedRouteId));
 					const payload = await res.json();
 
 					if (!res.ok || !payload.success || !payload.route || !payload.route.data) {
 						throw new Error(payload.message || 'Route plan gagal dimuat.');
 					}
 
-					plannedRouteData = payload.route.data;
-					plannedRouteInstructions = Array.isArray(plannedRouteData.instructions) ? plannedRouteData.instructions : [];
-					const coords = normalizeRouteCoords(plannedRouteData.coordinates);
-					plannedRouteCoords = coords;
-					routeNextInstructionIndex = 0;
-					routeInstructionMarks = {};
-
-					if (coords.length < 2) {
-						throw new Error('Koordinat route plan kosong.');
-					}
-
-					if (plannedRouteLine) map.removeLayer(plannedRouteLine);
-
-					plannedRouteLine = L.polyline(coords, {
-						color: '#3498db',
-						weight: 5,
-						opacity: 0.9,
-						dashArray: '12, 8',
-						interactive: false
-					}).addTo(map);
-
-					plannedRouteLine.bringToBack();
-					line.bringToFront();
-					marker.bringToFront();
-
-					const routeName = payload.route.name || plannedRouteData.name || 'Route Plan';
-					const routeDistance = Number(payload.route.distance || plannedRouteData.distance_km || 0).toFixed(1);
-					setRouteStatus('🧭 ' + routeName, routeDistance + ' KM • ' + plannedRouteInstructions.length + ' arahan siap');
+					applyPlannedRoute(payload.route);
 
 					setTimeout(() => {
 						map.fitBounds(plannedRouteLine.getBounds(), { padding: [35, 35] });
@@ -541,13 +970,85 @@ function clearDB() {
 				}
 			}
 
+			async function rerouteToDestination() {
+				if (rerouteInProgress) return;
+
+				const btn = document.getElementById('btn-reroute');
+				const destination =
+					plannedRouteData &&
+					Array.isArray(plannedRouteData.waypoints) &&
+					plannedRouteData.waypoints.length > 0
+						? plannedRouteData.waypoints[plannedRouteData.waypoints.length - 1]
+						: plannedRouteCoords[plannedRouteCoords.length - 1];
+
+				if (!latestPosition || !destination) {
+					setRouteStatus('↻ REROUTE BELUM SIAP', 'GPS atau tujuan rute belum tersedia.', true);
+					return;
+				}
+
+				rerouteInProgress = true;
+				if (btn) {
+					btn.disabled = true;
+					btn.innerText = '...';
+				}
+				setRouteStatus('↻ MEMBUAT RUTE BARU', 'Tujuan tetap sama, start memakai posisi GPS sekarang.');
+				speakRoute('Membuat rute baru ke tujuan yang sama.', true);
+
+				try {
+					const res = await fetch('/api/route_plan', {
+						method: 'POST',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({
+							name: 'Reroute - ' + (plannedRouteData.name || 'Route Plan'),
+							profile: plannedRouteData.profile || 'cycling-regular',
+							waypoints: [
+								{ lat: latestPosition.lat, lng: latestPosition.lng },
+								{ lat: Number(destination.lat !== undefined ? destination.lat : destination[0]), lng: Number(destination.lng !== undefined ? destination.lng : destination[1]) }
+							]
+						})
+					});
+					const payload = await res.json();
+
+					if (!res.ok || !payload.success || !payload.route || !payload.route.data) {
+						throw new Error(payload.message || 'Reroute gagal.');
+					}
+
+					activePlannedRouteId = String(payload.route.id || activePlannedRouteId || '');
+					applyPlannedRoute(payload.route);
+					setRouteStatus('↻ REROUTE SIAP', 'Route ID #' + activePlannedRouteId + ' menggantikan rute lama.');
+					speakRoute('Rute baru siap. Lanjutkan perjalanan.', true);
+				} catch (err) {
+					console.warn('Reroute gagal:', err);
+					setRouteStatus('↻ REROUTE GAGAL', err.message || 'Coba lagi beberapa saat.', true);
+					speakRoute('Reroute gagal. Kembali ke jalur jika memungkinkan.', true);
+				} finally {
+					rerouteInProgress = false;
+					if (btn) {
+						btn.disabled = false;
+						btn.innerText = '↻ REROUTE';
+					}
+				}
+			}
+
 			loadPlannedRoute();
+			updateNavVoiceControls();
+			updatePrivacyButton();
+			if ('speechSynthesis' in window) {
+				window.speechSynthesis.onvoiceschanged = updateNavVoiceControls;
+			}
 
 			if(navigator.geolocation) {
 				navigator.geolocation.getCurrentPosition(p => {
 					const curLoc = [p.coords.latitude, p.coords.longitude];
+					latestPosition = {
+						lat: p.coords.latitude,
+						lng: p.coords.longitude,
+						accuracy: p.coords.accuracy || 0,
+						speed: (p.coords.speed || 0) * 3.6
+					};
 					map.setView(curLoc, 16);
 					marker.setLatLng(curLoc);
+					lastVisualUpdate = Date.now();
 				}, () => console.log("Menunggu akurasi GPS..."), { enableHighAccuracy: true });
 			}
 
@@ -580,6 +1081,8 @@ document.getElementById(
       const d =
         JSON.parse(s);
 
+      renderResumeSummary(d);
+
       document.getElementById(
         'main-val'
       ).innerText =
@@ -604,6 +1107,8 @@ document.getElementById(
       console.warn(
         'Blackbox corrupt'
       );
+
+      renderResumeSummary(null, true);
 
     }
 
@@ -656,6 +1161,12 @@ document.getElementById(
 					lastTempCheck = d.lastTempCheck || 0;
 					totalElevation = d.totalElevation || 0;
 					lastAlt = d.lastAlt || null;
+					rideIsPublic = Boolean(d.isPublic);
+					updatePrivacyButton();
+					if (d.plannedRouteId) {
+						activePlannedRouteId = String(d.plannedRouteId);
+						await loadPlannedRoute();
+					}
 					
 					document.getElementById('safeMode').style.display = 'none';
 					
@@ -734,14 +1245,21 @@ function gpsQuality(acc) {
 
 			let wakeLock = null;
 			async function requestWakeLock() {
-				try { if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen'); } 
+				try {
+					if ('wakeLock' in navigator && wakeLock === null) {
+						wakeLock = await navigator.wakeLock.request('screen');
+						wakeLock.addEventListener('release', () => {
+							wakeLock = null;
+						});
+					}
+				} 
 				catch (err) {}
 			}
 			function releaseWakeLock() {
 				if (wakeLock !== null) wakeLock.release().then(() => { wakeLock = null; });
 			}
 			document.addEventListener('visibilitychange', async () => {
-				if (wakeLock !== null && document.visibilityState === 'visible') await requestWakeLock();
+				if (rec && document.visibilityState === 'visible') await requestWakeLock();
 			});
 
 			function mulai(isResume = false) {
@@ -824,6 +1342,7 @@ if (!gpsStatus) return;
 }
 
 					const cur = [lat, lng];
+					latestPosition = { lat, lng, accuracy, speed: speedKmh };
 
 					if(path.length > 0) {
 						const last = path[path.length-1];
@@ -843,7 +1362,7 @@ if (!gpsStatus) return;
     let pt = { lat, lng, speed: speedKmh, ele: altitude || 0, time: new Date().toISOString() };
     path.push(pt); 
     savePointDB(pt); 
-    line.addLatLng(cur); 
+    addTrackPointToMap(cur); 
     
 } else if (d >= 1.5) {
     console.warn("Lonjakan Sinyal (Blank Spot). Jangkar dipindah, jarak tempuh tidak ditambahkan.");
@@ -852,21 +1371,26 @@ if (!gpsStatus) return;
     let pt = { lat, lng, speed: speedKmh, ele: altitude || 0, time: new Date().toISOString() };
     path.push(pt); 
     savePointDB(pt); 
-    line.addLatLng(cur); 
+    addTrackPointToMap(cur); 
     lastAlt = altitude; // Reset acuan elevasi juga
 }
 					} else { 
 						let pt = { lat, lng, speed: speedKmh, ele: altitude || 0, time: new Date().toISOString() };
 						path.push(pt); 
 						savePointDB(pt);
-						line.addLatLng(cur);
+						addTrackPointToMap(cur);
 						lastAlt = altitude;
 						if (tempReadings.length === 0) recordTemperature(lat, lng);
 					}
 
-					marker.setLatLng(cur); 
+					if (shouldUpdateVisuals()) {
+						if (!isStealthMode) marker.setLatLng(cur);
+						document.getElementById('main-val').innerText = dist.toFixed(2);
+						document.getElementById('val-speed').innerText = speedKmh.toFixed(1);
+					}
+
 					// Jangan paksa kamera geser kalau Stealth lagi aktif (bikin berat)
-					if (document.getElementById('stealthOverlay').style.display !== 'flex') {
+					if (!isStealthMode) {
 						if (autoFollow) {
 
   map.panTo(cur);
@@ -874,19 +1398,14 @@ if (!gpsStatus) return;
 }
 					}
 					
-					document.getElementById('main-val').innerText = dist.toFixed(2);
-					document.getElementById('val-speed').innerText = speedKmh.toFixed(1);
 					updateRouteNavigator(lat, lng);
+					updateOffRouteStatus(lat, lng, accuracy);
 
 					let currentKm = Math.floor(dist);
 					if (currentKm > lastAnnouncedKm && currentKm >= 1 && plannedRouteInstructions.length === 0) {
 						lastAnnouncedKm = currentKm;
-						if ('speechSynthesis' in window) {
-							let avgSpeedVoice = movingTime > 0 ? (dist / (movingTime / 3600)).toFixed(1) : "0.0";
-							let text = 'Jarak tempuh ' + currentKm + ' kilometer. Kecepatan rata-rata ' + avgSpeedVoice + ' kilometer per jam.';
-							let utt = new SpeechSynthesisUtterance(text);
-							utt.lang = 'id-ID'; window.speechSynthesis.speak(utt);
-						}
+						let avgSpeedVoice = movingTime > 0 ? (dist / (movingTime / 3600)).toFixed(1) : "0.0";
+						speakRoute('Jarak tempuh ' + currentKm + ' kilometer. Kecepatan rata-rata ' + avgSpeedVoice + ' kilometer per jam.', false);
 					}
 
 					// Simpan Blackbox (Metadata saja, path di-skip karena sudah masuk IndexedDB)
@@ -902,8 +1421,23 @@ if (!gpsStatus) return;
   lastAlt,
 
   roomID,
-  plannedRouteId,
+  plannedRouteId: activePlannedRouteId,
+  plannedRouteName:
+    plannedRouteData && plannedRouteData.name
+      ? plannedRouteData.name
+      : '',
+  isPublic: rideIsPublic,
   userName,
+  trackPointCount:
+    path.length,
+  lastPosition:
+    latestPosition
+      ? {
+        lat: latestPosition.lat,
+        lng: latestPosition.lng,
+        accuracy: latestPosition.accuracy || 0
+      }
+      : null,
 
   activityType:
     '${type}',
@@ -947,8 +1481,7 @@ if (!gpsStatus) return;
 				// --- THROTTLE RADAR SYNC ---
 				radarInt = setInterval(() => {
 					radarTick += 4;
-					let isStealth = document.getElementById('stealthOverlay').style.display === 'flex';
-					let threshold = isStealth ? 16 : 4; // Sync tiap 16 detik di Stealth, 4 detik saat normal
+					let threshold = isStealthMode ? 16 : 4; // Sync tiap 16 detik di Stealth, 4 detik saat normal
 					
 					if(radarTick >= threshold && roomID !== "SINGLE_MODE" && path.length > 0) {
 						radarTick = 0;
@@ -994,6 +1527,7 @@ if (!gpsStatus) return;
 			}
 
 			async function selesai() {
+				if (isStealthMode) disableStealth();
 				rec = false; releaseWakeLock(); navigator.geolocation.clearWatch(watchId); clearInterval(radarInt); clearInterval(clockInt);
 				
 				const dur = Math.floor(movingTime);
@@ -1030,7 +1564,8 @@ if (!gpsStatus) return;
 							duration: dur,
 							activity_type: '${type}',
 							room: roomID,
-							planned_route_id: plannedRouteId ? Number(plannedRouteId) : null,
+							planned_route_id: activePlannedRouteId ? Number(activePlannedRouteId) : null,
+							is_public: rideIsPublic ? 1 : 0,
 							avg_temp: finalAvgTemp,
 							total_elevation: Math.round(totalElevation)
 						});
@@ -1055,6 +1590,8 @@ if (!gpsStatus) return;
 					} else {
 						uploadSuccess = false;
 					}
+
+					await cleanupPeletonAudio();
 					
 					if (uploadSuccess) { 
 						// Sukses langsung mendarat di awan
@@ -1079,9 +1616,50 @@ if (!gpsStatus) return;
 				}
 			}
 
-			function cancelRec() { if(confirm('Batalkan dan hapus rute?')) { localStorage.removeItem(key); clearDB(); window.location.href='/'; } }
-			function enableStealth() { document.getElementById('stealthOverlay').style.display = 'flex'; }
-			function disableStealth() { document.getElementById('stealthOverlay').style.display = 'none'; }
+			async function cleanupPeletonAudio() {
+				if (!isCap || roomID === "SINGLE_MODE") return;
+
+				try {
+					await fetch('/api/radio_cleanup', {
+						method: 'POST',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({ room: roomID }),
+						keepalive: true
+					});
+				} catch(e) {
+					console.warn('Gagal membersihkan audio peleton:', e);
+				}
+			}
+
+			async function cancelRec() {
+				if(confirm('Batalkan dan hapus rute?')) {
+					await cleanupPeletonAudio();
+					localStorage.removeItem(key);
+					clearDB();
+					window.location.href='/';
+				}
+			}
+			function enableStealth() {
+				isStealthMode = true;
+				autoFollow = false;
+				lastVisualUpdate = 0;
+				document.getElementById('stealthOverlay').style.display = 'flex';
+				document.getElementById('btn-recenter').style.display = 'block';
+				updateStealthButton();
+
+				const now = Date.now();
+				if (now - lastStealthVoiceHint > 120000) {
+					speakRoute('Stealth mode aktif. Layar dibuat hemat, navigasi suara tetap berjalan.', false);
+					lastStealthVoiceHint = now;
+				}
+			}
+
+			function disableStealth() {
+				isStealthMode = false;
+				document.getElementById('stealthOverlay').style.display = 'none';
+				refreshTrackVisuals();
+				updateStealthButton();
+			}
 			function recenterMap() {
 				autoFollow = true;
 				document.getElementById('btn-recenter').style.display = 'none';

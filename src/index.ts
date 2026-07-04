@@ -17,6 +17,9 @@ export type Bindings = {
   JWT_SECRET: string;
   ORS_API_KEY: string;
   ROUTING_PROVIDER?: string;
+  PUBLIC_PROFILE_SLUG?: string;
+  PUBLIC_PROFILE_NAME?: string;
+  PUBLIC_PROFILE_AVATAR?: string;
   TURNSTILE_SITE_KEY: string;
   TURNSTILE_SECRET_KEY: string;
 };

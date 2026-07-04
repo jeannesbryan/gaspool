@@ -7,6 +7,33 @@ import { verify } from "hono/jwt";
 const api = new Hono<{ Bindings: Bindings }>();
 const R2_PUBLIC_BASE_URL =
   "https://pub-13cc00374110455e9437c511bcbdf007.r2.dev";
+const DEFAULT_PUBLIC_PROFILE_SLUG = "rider";
+
+const normalizePublicProfileSlug = (value?: string) => {
+  const slug = String(value || DEFAULT_PUBLIC_PROFILE_SLUG)
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]/g, "")
+    .slice(0, 40);
+
+  return slug || DEFAULT_PUBLIC_PROFILE_SLUG;
+};
+
+const getPublicProfileSlug = (env: Bindings) =>
+  normalizePublicProfileSlug(env.PUBLIC_PROFILE_SLUG);
+
+const sanitizeRoomId = (value: string) =>
+  String(value || "")
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9_-]/g, "")
+    .slice(0, 48);
+
+const sanitizeRadioUser = (value: string) =>
+  String(value || "")
+    .trim()
+    .replace(/[^a-zA-Z0-9_-]/g, "")
+    .slice(0, 32) || "user";
 
 type RoutePoint = {
   lat: number;
@@ -37,6 +64,19 @@ type PlannedRoutePayload = {
   created_at: string;
 };
 
+type GeocodeResult = {
+  label: string;
+  name: string;
+  lat: number;
+  lng: number;
+  confidence: number | null;
+  layer: string;
+  source: string;
+  country: string;
+  region: string;
+  locality: string;
+};
+
 const normalizeProfile = (activityType: string = "ride") => {
   const type = activityType.toLowerCase();
 
@@ -54,6 +94,35 @@ const normalizeRoutePoint = (point: any): RoutePoint | null => {
   if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return null;
 
   return { lat, lng };
+};
+
+const normalizeGeocodeFeature = (feature: any): GeocodeResult | null => {
+  const coordinates = feature?.geometry?.coordinates || [];
+  const lng = Number(coordinates?.[0]);
+  const lat = Number(coordinates?.[1]);
+  const props = feature?.properties || {};
+
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return null;
+
+  const label = String(
+    props.label || props.name || props.locality || "Lokasi tanpa nama",
+  );
+  const name = String(props.name || label);
+  const confidence = Number(props.confidence);
+
+  return {
+    label,
+    name,
+    lat,
+    lng,
+    confidence: Number.isFinite(confidence) ? confidence : null,
+    layer: String(props.layer || ""),
+    source: String(props.source || ""),
+    country: String(props.country || ""),
+    region: String(props.region || props.region_a || ""),
+    locality: String(props.locality || props.county || ""),
+  };
 };
 
 const normalizeORSRoute = (data: any, options: {
@@ -162,6 +231,95 @@ const protectAPI = async (c: any, next: any) => {
     );
   }
 };
+
+// 1a. Geocoding: cari lokasi via OpenRouteService, API key tetap di server
+api.get("/geocode", protectAPI, async (c) => {
+  try {
+    if (!c.env.ORS_API_KEY) {
+      return c.json(
+        {
+          success: false,
+          message: "ORS_API_KEY belum dipasang di Worker secret.",
+        },
+        500,
+      );
+    }
+
+    const q = String(c.req.query("q") || "").trim().slice(0, 120);
+
+    if (q.length < 2) {
+      return c.json(
+        {
+          success: false,
+          message: "Kata kunci lokasi minimal 2 karakter.",
+        },
+        400,
+      );
+    }
+
+    const lat = Number(c.req.query("lat"));
+    const lng = Number(c.req.query("lng"));
+    const params = new URLSearchParams({
+      api_key: c.env.ORS_API_KEY,
+      text: q,
+      size: "8",
+      "boundary.country": "ID",
+    });
+
+    if (
+      Number.isFinite(lat) &&
+      Number.isFinite(lng) &&
+      lat >= -90 &&
+      lat <= 90 &&
+      lng >= -180 &&
+      lng <= 180
+    ) {
+      params.set("focus.point.lat", String(lat));
+      params.set("focus.point.lon", String(lng));
+    }
+
+    const orsRes = await fetch(
+      "https://api.openrouteservice.org/geocode/search?" + params.toString(),
+      {
+        headers: {
+          Authorization: c.env.ORS_API_KEY,
+        },
+      },
+    );
+
+    if (!orsRes.ok) {
+      const details = await orsRes.text();
+
+      return c.json(
+        {
+          success: false,
+          message: "Geocoder gagal mencari lokasi.",
+          status: orsRes.status,
+          details: details.slice(0, 500),
+        },
+        502,
+      );
+    }
+
+    const data = await orsRes.json();
+    const results = (data?.features || [])
+      .map(normalizeGeocodeFeature)
+      .filter(Boolean) as GeocodeResult[];
+
+    return c.json({
+      success: true,
+      results,
+    });
+  } catch (e: any) {
+    return c.json(
+      {
+        success: false,
+        message: e?.message || "Geocoder error.",
+      },
+      500,
+    );
+  }
+});
 
 // 1. Tarik Data Dashboard
 api.get("/rides", protectAPI, async (c) => {
@@ -436,6 +594,101 @@ api.get("/route_plan/:id", protectAPI, async (c) => {
   }
 });
 
+api.put("/route_plan/:id", protectAPI, async (c) => {
+  try {
+    const body = await c.req.json();
+    const name = String(body?.name || "").trim().slice(0, 80);
+
+    if (!name) {
+      return c.json(
+        {
+          success: false,
+          message: "Nama rute tidak boleh kosong.",
+        },
+        400,
+      );
+    }
+
+    const route: any = await c.env.DB.prepare(
+      "SELECT id FROM planned_routes WHERE id = ?",
+    )
+      .bind(c.req.param("id"))
+      .first();
+
+    if (!route) {
+      return c.json(
+        {
+          success: false,
+          message: "Route plan tidak ditemukan.",
+        },
+        404,
+      );
+    }
+
+    await c.env.DB.prepare("UPDATE planned_routes SET name = ? WHERE id = ?")
+      .bind(name, c.req.param("id"))
+      .run();
+
+    return c.json({
+      success: true,
+      route: {
+        id: Number(c.req.param("id")),
+        name,
+      },
+    });
+  } catch (e: any) {
+    return c.json(
+      {
+        success: false,
+        message: e.message || "Gagal rename route plan.",
+      },
+      500,
+    );
+  }
+});
+
+api.delete("/route_plan/:id", protectAPI, async (c) => {
+  try {
+    const route: any = await c.env.DB.prepare(
+      "SELECT id, route_url FROM planned_routes WHERE id = ?",
+    )
+      .bind(c.req.param("id"))
+      .first();
+
+    if (!route) {
+      return c.json(
+        {
+          success: false,
+          message: "Route plan tidak ditemukan.",
+        },
+        404,
+      );
+    }
+
+    if (typeof route.route_url === "string" && route.route_url.startsWith(R2_PUBLIC_BASE_URL + "/")) {
+      const key = route.route_url.slice(R2_PUBLIC_BASE_URL.length + 1);
+      if (key) await c.env.R2_BUCKET.delete(key);
+    }
+
+    await c.env.DB.prepare("DELETE FROM planned_routes WHERE id = ?")
+      .bind(c.req.param("id"))
+      .run();
+
+    return c.json({
+      success: true,
+      id: Number(c.req.param("id")),
+    });
+  } catch (e: any) {
+    return c.json(
+      {
+        success: false,
+        message: e.message || "Gagal menghapus route plan.",
+      },
+      500,
+    );
+  }
+});
+
 // 2. Simpan Rekaman Baru (Save Ride Chunking) ke R2 dan D1
 api.post("/save_ride", protectAPI, async (c) => {
   try {
@@ -456,6 +709,12 @@ api.post("/save_ride", protectAPI, async (c) => {
       b.planned_route_id === undefined || b.planned_route_id === null
         ? null
         : Number(b.planned_route_id);
+    const isPublic =
+      b.is_public === true ||
+      b.is_public === 1 ||
+      b.is_public === "1"
+        ? 1
+        : 0;
 
     if (!uuid || chunk_index === undefined) {
       return c.json(
@@ -546,9 +805,10 @@ api.post("/save_ride", protectAPI, async (c) => {
       polyline,
       activity_type,
       source,
-      planned_route_id
+      planned_route_id,
+      is_public
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
 
       await c.env.DB.prepare(query)
         .bind(
@@ -565,6 +825,7 @@ api.post("/save_ride", protectAPI, async (c) => {
           activity_type || "ride",
           b.source || "GASPOOL",
           Number.isFinite(plannedRouteId) ? plannedRouteId : null,
+          isPublic,
         )
         .run();
 
@@ -597,6 +858,49 @@ api.post("/edit_ride/:id", protectAPI, async (c) => {
     .bind(name, c.req.param("id"))
     .run();
   return c.json({ success: true });
+});
+
+api.post("/ride_visibility/:id", protectAPI, async (c) => {
+  try {
+    const body = await c.req.json();
+    const isPublic =
+      body?.is_public === true ||
+      body?.is_public === 1 ||
+      body?.is_public === "1"
+        ? 1
+        : 0;
+    const ride: any = await c.env.DB.prepare("SELECT id FROM rides WHERE id = ?")
+      .bind(c.req.param("id"))
+      .first();
+
+    if (!ride) {
+      return c.json(
+        {
+          success: false,
+          message: "Aktivitas tidak ditemukan.",
+        },
+        404,
+      );
+    }
+
+    await c.env.DB.prepare("UPDATE rides SET is_public = ? WHERE id = ?")
+      .bind(isPublic, c.req.param("id"))
+      .run();
+
+    return c.json({
+      success: true,
+      id: Number(c.req.param("id")),
+      is_public: isPublic,
+    });
+  } catch (e: any) {
+    return c.json(
+      {
+        success: false,
+        message: e.message || "Gagal mengubah status publik aktivitas.",
+      },
+      500,
+    );
+  }
 });
 
 // 4. Hapus Aktivitas
@@ -693,11 +997,11 @@ api.post("/radar_sync", async (c) => {
 api.post("/radio", async (c) => {
   try {
     const body = await c.req.parseBody();
-    const room = body["room"] as string;
+    const room = sanitizeRoomId(body["room"] as string);
     const user = body["user"] as string;
     const audioFile = body["audio"] as File;
 
-    if (!room || !user || !audioFile) {
+    if (!room || room === "SINGLE_MODE" || !user || !audioFile) {
       return c.json(
         { success: false, message: "Data transmisi tidak lengkap" },
         400,
@@ -705,23 +1009,24 @@ api.post("/radio", async (c) => {
     }
 
     // Generate nama file unik agar tidak bertabrakan
-    const fileName = `radio_${room}_${user.replace(/[^a-zA-Z0-9]/g, "")}_${Date.now()}.webm`;
+    const objectKey = `gaspool/audio/${room}/radio_${sanitizeRadioUser(user)}_${Date.now()}.webm`;
 
     // Konversi file suara menjadi ArrayBuffer untuk diunggah
     const arrayBuffer = await audioFile.arrayBuffer();
 
     // Tembakkan file suara ke Satelit R2
-    await c.env.R2_BUCKET.put(fileName, arrayBuffer, {
+    await c.env.R2_BUCKET.put(objectKey, arrayBuffer, {
       httpMetadata: { contentType: audioFile.type || "audio/webm" },
     });
 
     // URL Publik file suara
-    const publicUrl = `${R2_PUBLIC_BASE_URL}/${fileName}`;
+    const publicUrl = `${R2_PUBLIC_BASE_URL}/${objectKey}`;
 
     // Catat link suara ke Radar KV agar teman di room bisa mendengarnya
     await c.env.GASPOOL_RADAR.put(
       `RADIO:${room}:${user}`,
       JSON.stringify({
+        objectKey,
         url: publicUrl,
         time: Date.now(),
       }),
@@ -734,19 +1039,70 @@ api.post("/radio", async (c) => {
   }
 });
 
-// 7. PUBLIC RIDES FETCH (Hanya untuk Jeannes Bryan)
+api.post("/radio_cleanup", protectAPI, async (c) => {
+  try {
+    const body = await c.req.json().catch(() => ({}));
+    const room = sanitizeRoomId(body?.room);
+
+    if (!room || room === "SINGLE_MODE") {
+      return c.json({ success: true, deleted: 0 });
+    }
+
+    let deleted = 0;
+    const prefixes = [`gaspool/audio/${room}/`, `radio_${room}_`];
+
+    for (const prefix of prefixes) {
+      let cursor: string | undefined;
+
+      do {
+        const listed: any = await c.env.R2_BUCKET.list({
+          prefix,
+          cursor,
+        });
+
+        for (const object of listed.objects || []) {
+          await c.env.R2_BUCKET.delete(object.key);
+          deleted++;
+        }
+
+        cursor = listed.truncated ? listed.cursor : undefined;
+      } while (cursor);
+    }
+
+    const radioList = await c.env.GASPOOL_RADAR.list({
+      prefix: `RADIO:${room}:`,
+    });
+
+    await Promise.all(
+      radioList.keys.map((key) => c.env.GASPOOL_RADAR.delete(key.name)),
+    );
+
+    return c.json({ success: true, deleted });
+  } catch (e: any) {
+    return c.json(
+      {
+        success: false,
+        message: e.message || "Gagal membersihkan audio peleton.",
+      },
+      500,
+    );
+  }
+});
+
+// 7. PUBLIC RIDES FETCH (single-owner public profile)
 api.get("/public_rides/:username", async (c) => {
-  const username = c.req.param("username").toLowerCase();
+  const username = normalizePublicProfileSlug(c.req.param("username"));
+  const publicProfileSlug = getPublicProfileSlug(c.env);
   const p = parseInt(c.req.query("page") || "1");
   const lim = 10;
   const off = (p - 1) * lim;
 
-  if (username !== "jeannesbryan")
-    return c.json({ error: "Unauthorized" }, 401);
+  if (username !== publicProfileSlug)
+    return c.json({ error: "Public profile not found" }, 404);
 
   try {
     const { results: rides } = await c.env.DB.prepare(
-      "SELECT * FROM rides ORDER BY start_date DESC LIMIT ? OFFSET ?",
+      "SELECT * FROM rides WHERE is_public = 1 ORDER BY start_date DESC LIMIT ? OFFSET ?",
     )
       .bind(lim, off)
       .all();

@@ -4,6 +4,49 @@ import { verify } from "hono/jwt";
 import { Bindings } from "../index";
 
 const dashboard = new Hono<{ Bindings: Bindings }>();
+const DEFAULT_PUBLIC_PROFILE_SLUG = "rider";
+const DEFAULT_PUBLIC_PROFILE_NAME = "Gaspool Rider";
+const DEFAULT_PUBLIC_PROFILE_AVATAR = "/assets/profile.webp";
+
+const escapeHTML = (value: string) =>
+  String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+
+const normalizePublicProfileSlug = (value?: string) => {
+  const slug = String(value || DEFAULT_PUBLIC_PROFILE_SLUG)
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]/g, "")
+    .slice(0, 40);
+
+  return slug || DEFAULT_PUBLIC_PROFILE_SLUG;
+};
+
+const normalizePublicProfileAvatar = (value?: string) => {
+  const avatar = String(value || DEFAULT_PUBLIC_PROFILE_AVATAR)
+    .trim()
+    .slice(0, 240);
+
+  if (avatar.startsWith("/assets/") || avatar.startsWith("https://")) {
+    return avatar;
+  }
+
+  return DEFAULT_PUBLIC_PROFILE_AVATAR;
+};
+
+const getPublicProfile = (env: Bindings) => ({
+  slug: normalizePublicProfileSlug(env.PUBLIC_PROFILE_SLUG),
+  name: escapeHTML(
+    String(env.PUBLIC_PROFILE_NAME || DEFAULT_PUBLIC_PROFILE_NAME)
+      .trim()
+      .slice(0, 80) || DEFAULT_PUBLIC_PROFILE_NAME,
+  ),
+  avatar: escapeHTML(normalizePublicProfileAvatar(env.PUBLIC_PROFILE_AVATAR)),
+});
 
 // ==========================================
 // 1. DASHBOARD UTAMA (Pusat Komando PWA)
@@ -61,6 +104,9 @@ dashboard.get("/", async (c) => {
           td { padding: 18px 15px; }
           .ride-name { font-weight: 900; font-size: 0.95rem; margin-bottom: 4px; color: #fff; }
           .ride-meta { font-size: 0.75rem; color: #888; font-weight: bold; }
+          .visibility-badge { display: inline-flex; align-items: center; gap: 4px; border-radius: 999px; padding: 3px 7px; margin-left: 6px; font-size: 0.62rem; font-weight: 900; letter-spacing: 0.6px; vertical-align: middle; }
+          .visibility-public { color: #2ecc71; background: rgba(46,204,113,0.12); border: 1px solid rgba(46,204,113,0.35); }
+          .visibility-private { color: #94a3b8; background: rgba(148,163,184,0.12); border: 1px solid rgba(148,163,184,0.25); }
           
           .modal { display: none; position: fixed; z-index: 2000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); backdrop-filter: blur(10px); justify-content: center; align-items: center; padding: 20px; }
           .modal-content { background: #16161d; border-radius: 30px; width: 100%; max-width: 500px; border: 1px solid rgba(255,255,255,0.1); padding: 25px; box-shadow: 0 25px 50px rgba(0,0,0,0.5); }
@@ -84,6 +130,7 @@ dashboard.get("/", async (c) => {
             <button class="btn btn-orange" onclick="window.location.href='/record?type=ride'">🚴 GOWES SOLO</button>
             <button class="btn btn-accent" onclick="openModal('peletonModal')">👥 GOWES PELETON</button>
             <button class="btn btn-outline" style="grid-column: span 2; border-color: var(--primary); color: var(--primary);" onclick="window.location.href='/route_plan'">🧭 RUTE PLAN</button>
+            <button class="btn btn-outline" style="grid-column: span 2; border-color: #3498db; color: #3498db;" onclick="window.location.href='/routes'">🗺️ RUTE TERSIMPAN</button>
             <button class="btn btn-orange" style="grid-column: span 2;" onclick="openModal('runModal')">🏃 PACE MODE</button>
             <button class="btn btn-outline" onclick="window.location.href='/sync_strava'">🧡 STRAVA SYNC</button>
             <button class="btn btn-outline" onclick="window.location.href='/gpx_import'">📥 GPX IMPORT</button>
@@ -170,8 +217,9 @@ dashboard.get("/", async (c) => {
                 
                 <div id="map-modal"></div>
                 
-                <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:8px; margin-top:10px;">
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px; margin-top:10px;">
                     <button class="btn btn-orange" style="font-size: 0.65rem;" id="btn-detail-link">🔍 STUDIO</button>
+                    <button class="btn" style="background:#2ecc71; color:white; font-size: 0.65rem;" id="btn-visibility-link">🌐 PUBLIC</button>
                     <button class="btn" style="background:#3498db; color:white; font-size: 0.65rem;" id="btn-edit-link">✏️ EDIT</button>
                     <button class="btn" style="background:#e74c3c; color:white; font-size: 0.65rem;" id="btn-delete-link">🗑️ HAPUS</button>
                 </div>
@@ -231,10 +279,13 @@ dashboard.get("/", async (c) => {
                const tr = document.createElement('tr');
                const icon = r.activity_type === 'run' ? '🏃' : (r.activity_type === 'walk' ? '🚶' : (r.activity_type === 'hike' ? '⛰️' : '🚴'));
                
-               tr.onclick = () => bukaPeta(r.polyline, r.name, r.distance, r.id);
+               tr.onclick = () => bukaPeta(r.polyline, r.name, r.distance, r.id, Number(r.is_public || 0) === 1);
+               const visibilityBadge = Number(r.is_public || 0) === 1
+                 ? '<span class="visibility-badge visibility-public">PUBLIC</span>'
+                 : '<span class="visibility-badge visibility-private">PRIVATE</span>';
                
                tr.innerHTML = '<td><div style="font-size:1.5rem;">' + icon + '</div></td>' +
-                            '<td><div class="ride-name">' + escapeHTML(r.name) + '</div>' +
+                            '<td><div class="ride-name">' + escapeHTML(r.name) + visibilityBadge + '</div>' +
                             '<div class="ride-meta">' + parseFloat(r.distance).toFixed(2) + ' KM • ' + new Date(r.start_date).toLocaleDateString('id-ID') + '</div></td>' +
                             '<td style="text-align:right; color:' + primaryColor + '; font-weight:bold;">❯</td>';
                tb.appendChild(tr);
@@ -272,11 +323,40 @@ function escapeHTML(str) {
               return coordinates;
           }
 
-          async function bukaPeta(url, name, dist, id) {
+          function setVisibilityButton(isPublic) {
+            const btn = document.getElementById('btn-visibility-link');
+            btn.innerText = isPublic ? '🌐 PUBLIC' : '🔒 PRIVATE';
+            btn.style.background = isPublic ? '#2ecc71' : '#555';
+          }
+
+          async function bukaPeta(url, name, dist, id, isPublic) {
             openModal('mapModal');
             document.getElementById('mTitle').innerText = name;
             document.getElementById('mDist').innerText = parseFloat(dist).toFixed(2) + ' KM';
             document.getElementById('btn-detail-link').onclick = () => window.location.href = '/detail/' + id;
+            setVisibilityButton(isPublic);
+            document.getElementById('btn-visibility-link').onclick = async () => {
+                const nextPublic = !isPublic;
+                const label = nextPublic ? 'publik' : 'private';
+                if(!confirm('Ubah aktivitas ini menjadi ' + label + '?')) return;
+
+                const res = await fetch('/api/ride_visibility/' + id, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ is_public: nextPublic ? 1 : 0 })
+                });
+                const data = await res.json();
+
+                if (!res.ok || !data.success) {
+                    alert(data.message || 'Gagal mengubah status publik.');
+                    return;
+                }
+
+                isPublic = nextPublic;
+                setVisibilityButton(isPublic);
+                closeModal('mapModal');
+                changeFilter();
+            };
             
             document.getElementById('btn-edit-link').onclick = async () => {
                 const n = prompt('Rename Activity:', name);
@@ -527,6 +607,7 @@ let bunkerSyncRunning = false;
 dashboard.get("/route_plan", async (c) => {
   const token = getCookie(c, "gaspool_session");
   if (!token) return c.redirect("/login");
+  const routeId = (c.req.query("route") || "").replace(/[^0-9]/g, "");
 
   return c.html(`
     <!DOCTYPE html>
@@ -552,6 +633,12 @@ dashboard.get("/route_plan", async (c) => {
             .row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 8px; }
             .input, .select { width: 100%; background: rgba(255,255,255,0.06); border: 1px solid var(--line); color: #fff; border-radius: 12px; padding: 12px; font-size: 0.85rem; font-weight: 800; outline: none; }
             .select option { background: #0a0a12; color: #fff; }
+            .search-box { display: grid; grid-template-columns: 1fr 84px; gap: 8px; margin-bottom: 8px; }
+            .search-results { display: none; flex-direction: column; gap: 6px; max-height: 172px; overflow: auto; margin: 0 0 10px; }
+            .search-item { width: 100%; text-align: left; border: 1px solid var(--line); border-radius: 12px; background: rgba(255,255,255,0.06); color: #fff; padding: 10px; cursor: pointer; }
+            .search-item:active { transform: scale(0.99); }
+            .search-title { font-size: 0.78rem; font-weight: 900; line-height: 1.25; }
+            .search-meta { color: var(--muted); font-size: 0.66rem; font-weight: 800; margin-top: 4px; line-height: 1.3; }
             .btn { border: none; border-radius: 12px; padding: 12px 10px; font-size: 0.75rem; font-weight: 900; cursor: pointer; color: #fff; background: rgba(255,255,255,0.08); text-transform: uppercase; }
             .btn:active { transform: scale(0.97); }
             .btn-primary { background: var(--primary); }
@@ -564,13 +651,21 @@ dashboard.get("/route_plan", async (c) => {
             .stat-val { color: var(--primary); font-size: 1.2rem; font-weight: 900; font-style: italic; }
             .stat-lbl { color: var(--muted); font-size: 0.62rem; font-weight: 900; letter-spacing: 1px; margin-top: 3px; }
             .points { display: flex; gap: 6px; flex-wrap: wrap; margin: 8px 0 10px; min-height: 28px; }
-            .point-pill { border: 1px solid var(--line); background: rgba(255,255,255,0.06); color: #fff; border-radius: 999px; padding: 7px 9px; font-size: 0.68rem; font-weight: 900; }
+            .point-pill { border: 1px solid var(--line); background: rgba(255,255,255,0.06); color: #fff; border-radius: 12px; padding: 6px 7px; font-size: 0.68rem; font-weight: 900; display: flex; align-items: center; gap: 5px; cursor: pointer; }
+            .point-label { min-width: 48px; }
+            .point-action { border: 1px solid var(--line); background: rgba(0,0,0,0.2); color: #fff; border-radius: 8px; min-width: 24px; height: 24px; font-size: 0.7rem; font-weight: 900; cursor: pointer; }
+            .point-action:disabled { opacity: 0.32; cursor: not-allowed; }
+            .planner-tools { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; }
             .hint { color: var(--muted); font-size: 0.72rem; line-height: 1.35; font-weight: 700; margin: 7px 2px 10px; }
             .status { color: var(--muted); font-size: 0.75rem; font-weight: 800; min-height: 18px; margin: 2px 2px 9px; }
+            .gps-control { position: fixed; right: 14px; top: 84px; z-index: 1000; border: 1px solid var(--line); border-radius: 14px; background: var(--panel); color: #fff; backdrop-filter: blur(14px); padding: 12px 14px; font-size: 0.72rem; font-weight: 900; cursor: pointer; pointer-events: auto; box-shadow: 0 12px 30px rgba(0,0,0,0.35); }
+            .gps-control.is-following { color: var(--primary); border-color: rgba(255,95,0,0.75); }
+            .gps-control:disabled { opacity: 0.42; cursor: not-allowed; }
             .leaflet-control-attribution { display: none; }
             @media (min-width: 720px) {
                 .panel { left: auto; right: 20px; bottom: 20px; width: 430px; max-height: calc(100vh - 40px); }
                 .topbar { padding: 20px; }
+                .gps-control { top: 96px; right: 20px; }
             }
         </style>
     </head>
@@ -584,9 +679,15 @@ dashboard.get("/route_plan", async (c) => {
             </div>
             <a class="back-btn" href="/">KEMBALI</a>
         </div>
+        <button id="btnRecenter" class="gps-control" onclick="recenterToUser()" disabled>GPS</button>
 
         <div class="panel">
             <input id="routeName" class="input" value="Gowes Route Plan" maxlength="80" style="margin-bottom:8px;">
+            <div class="search-box">
+                <input id="locationSearch" class="input" placeholder="Cari lokasi, misal: alun-alun mojokerto">
+                <button class="btn btn-primary" id="btnSearch" onclick="searchLocation()">CARI</button>
+            </div>
+            <div id="searchResults" class="search-results"></div>
             <div class="row">
                 <select id="routeProfile" class="select">
                     <option value="cycling-regular">RIDE REGULAR</option>
@@ -602,6 +703,10 @@ dashboard.get("/route_plan", async (c) => {
             <div class="hint">Ketuk peta untuk menambah titik. Titik pertama menjadi start, titik terakhir menjadi tujuan, titik di tengah menjadi waypoint.</div>
             <div id="status" class="status">Belum ada titik rute.</div>
             <div id="points" class="points"></div>
+            <div class="planner-tools">
+                <button class="btn" id="btnUndoPoint" onclick="undoPoint()" disabled>UNDO TITIK</button>
+                <button class="btn" id="btnFitMap" onclick="fitRouteView()" disabled>FIT MAP</button>
+            </div>
 
             <div class="row-3">
                 <button class="btn btn-primary" id="btnGenerate" onclick="generateRoute()">GENERATE</button>
@@ -636,9 +741,18 @@ dashboard.get("/route_plan", async (c) => {
             let guideLine = null;
             let routeLine = null;
             let savedRoute = null;
+            let searchAbort = null;
+            let userMarker = null;
+            let userAccuracyCircle = null;
+            let userPosition = null;
+            let userWatchId = null;
+            let followUser = false;
+            let centeredOnUserOnce = false;
+            const preloadRouteId = "${routeId}";
 
             const primaryColor = '#FF5F00';
             const routeColor = '#3498db';
+            const userColor = '#38bdf8';
 
             function initMap() {
                 map = L.map('map', { zoomControl: false }).setView([-7.25, 112.76], 13);
@@ -650,11 +764,24 @@ dashboard.get("/route_plan", async (c) => {
                     addPoint(e.latlng.lat, e.latlng.lng);
                 });
 
-                if (navigator.geolocation) {
-                    navigator.geolocation.getCurrentPosition(function(pos) {
-                        const latlng = [pos.coords.latitude, pos.coords.longitude];
-                        map.setView(latlng, 15);
-                    }, function() {}, { enableHighAccuracy: true, timeout: 8000 });
+                map.on('dragstart', function() {
+                    if (userPosition) {
+                        followUser = false;
+                        updateRecenterButton();
+                    }
+                });
+
+                startUserTracking();
+
+                document.getElementById('locationSearch').addEventListener('keydown', function(e) {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        searchLocation();
+                    }
+                });
+
+                if (preloadRouteId) {
+                    loadExistingRoute(preloadRouteId);
                 }
             }
 
@@ -664,12 +791,319 @@ dashboard.get("/route_plan", async (c) => {
                 el.style.color = isError ? '#e74c3c' : '#94a3b8';
             }
 
-            function addPoint(lat, lng) {
-                points.push({ lat: lat, lng: lng });
+            function updateRecenterButton() {
+                const btn = document.getElementById('btnRecenter');
+                btn.disabled = !userPosition;
+                btn.classList.toggle('is-following', Boolean(userPosition && followUser));
+                btn.innerText = followUser ? 'GPS ON' : 'GPS';
+            }
+
+            function startUserTracking() {
+                if (!navigator.geolocation) {
+                    updateRecenterButton();
+                    return;
+                }
+
+                userWatchId = navigator.geolocation.watchPosition(function(pos) {
+                    updateUserPosition(pos);
+                }, function() {
+                    updateRecenterButton();
+                }, {
+                    enableHighAccuracy: true,
+                    maximumAge: 5000,
+                    timeout: 12000
+                });
+            }
+
+            function updateUserPosition(pos) {
+                const lat = Number(pos.coords.latitude);
+                const lng = Number(pos.coords.longitude);
+                const accuracy = Math.max(5, Number(pos.coords.accuracy || 0));
+                const latlng = [lat, lng];
+
+                if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+
+                userPosition = { lat: lat, lng: lng, accuracy: accuracy };
+
+                if (!userAccuracyCircle) {
+                    userAccuracyCircle = L.circle(latlng, {
+                        radius: accuracy,
+                        color: userColor,
+                        weight: 1,
+                        opacity: 0.35,
+                        fillColor: userColor,
+                        fillOpacity: 0.12,
+                        interactive: false
+                    }).addTo(map);
+                } else {
+                    userAccuracyCircle.setLatLng(latlng);
+                    userAccuracyCircle.setRadius(accuracy);
+                }
+
+                if (!userMarker) {
+                    userMarker = L.circleMarker(latlng, {
+                        radius: 8,
+                        color: '#fff',
+                        weight: 3,
+                        fillColor: userColor,
+                        fillOpacity: 1,
+                        interactive: false
+                    }).addTo(map);
+                } else {
+                    userMarker.setLatLng(latlng);
+                }
+
+                if (!centeredOnUserOnce || followUser) {
+                    map.setView(latlng, Math.max(map.getZoom(), 15), { animate: true });
+                    centeredOnUserOnce = true;
+                }
+
+                updateRecenterButton();
+            }
+
+            function recenterToUser() {
+                if (!userPosition) {
+                    setStatus('Lokasi GPS belum tersedia.', true);
+                    return;
+                }
+
+                followUser = true;
+                map.setView([userPosition.lat, userPosition.lng], Math.max(map.getZoom(), 16), { animate: true });
+                updateRecenterButton();
+                setStatus('Peta kembali ke posisi kamu.', false);
+            }
+
+            function setSearchResultsVisible(visible) {
+                document.getElementById('searchResults').style.display = visible ? 'flex' : 'none';
+            }
+
+            function clearSearchResults() {
+                const list = document.getElementById('searchResults');
+                list.innerHTML = '';
+                setSearchResultsVisible(false);
+            }
+
+            async function searchLocation() {
+                const input = document.getElementById('locationSearch');
+                const btn = document.getElementById('btnSearch');
+                const query = input.value.trim();
+
+                if (query.length < 2) {
+                    setStatus('Ketik minimal 2 karakter untuk mencari lokasi.', true);
+                    clearSearchResults();
+                    return;
+                }
+
+                if (searchAbort) searchAbort.abort();
+                searchAbort = new AbortController();
+
+                btn.disabled = true;
+                btn.innerText = '...';
+                setStatus('Mencari lokasi...', false);
+
+                try {
+                    const center = map.getCenter();
+                    const url = '/api/geocode?q=' + encodeURIComponent(query)
+                        + '&lat=' + encodeURIComponent(center.lat)
+                        + '&lng=' + encodeURIComponent(center.lng);
+                    const res = await fetch(url, { signal: searchAbort.signal });
+                    const data = await res.json();
+
+                    if (!res.ok || !data.success) {
+                        throw new Error(data.message || 'Pencarian lokasi gagal.');
+                    }
+
+                    renderSearchResults(data.results || []);
+                } catch (err) {
+                    if (err.name === 'AbortError') return;
+                    console.error(err);
+                    setStatus(err.message || 'Gagal mencari lokasi.', true);
+                    clearSearchResults();
+                } finally {
+                    btn.disabled = false;
+                    btn.innerText = 'CARI';
+                }
+            }
+
+            function renderSearchResults(results) {
+                const list = document.getElementById('searchResults');
+                list.innerHTML = '';
+
+                if (!results.length) {
+                    setStatus('Lokasi tidak ditemukan. Coba kata kunci lain.', true);
+                    setSearchResultsVisible(false);
+                    return;
+                }
+
+                results.forEach(function(result) {
+                    const item = document.createElement('button');
+                    const title = document.createElement('div');
+                    const meta = document.createElement('div');
+                    const area = [result.locality, result.region, result.country].filter(Boolean).join(', ');
+
+                    item.type = 'button';
+                    item.className = 'search-item';
+                    title.className = 'search-title';
+                    meta.className = 'search-meta';
+                    title.innerText = result.label || result.name || 'Lokasi';
+                    meta.innerText = area || (Number(result.lat).toFixed(5) + ', ' + Number(result.lng).toFixed(5));
+
+                    item.appendChild(title);
+                    item.appendChild(meta);
+                    item.onclick = function() {
+                        selectSearchResult(result);
+                    };
+                    list.appendChild(item);
+                });
+
+                setSearchResultsVisible(true);
+                setStatus(results.length + ' hasil ditemukan. Pilih salah satu untuk menambah titik.', false);
+            }
+
+            function selectSearchResult(result) {
+                const lat = Number(result.lat);
+                const lng = Number(result.lng);
+                const wasEmpty = points.length === 0;
+
+                if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+                    setStatus('Koordinat hasil pencarian tidak valid.', true);
+                    return;
+                }
+
+                addPoint(lat, lng);
+                map.setView([lat, lng], 16);
+                document.getElementById('locationSearch').value = result.name || result.label || '';
+                clearSearchResults();
+
+                const routeName = document.getElementById('routeName');
+                if (!wasEmpty && routeName.value === 'Gowes Route Plan') {
+                    routeName.value = 'Route ke ' + (result.name || result.label || 'Tujuan');
+                }
+            }
+
+            function invalidateGeneratedRoute() {
                 savedRoute = null;
                 document.getElementById('btnStart').disabled = true;
                 document.getElementById('summary').style.display = 'none';
+
+                if (routeLine) {
+                    map.removeLayer(routeLine);
+                    routeLine = null;
+                }
+            }
+
+            function updatePlannerControls() {
+                const undoBtn = document.getElementById('btnUndoPoint');
+                const fitBtn = document.getElementById('btnFitMap');
+
+                undoBtn.disabled = points.length === 0;
+                fitBtn.disabled = points.length === 0 && !routeLine;
+            }
+
+            function addPoint(lat, lng) {
+                points.push({ lat: lat, lng: lng });
+                invalidateGeneratedRoute();
                 drawPoints();
+            }
+
+            function undoPoint() {
+                if (points.length === 0) return;
+
+                points.pop();
+                invalidateGeneratedRoute();
+                drawPoints();
+                setStatus(points.length ? 'Titik terakhir dihapus.' : 'Semua titik rute sudah kosong.', false);
+            }
+
+            function removePoint(index) {
+                if (index < 0 || index >= points.length) return;
+
+                points.splice(index, 1);
+                invalidateGeneratedRoute();
+                drawPoints();
+                setStatus('Titik rute dihapus.', false);
+            }
+
+            function movePoint(index, direction) {
+                const target = index + direction;
+
+                if (index < 0 || index >= points.length || target < 0 || target >= points.length) return;
+
+                const current = points[index];
+                points[index] = points[target];
+                points[target] = current;
+                invalidateGeneratedRoute();
+                drawPoints();
+                setStatus('Urutan titik rute diperbarui.', false);
+            }
+
+            function focusPoint(index) {
+                const point = points[index];
+
+                if (!point) return;
+
+                map.setView([point.lat, point.lng], Math.max(map.getZoom(), 16), { animate: true });
+            }
+
+            function fitRouteView() {
+                if (routeLine) {
+                    map.fitBounds(routeLine.getBounds(), { padding: [45, 45] });
+                    return;
+                }
+
+                if (guideLine) {
+                    map.fitBounds(guideLine.getBounds(), { padding: [45, 45] });
+                    return;
+                }
+
+                if (points.length === 1) {
+                    focusPoint(0);
+                }
+            }
+
+            async function loadExistingRoute(routeId) {
+                setStatus('Memuat rute tersimpan #' + routeId + '...', false);
+
+                try {
+                    const res = await fetch('/api/route_plan/' + encodeURIComponent(routeId));
+                    const data = await res.json();
+
+                    if (!res.ok || !data.success || !data.route) {
+                        throw new Error(data.message || 'Rute tersimpan gagal dimuat.');
+                    }
+
+                    const route = data.route;
+                    const routeData = route.data || {};
+                    const waypoints = Array.isArray(routeData.waypoints) ? routeData.waypoints : [];
+
+                    points = waypoints.map(function(point) {
+                        return {
+                            lat: Number(point.lat),
+                            lng: Number(point.lng !== undefined ? point.lng : point.lon)
+                        };
+                    }).filter(function(point) {
+                        return Number.isFinite(point.lat) && Number.isFinite(point.lng);
+                    });
+
+                    savedRoute = route;
+                    document.getElementById('routeName').value = route.name || routeData.name || 'Gowes Route Plan';
+                    if (route.profile || routeData.profile) {
+                        document.getElementById('routeProfile').value = route.profile || routeData.profile;
+                    }
+
+                    drawPoints();
+                    drawRoute(routeData.coordinates || []);
+                    document.getElementById('statDist').innerText = Number(route.distance || routeData.distance_km || 0).toFixed(1);
+                    document.getElementById('statTime').innerText = Math.max(1, Math.round(Number(route.duration || routeData.duration_s || 0) / 60));
+                    document.getElementById('statTurns').innerText = Array.isArray(routeData.instructions) ? routeData.instructions.length : 0;
+                    document.getElementById('routeInfo').innerText = 'Route ID #' + route.id + ' dimuat dari library.';
+                    document.getElementById('summary').style.display = 'block';
+                    document.getElementById('btnStart').disabled = false;
+                    setStatus('Rute tersimpan berhasil dimuat.', false);
+                } catch (err) {
+                    console.error(err);
+                    setStatus(err.message || 'Gagal memuat rute tersimpan.', true);
+                }
             }
 
             function drawPoints() {
@@ -697,11 +1131,52 @@ dashboard.get("/route_plan", async (c) => {
                         fillColor: index === 0 ? '#2ecc71' : (index === points.length - 1 ? '#e74c3c' : primaryColor),
                         fillOpacity: 1
                     }).addTo(map).bindTooltip(label, { permanent: true, direction: 'top' });
+                    marker.on('click', function() { focusPoint(index); });
                     markers.push(marker);
 
                     const pill = document.createElement('div');
+                    const pillLabel = document.createElement('span');
+                    const btnUp = document.createElement('button');
+                    const btnDown = document.createElement('button');
+                    const btnRemove = document.createElement('button');
+
                     pill.className = 'point-pill';
-                    pill.innerText = label;
+                    pill.title = Number(point.lat).toFixed(5) + ', ' + Number(point.lng).toFixed(5);
+                    pill.onclick = function() { focusPoint(index); };
+
+                    pillLabel.className = 'point-label';
+                    pillLabel.innerText = label;
+
+                    btnUp.type = 'button';
+                    btnUp.className = 'point-action';
+                    btnUp.innerText = '↑';
+                    btnUp.disabled = index === 0;
+                    btnUp.onclick = function(e) {
+                        e.stopPropagation();
+                        movePoint(index, -1);
+                    };
+
+                    btnDown.type = 'button';
+                    btnDown.className = 'point-action';
+                    btnDown.innerText = '↓';
+                    btnDown.disabled = index === points.length - 1;
+                    btnDown.onclick = function(e) {
+                        e.stopPropagation();
+                        movePoint(index, 1);
+                    };
+
+                    btnRemove.type = 'button';
+                    btnRemove.className = 'point-action';
+                    btnRemove.innerText = '×';
+                    btnRemove.onclick = function(e) {
+                        e.stopPropagation();
+                        removePoint(index);
+                    };
+
+                    pill.appendChild(pillLabel);
+                    pill.appendChild(btnUp);
+                    pill.appendChild(btnDown);
+                    pill.appendChild(btnRemove);
                     list.appendChild(pill);
                 });
 
@@ -718,6 +1193,8 @@ dashboard.get("/route_plan", async (c) => {
                 if (points.length === 0) setStatus('Belum ada titik rute.', false);
                 else if (points.length === 1) setStatus('Start sudah dipasang. Ketuk peta untuk menambah tujuan.', false);
                 else setStatus(points.length + ' titik siap digenerate.', false);
+
+                updatePlannerControls();
             }
 
             function useCurrentLocation() {
@@ -726,8 +1203,16 @@ dashboard.get("/route_plan", async (c) => {
                     return;
                 }
 
+                if (userPosition) {
+                    addPoint(userPosition.lat, userPosition.lng);
+                    map.setView([userPosition.lat, userPosition.lng], Math.max(map.getZoom(), 16), { animate: true });
+                    setStatus('Lokasi GPS dipasang sebagai titik rute.', false);
+                    return;
+                }
+
                 setStatus('Mengambil lokasi GPS...', false);
                 navigator.geolocation.getCurrentPosition(function(pos) {
+                    updateUserPosition(pos);
                     addPoint(pos.coords.latitude, pos.coords.longitude);
                     map.setView([pos.coords.latitude, pos.coords.longitude], 16);
                 }, function() {
@@ -737,9 +1222,7 @@ dashboard.get("/route_plan", async (c) => {
 
             function resetPlan() {
                 points = [];
-                savedRoute = null;
-                document.getElementById('btnStart').disabled = true;
-                document.getElementById('summary').style.display = 'none';
+                invalidateGeneratedRoute();
                 drawPoints();
             }
 
@@ -829,7 +1312,263 @@ dashboard.get("/route_plan", async (c) => {
 });
 
 // ==========================================
-// 3. FITUR: HEATMAP OMNI-TRACKER
+// 3. FITUR: ROUTE LIBRARY
+// ==========================================
+dashboard.get("/routes", async (c) => {
+  const token = getCookie(c, "gaspool_session");
+  if (!token) return c.redirect("/login");
+
+  return c.html(`
+    <!DOCTYPE html>
+    <html lang="id">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Rute Tersimpan - Gaspool</title>
+        <style>
+          :root { --primary: #FF5F00; --bg: #0a0a12; --card: rgba(255,255,255,0.06); --line: rgba(255,255,255,0.1); --muted: #94a3b8; --route: #3498db; }
+          * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+          body { margin: 0; min-height: 100vh; background: var(--bg); background-image: radial-gradient(circle at 50% 0%, rgba(52,152,219,0.18) 0%, #0a0a12 70%); color: #fff; font-family: 'Inter', sans-serif; padding: 18px; }
+          .wrap { max-width: 720px; margin: 0 auto; }
+          .topbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 18px; }
+          h1 { margin: 0; color: var(--primary); font-style: italic; font-size: 1.8rem; font-weight: 900; letter-spacing: -1px; }
+          .subtitle { color: var(--muted); font-size: 0.75rem; font-weight: 800; margin-top: 4px; }
+          .back { color: #fff; text-decoration: none; border: 1px solid var(--line); background: var(--card); border-radius: 12px; padding: 12px 14px; font-weight: 900; font-size: 0.76rem; }
+          .toolbar { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px; }
+          .btn { border: none; border-radius: 12px; padding: 12px 10px; font-size: 0.75rem; font-weight: 900; cursor: pointer; color: #fff; background: rgba(255,255,255,0.08); text-transform: uppercase; }
+          .btn:active { transform: scale(0.97); }
+          .btn-primary { background: var(--primary); }
+          .btn-route { background: var(--route); }
+          .btn-danger { background: rgba(231,76,60,0.85); }
+          .btn-outline { border: 1px solid var(--line); }
+          .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+          .status { color: var(--muted); font-size: 0.78rem; font-weight: 800; min-height: 20px; margin: 8px 2px 12px; }
+          .routes { display: grid; gap: 10px; }
+          .route-card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 14px; box-shadow: 0 14px 35px rgba(0,0,0,0.22); }
+          .route-title { font-size: 1rem; font-weight: 900; line-height: 1.25; margin-bottom: 8px; }
+          .route-meta { color: var(--muted); font-size: 0.72rem; font-weight: 800; line-height: 1.45; margin-bottom: 12px; }
+          .route-actions { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+          .empty { border: 1px dashed var(--line); border-radius: 16px; padding: 26px 18px; text-align: center; color: var(--muted); font-weight: 800; }
+          #btnMore { width: 100%; margin-top: 14px; display: none; }
+          @media (max-width: 560px) {
+            .route-actions { grid-template-columns: 1fr 1fr; }
+            .toolbar { grid-template-columns: 1fr; }
+          }
+        </style>
+    </head>
+    <body>
+      <div class="wrap">
+        <div class="topbar">
+          <div>
+            <h1>RUTE TERSIMPAN</h1>
+            <div class="subtitle">Library route plan Gaspool</div>
+          </div>
+          <a class="back" href="/">KEMBALI</a>
+        </div>
+
+        <div class="toolbar">
+          <button class="btn btn-primary" onclick="window.location.href='/route_plan'">BUAT RUTE BARU</button>
+          <button class="btn btn-outline" onclick="reloadRoutes()">REFRESH</button>
+        </div>
+
+        <div id="status" class="status">Memuat rute tersimpan...</div>
+        <div id="routes" class="routes"></div>
+        <button id="btnMore" class="btn btn-outline" onclick="loadRoutes()">LOAD MORE</button>
+      </div>
+
+      <script>
+        let offset = 0;
+        const limit = 20;
+        let loading = false;
+
+        function escapeHTML(str) {
+          return String(str || '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+        }
+
+        function setStatus(text, isError) {
+          const el = document.getElementById('status');
+          el.innerText = text;
+          el.style.color = isError ? '#e74c3c' : '#94a3b8';
+        }
+
+        function formatDuration(seconds) {
+          const min = Math.max(1, Math.round(Number(seconds || 0) / 60));
+          if (min < 60) return min + ' menit';
+          return Math.floor(min / 60) + ' jam ' + (min % 60) + ' menit';
+        }
+
+        function formatDate(value) {
+          if (!value) return '-';
+          const d = new Date(value);
+          if (isNaN(d.getTime())) return String(value);
+          return d.toLocaleDateString('id-ID') + ' ' + d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+        }
+
+        function renderRoute(route) {
+          const card = document.createElement('div');
+          const title = document.createElement('div');
+          const meta = document.createElement('div');
+          const actions = document.createElement('div');
+          const startBtn = document.createElement('button');
+          const openBtn = document.createElement('button');
+          const renameBtn = document.createElement('button');
+          const deleteBtn = document.createElement('button');
+
+          card.className = 'route-card';
+          card.dataset.id = route.id;
+          title.className = 'route-title';
+          meta.className = 'route-meta';
+          actions.className = 'route-actions';
+
+          title.innerText = route.name || 'Route Plan #' + route.id;
+          meta.innerText =
+            Number(route.distance || 0).toFixed(1) + ' KM • ' +
+            formatDuration(route.duration) + ' • ' +
+            (route.profile || 'cycling-regular') + ' • ' +
+            formatDate(route.created_at);
+
+          startBtn.className = 'btn btn-route';
+          startBtn.innerText = 'MULAI';
+          startBtn.onclick = function() {
+            window.location.href = '/record?type=ride&route=' + encodeURIComponent(route.id);
+          };
+
+          openBtn.className = 'btn btn-outline';
+          openBtn.innerText = 'BUKA';
+          openBtn.onclick = function() {
+            window.location.href = '/route_plan?route=' + encodeURIComponent(route.id);
+          };
+
+          renameBtn.className = 'btn btn-outline';
+          renameBtn.innerText = 'RENAME';
+          renameBtn.onclick = function() {
+            renameRoute(route, title);
+          };
+
+          deleteBtn.className = 'btn btn-danger';
+          deleteBtn.innerText = 'HAPUS';
+          deleteBtn.onclick = function() {
+            deleteRoute(route, card);
+          };
+
+          actions.appendChild(startBtn);
+          actions.appendChild(openBtn);
+          actions.appendChild(renameBtn);
+          actions.appendChild(deleteBtn);
+          card.appendChild(title);
+          card.appendChild(meta);
+          card.appendChild(actions);
+
+          return card;
+        }
+
+        async function loadRoutes() {
+          if (loading) return;
+
+          loading = true;
+          document.getElementById('btnMore').disabled = true;
+          setStatus(offset === 0 ? 'Memuat rute tersimpan...' : 'Memuat rute berikutnya...', false);
+
+          try {
+            const res = await fetch('/api/route_plans?limit=' + limit + '&offset=' + offset);
+            const data = await res.json();
+
+            if (!res.ok || !data.success) {
+              throw new Error(data.message || 'Gagal memuat route library.');
+            }
+
+            const list = document.getElementById('routes');
+            const routes = data.routes || [];
+
+            if (offset === 0) list.innerHTML = '';
+
+            routes.forEach(function(route) {
+              list.appendChild(renderRoute(route));
+            });
+
+            offset += routes.length;
+            document.getElementById('btnMore').style.display = routes.length === limit ? 'block' : 'none';
+            setStatus(routes.length ? offset + ' rute termuat.' : 'Belum ada rute tersimpan.', false);
+
+            if (offset === 0) {
+              list.innerHTML = '<div class="empty">Belum ada rute. Buat route plan dulu dari tombol di atas.</div>';
+            }
+          } catch (err) {
+            console.error(err);
+            setStatus(err.message || 'Gagal memuat rute.', true);
+          } finally {
+            loading = false;
+            document.getElementById('btnMore').disabled = false;
+          }
+        }
+
+        function reloadRoutes() {
+          offset = 0;
+          loadRoutes();
+        }
+
+        async function renameRoute(route, titleEl) {
+          const name = prompt('Nama baru rute:', route.name || '');
+          const nextName = String(name || '').trim();
+
+          if (!nextName) return;
+
+          try {
+            const res = await fetch('/api/route_plan/' + encodeURIComponent(route.id), {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ name: nextName })
+            });
+            const data = await res.json();
+
+            if (!res.ok || !data.success) {
+              throw new Error(data.message || 'Gagal rename rute.');
+            }
+
+            route.name = nextName;
+            titleEl.innerText = nextName;
+            setStatus('Rute berhasil direname.', false);
+          } catch (err) {
+            console.error(err);
+            setStatus(err.message || 'Gagal rename rute.', true);
+          }
+        }
+
+        async function deleteRoute(route, card) {
+          if (!confirm('Hapus rute "' + (route.name || ('#' + route.id)) + '"?')) return;
+
+          try {
+            const res = await fetch('/api/route_plan/' + encodeURIComponent(route.id), {
+              method: 'DELETE'
+            });
+            const data = await res.json();
+
+            if (!res.ok || !data.success) {
+              throw new Error(data.message || 'Gagal menghapus rute.');
+            }
+
+            card.remove();
+            setStatus('Rute berhasil dihapus.', false);
+          } catch (err) {
+            console.error(err);
+            setStatus(err.message || 'Gagal menghapus rute.', true);
+          }
+        }
+
+        window.onload = loadRoutes;
+      </script>
+    </body>
+    </html>
+  `);
+});
+
+// ==========================================
+// 4. FITUR: HEATMAP OMNI-TRACKER
 // ==========================================
 dashboard.get("/heatmap", async (c) => {
   const token = getCookie(c, "gaspool_session");
@@ -1342,10 +2081,11 @@ dashboard.post("/sync_strava", async (c) => {
 });
 
 // ==========================================
-// 5. FITUR: PUBLIC TIMELINE (ELITE SHOWCASE)
+// 5. FITUR: PUBLIC TIMELINE (single-owner showcase)
 // ==========================================
 dashboard.get("/:username", async (c, next) => {
-  const username = c.req.param("username").toLowerCase();
+  const username = normalizePublicProfileSlug(c.req.param("username"));
+  const publicProfile = getPublicProfile(c.env);
   const reserved = [
     "login",
     "logout",
@@ -1354,13 +2094,14 @@ dashboard.get("/:username", async (c, next) => {
     "record",
     "detail",
     "video_flex",
+    "routes",
     "route_plan",
     "heatmap",
     "gpx_import",
     "sync_strava",
   ];
   if (reserved.includes(username)) return next();
-  if (username !== "jeannesbryan")
+  if (username !== publicProfile.slug)
     return c.text("Satelit tidak menemukan agen ini.", 404);
 
   try {
@@ -1372,10 +2113,11 @@ dashboard.get("/:username", async (c, next) => {
     COALESCE(SUM(total_elevation_gain),0) as elev,
     COALESCE(SUM(moving_time),0) as moving_time
   FROM rides
+  WHERE is_public = 1
   `,
     ).first();
     const { results: rides } = await c.env.DB.prepare(
-      "SELECT * FROM rides ORDER BY start_date DESC LIMIT 10",
+      "SELECT * FROM rides WHERE is_public = 1 ORDER BY start_date DESC LIMIT 10",
     ).all();
 
     return c.html(`
@@ -1384,7 +2126,7 @@ dashboard.get("/:username", async (c, next) => {
       <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Jeannes Bryan on Gaspool</title>
+        <title>${publicProfile.name} on Gaspool</title>
         <link rel="icon" type="image/png" sizes="192x192" href="/assets/android-chrome-192x192.png">
         <link rel="icon" type="image/png" sizes="512x512" href="/assets/android-chrome-512x512.png">
         <link rel="apple-touch-icon" href="/assets/apple-touch-icon.png">
@@ -1415,8 +2157,8 @@ dashboard.get("/:username", async (c, next) => {
       <body>
         <div class="container">
           <div class="profile-header">
-            <img src="/assets/jeannesbryan.webp" class="profile-img">
-            <h1 class="username">Jeannes Bryan</h1>
+            <img src="${publicProfile.avatar}" alt="${publicProfile.name}" class="profile-img">
+            <h1 class="username">${publicProfile.name}</h1>
             <div class="stats-grid">
   <div class="stat-item">
     <div class="stat-val">
@@ -1468,7 +2210,7 @@ dashboard.get("/:username", async (c, next) => {
 
 }
           async function loadMore() {
-            const res = await fetch('/api/public_rides/${username}?page=' + curP);
+            const res = await fetch('/api/public_rides/${publicProfile.slug}?page=' + curP);
             const data = await res.json();
             if(data.rides.length > 0) {
               const list = document.getElementById('rides-list');

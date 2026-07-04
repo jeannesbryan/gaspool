@@ -28,7 +28,7 @@
 
   "upload_source_maps": true,
 
-  // D1 database for users, rides, activities, and app data.
+  // D1 database for users, rides, planned routes, activities, and app data.
   "d1_databases": [
     {
       "binding": "DB",
@@ -37,7 +37,7 @@
     }
   ],
 
-  // R2 bucket for route JSON files and peleton radio audio.
+  // R2 bucket for generated route JSON files and peleton radio audio.
   "r2_buckets": [
     {
       "binding": "R2_BUCKET",
@@ -55,24 +55,42 @@
 
   // Optional custom domain.
   // Remove this block if you do not use a custom domain.
+  //
+  // Important:
+  // Keep route/domain config in this file aligned with Cloudflare Dashboard.
+  // Wrangler deploy will overwrite remote Worker routes with this local config.
   "routes": [
     {
       "pattern": "YOUR_DOMAIN.com",
       "custom_domain": true
     }
   ],
+  // Alternative for a classic route under a zone:
+  //
+  // "routes": [
+  //   {
+  //     "pattern": "YOUR_DOMAIN.com/*",
+  //     "zone_name": "YOUR_ZONE_NAME"
+  //   }
+  // ],
 
   // Public variables.
   // TURNSTILE_SITE_KEY is public and safe to expose.
   // ROUTING_PROVIDER selects the route planning adapter.
   // Current supported value: "ors" for OpenRouteService.
+  // PUBLIC_PROFILE_* controls the single-owner public profile page.
+  // Example: https://YOUR_DOMAIN.com/rider
   "vars": {
     "TURNSTILE_SITE_KEY": "YOUR_CLOUDFLARE_TURNSTILE_SITE_KEY",
-    "ROUTING_PROVIDER": "ors"
+    "ROUTING_PROVIDER": "ors",
+    "PUBLIC_PROFILE_SLUG": "rider",
+    "PUBLIC_PROFILE_NAME": "Gaspool Rider",
+    "PUBLIC_PROFILE_AVATAR": "/assets/profile.webp"
   }
 
   // Required production secrets.
   // Do not put these values in wrangler.jsonc.
+  // ORS_API_KEY is used server-side for route generation and location search.
   //
   // npx wrangler secret put JWT_SECRET
   // npx wrangler secret put TURNSTILE_SECRET_KEY

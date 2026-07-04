@@ -3,89 +3,195 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#ff5f00" />
 
     <title>Gaspool Offline</title>
 
     <style>
       :root {
+        --bg: #0a0a12;
+        --panel: #15151f;
+        --line: rgba(255, 255, 255, 0.12);
+        --text: #ffffff;
+        --muted: #a6adbb;
         --primary: #ff5f00;
+        --primary-soft: rgba(255, 95, 0, 0.18);
+        --blue: #3498db;
       }
 
       * {
         box-sizing: border-box;
       }
 
+      html,
+      body {
+        min-height: 100%;
+      }
+
       body {
         margin: 0;
-        background: #000;
-        color: #fff;
-        font-family: Inter, sans-serif;
-        min-height: 100vh;
+        background:
+          radial-gradient(circle at top left, rgba(255, 95, 0, 0.16), transparent 36rem),
+          radial-gradient(circle at bottom right, rgba(52, 152, 219, 0.14), transparent 32rem),
+          var(--bg);
+        color: var(--text);
+        font-family:
+          Inter,
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
+        display: grid;
+        place-items: center;
+        padding: 24px;
+      }
+
+      main {
+        width: min(100%, 520px);
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.03));
+        box-shadow: 0 24px 80px rgba(0, 0, 0, 0.38);
+        overflow: hidden;
+      }
+
+      .topbar {
         display: flex;
-        justify-content: center;
         align-items: center;
-        padding: 20px;
+        gap: 12px;
+        padding: 18px 20px;
+        border-bottom: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.04);
       }
 
-      .panel {
-        width: 100%;
-        max-width: 500px;
-        border: 1px solid rgba(255, 95, 0, 0.3);
-        border-radius: 20px;
-        padding: 30px;
-        background: rgba(255, 255, 255, 0.03);
-        backdrop-filter: blur(20px);
-      }
-
-      .logo {
-        font-size: 4rem;
-        text-align: center;
-        margin-bottom: 10px;
-      }
-
-      .title {
+      .mark {
+        width: 42px;
+        height: 42px;
+        border-radius: 13px;
+        display: grid;
+        place-items: center;
+        background: var(--primary-soft);
         color: var(--primary);
-        font-weight: 900;
-        font-style: italic;
-        text-align: center;
-        margin-bottom: 20px;
+        font-weight: 950;
+        letter-spacing: -0.04em;
       }
 
-      .line {
-        color: #aaa;
-        font-size: 14px;
-        margin: 8px 0;
+      .brand {
+        line-height: 1;
       }
 
-      .btn {
-        margin-top: 25px;
-        width: 100%;
-        padding: 15px;
-        border: none;
+      .brand strong {
+        display: block;
+        font-size: 17px;
+        font-weight: 950;
+        letter-spacing: 0.02em;
+      }
+
+      .brand span {
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 800;
+        text-transform: uppercase;
+      }
+
+      .content {
+        padding: 28px 24px 24px;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: clamp(28px, 8vw, 44px);
+        line-height: 0.95;
+        letter-spacing: 0;
+      }
+
+      h1 span {
+        color: var(--primary);
+      }
+
+      p {
+        margin: 16px 0 0;
+        color: var(--muted);
+        font-size: 15px;
+        line-height: 1.6;
+      }
+
+      .status {
+        display: grid;
+        gap: 10px;
+        margin: 22px 0;
+      }
+
+      .status div {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 14px;
+        padding: 12px 14px;
+        border: 1px solid var(--line);
         border-radius: 12px;
+        background: rgba(0, 0, 0, 0.18);
+        color: #d8deea;
+        font-size: 13px;
+        font-weight: 800;
+      }
+
+      .status b {
+        color: var(--primary);
+        font-size: 12px;
+        letter-spacing: 0.06em;
+      }
+
+      button {
+        width: 100%;
+        min-height: 52px;
+        border: 0;
+        border-radius: 14px;
         background: var(--primary);
         color: #fff;
-        font-weight: 900;
+        font-weight: 950;
         cursor: pointer;
+        box-shadow: 0 14px 34px rgba(255, 95, 0, 0.24);
+      }
+
+      .hint {
+        margin-top: 12px;
+        color: #7f8798;
+        font-size: 12px;
+        text-align: center;
       }
     </style>
   </head>
 
   <body>
-    <div class="panel">
-      <div class="logo">📡</div>
+    <main>
+      <div class="topbar">
+        <div class="mark">G</div>
+        <div class="brand">
+          <strong>GASPOOL</strong>
+          <span>Offline Mode</span>
+        </div>
+      </div>
 
-      <div class="title">GASPOOL OFFLINE</div>
+      <div class="content">
+        <h1>Sinyal putus.<br /><span>Data tetap dijaga.</span></h1>
+        <p>
+          Gaspool tidak bisa memuat halaman baru karena koneksi sedang hilang.
+          Jika kamu sedang tracking, jangan force-close browser. Kembali ke tab tracker
+          dan lanjutkan ketika sinyal sudah stabil.
+        </p>
 
-      <div class="line">> CONNECTION LOST</div>
+        <div class="status" aria-label="Status offline">
+          <div><span>Koneksi jaringan</span><b>OFFLINE</b></div>
+          <div><span>Halaman baru</span><b>DITUNDA</b></div>
+          <div><span>Sesi lokal</span><b>TETAP AMAN</b></div>
+        </div>
 
-      <div class="line">> SATELLITE LINK UNAVAILABLE</div>
-
-      <div class="line">> CHECK NETWORK STATUS</div>
-
-      <div class="line">> RETRY WHEN SIGNAL RETURNS</div>
-
-      <button class="btn" onclick="location.reload()">RECONNECT</button>
-    </div>
+        <button type="button" onclick="location.reload()">COBA SAMBUNGKAN LAGI</button>
+        <div class="hint">Jika masih gagal, cek sinyal lalu refresh ulang.</div>
+      </div>
+    </main>
   </body>
 </html>

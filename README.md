@@ -109,6 +109,266 @@ npm install
 
 ---
 
+## Install From Zero To Live
+
+This section is the recommended first-time deployment flow for a fresh self-hosted Gaspool instance.
+
+The examples below use these placeholder names:
+
+```text
+Worker name      : gaspool
+D1 database      : gaspool-db
+R2 bucket        : gaspool-media
+KV namespace     : GASPOOL_RADAR
+Custom domain    : gaspool.npc.my.id
+Cloudflare zone  : npc.my.id
+Public profile   : /rider
+```
+
+Replace them with your own values.
+
+### 1. Login to Cloudflare
+
+```bash
+npx wrangler login
+```
+
+### 2. Create Cloudflare resources
+
+Create a D1 database:
+
+```bash
+npx wrangler d1 create gaspool-db
+```
+
+Copy the returned `database_id` into `wrangler.jsonc`.
+
+Create an R2 bucket:
+
+```bash
+npx wrangler r2 bucket create gaspool-media
+```
+
+Recommended R2 lifecycle rule for temporary peleton radio audio:
+
+```bash
+npx wrangler r2 bucket lifecycle add gaspool-media delete-peleton-audio gaspool/audio/ --expire-days 1
+```
+
+This rule only targets objects whose key starts with:
+
+```text
+gaspool/audio/
+```
+
+It does not delete ride JSON or planned route JSON.
+
+Create a KV namespace for live peleton radar:
+
+```bash
+npx wrangler kv namespace create GASPOOL_RADAR
+```
+
+Copy the returned KV `id` into `wrangler.jsonc`.
+
+### 3. Create external service keys
+
+Create these values before deployment:
+
+- Cloudflare Turnstile site key and secret key
+- OpenRouteService API key
+
+For Turnstile, register the domain that will serve Gaspool, for example:
+
+```text
+gaspool.npc.my.id
+```
+
+For local development, add `localhost` in the Turnstile dashboard if you want to test login locally.
+
+### 4. Copy and edit Wrangler config
+
+Copy the example config:
+
+```bash
+cp wrangler.example.jsonc wrangler.jsonc
+```
+
+On Windows:
+
+```bash
+copy wrangler.example.jsonc wrangler.jsonc
+```
+
+Then edit `wrangler.jsonc`:
+
+```jsonc
+{
+  "name": "gaspool",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-05-16",
+  "compatibility_flags": ["nodejs_compat"],
+
+  "assets": {
+    "binding": "ASSETS",
+    "directory": "./public"
+  },
+
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "gaspool-db",
+      "database_id": "YOUR_D1_DATABASE_ID"
+    }
+  ],
+
+  "r2_buckets": [
+    {
+      "binding": "R2_BUCKET",
+      "bucket_name": "gaspool-media"
+    }
+  ],
+
+  "kv_namespaces": [
+    {
+      "binding": "GASPOOL_RADAR",
+      "id": "YOUR_KV_NAMESPACE_ID"
+    }
+  ],
+
+  "routes": [
+    {
+      "pattern": "gaspool.npc.my.id",
+      "custom_domain": true
+    }
+  ],
+
+  "vars": {
+    "TURNSTILE_SITE_KEY": "YOUR_CLOUDFLARE_TURNSTILE_SITE_KEY",
+    "ROUTING_PROVIDER": "ors",
+    "PUBLIC_PROFILE_SLUG": "rider",
+    "PUBLIC_PROFILE_NAME": "Gaspool Rider",
+    "PUBLIC_PROFILE_AVATAR": "/assets/profile.webp"
+  }
+}
+```
+
+Do **not** commit your real `wrangler.jsonc`.
+
+### 5. Custom domain options
+
+Gaspool can run on the default `workers.dev` URL, but a custom domain is recommended for real GPS tracking because browser location APIs require HTTPS and the URL is easier to share.
+
+For a Worker custom domain such as:
+
+```text
+https://gaspool.npc.my.id
+```
+
+use:
+
+```jsonc
+"routes": [
+  {
+    "pattern": "gaspool.npc.my.id",
+    "custom_domain": true
+  }
+]
+```
+
+Alternative classic route under a Cloudflare zone:
+
+```jsonc
+"routes": [
+  {
+    "pattern": "gaspool.npc.my.id/*",
+    "zone_name": "npc.my.id"
+  }
+]
+```
+
+Important:
+
+- Keep route/domain config in `wrangler.jsonc` aligned with the Cloudflare Dashboard.
+- `wrangler deploy` can overwrite remote Worker route settings with your local config.
+- If Wrangler shows a warning that local routes differ from remote routes, fix `wrangler.jsonc` before confirming deploy.
+
+### 6. Put production secrets
+
+Generate a strong JWT secret:
+
+```bash
+node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"
+```
+
+Store secrets in Cloudflare:
+
+```bash
+npx wrangler secret put JWT_SECRET
+npx wrangler secret put TURNSTILE_SECRET_KEY
+npx wrangler secret put ORS_API_KEY
+```
+
+Never put these secrets inside `wrangler.jsonc`.
+
+### 7. Apply D1 schema and migrations
+
+Apply the project schema/migrations before first deploy.
+
+If the repo has Wrangler migration files:
+
+```bash
+npx wrangler d1 migrations apply gaspool-db --remote
+```
+
+If you apply SQL files manually, run the base schema first, then feature migrations. Example:
+
+```bash
+npx wrangler d1 execute gaspool-db --remote --file migrations/0001_schema.sql
+npx wrangler d1 execute gaspool-db --remote --file migrations/0002_planned_routes.sql
+npx wrangler d1 execute gaspool-db --remote --file migrations/0002_ride_visibility.sql
+```
+
+`0002_ride_visibility.sql` adds `rides.is_public` and makes old activities private by default.
+
+### 8. Generate types and deploy
+
+```bash
+npm run cf-typegen
+npm run deploy
+```
+
+### 9. First login
+
+Open:
+
+```text
+https://gaspool.npc.my.id/login
+```
+
+The first successful login creates the first captain account automatically if the `users` table is empty.
+
+After login:
+
+- `/` opens the private dashboard.
+- `/route_plan` opens the route planner.
+- `/routes` opens saved routes.
+- `/:PUBLIC_PROFILE_SLUG` opens the public profile.
+
+### 10. Smoke test checklist
+
+After deploy, test:
+
+- Login with Turnstile.
+- Open `/route_plan` and search a location.
+- Generate a route with OpenRouteService.
+- Start a tracker from the route.
+- Save one short activity.
+- Toggle the activity to `PUBLIC`.
+- Open the public profile URL in a private browser window.
+
+---
+
 ## Cloudflare Configuration
 
 Copy the example Wrangler config:
@@ -140,6 +400,8 @@ Custom domain, optional
 
 Do **not** commit your real `wrangler.jsonc`.
 
+If you are using a custom domain such as `gaspool.npc.my.id`, make sure the `routes` block exists locally before running `npm run deploy`. Wrangler treats the local config as the source of truth.
+
 ---
 
 ## Environment Variables and Secrets
@@ -151,6 +413,9 @@ Gaspool uses these bindings and secrets:
 ```text
 TURNSTILE_SITE_KEY
 ROUTING_PROVIDER
+PUBLIC_PROFILE_SLUG
+PUBLIC_PROFILE_NAME
+PUBLIC_PROFILE_AVATAR
 ```
 
 These can be placed inside `wrangler.jsonc` under `vars`.
@@ -159,6 +424,9 @@ Recommended value:
 
 ```text
 ROUTING_PROVIDER=ors
+PUBLIC_PROFILE_SLUG=rider
+PUBLIC_PROFILE_NAME=Gaspool Rider
+PUBLIC_PROFILE_AVATAR=/assets/profile.webp
 ```
 
 ### Secret variables
@@ -193,6 +461,74 @@ Do not put `ORS_API_KEY` inside `wrangler.jsonc`.
 
 ---
 
+## Public Profile
+
+Gaspool includes a single-owner public profile page for activity sharing.
+
+The private dashboard stays behind login at:
+
+```text
+https://YOUR_DOMAIN.com/
+```
+
+The public profile is a separate URL controlled by `PUBLIC_PROFILE_SLUG`.
+
+The public URL is controlled by `PUBLIC_PROFILE_SLUG`:
+
+```text
+https://YOUR_DOMAIN.com/PUBLIC_PROFILE_SLUG
+```
+
+Example:
+
+```text
+PUBLIC_PROFILE_SLUG=jeannesbryan
+PUBLIC_PROFILE_NAME=Jeannes Bryan
+PUBLIC_PROFILE_AVATAR=/assets/jeannesbryan.webp
+```
+
+This makes the public page available at:
+
+```text
+https://YOUR_DOMAIN.com/jeannesbryan
+```
+
+For example, on a custom domain:
+
+```text
+https://gaspool.npc.my.id/jeannesbryan
+```
+
+For open source installs, change these values in `wrangler.jsonc` so cloned deployments do not all use the same public URL. The old hardcoded-style URL `/jeannesbryan` should be treated as an example, not a required project default.
+
+`PUBLIC_PROFILE_AVATAR` should point to an image inside `/assets/` or an `https://` image URL.
+
+Public profile visibility rules:
+
+- New activities are private by default.
+- Private activities do not appear on the public profile.
+- Public activities can appear on `/:PUBLIC_PROFILE_SLUG`.
+- The dashboard owner can toggle an activity between `PRIVATE` and `PUBLIC`.
+
+Related routes:
+
+```text
+GET /:PUBLIC_PROFILE_SLUG
+GET /api/public_rides/:PUBLIC_PROFILE_SLUG
+```
+
+Recommended public profile config:
+
+```jsonc
+"vars": {
+  "PUBLIC_PROFILE_SLUG": "yourname",
+  "PUBLIC_PROFILE_NAME": "Your Name",
+  "PUBLIC_PROFILE_AVATAR": "/assets/profile.webp"
+}
+```
+
+---
+
 ## Generate Cloudflare Types
 
 After configuring `wrangler.jsonc`, generate Worker binding types:
@@ -221,11 +557,12 @@ npm run deploy
 
 Gaspool stores route JSON files in Cloudflare R2.
 
-Recommended object prefix:
+Recommended object prefixes:
 
 ```text
 gaspool/
 gaspool/routes/
+gaspool/audio/
 ```
 
 Example object key:
@@ -233,6 +570,7 @@ Example object key:
 ```text
 gaspool/gaspool_ride_1720000000000_123.json
 gaspool/routes/route_1720000000000_123.json
+gaspool/audio/ROOM123/radio_RIDER_1720000000000.webm
 ```
 
 R2 is used for:
@@ -242,6 +580,41 @@ R2 is used for:
 - Peleton radio audio files
 
 The public route JSON URL is stored in D1, so if an object is moved in R2, the related D1 record must also be updated.
+
+### R2 Lifecycle For Temporary Audio
+
+Peleton radio audio is temporary. Gaspool tries to clean it up when the captain finishes or aborts a peleton session, but browser/network interruptions can prevent cleanup from running.
+
+Add an R2 lifecycle rule as a safety net:
+
+```bash
+npx wrangler r2 bucket lifecycle add gaspool-media delete-peleton-audio gaspool/audio/ --expire-days 1
+```
+
+This means:
+
+- only objects under `gaspool/audio/` are affected,
+- ride JSON under `gaspool/` is kept,
+- planned route JSON under `gaspool/routes/` is kept,
+- audio leftovers are automatically expired after 1 day.
+
+You can also configure this from the Cloudflare dashboard:
+
+1. Open Cloudflare Dashboard.
+2. Go to **R2 Object Storage**.
+3. Select your Gaspool bucket.
+4. Open **Settings**.
+5. Find **Object lifecycle rules**.
+6. Add a rule with prefix:
+
+```text
+gaspool/audio/
+```
+
+7. Set expiration to `1 day`.
+8. Save the rule.
+
+Cloudflare lifecycle deletion is not instant. Objects are typically removed within about 24 hours after they become eligible for expiration.
 
 ---
 
@@ -336,6 +709,45 @@ Near the turn point
 Voice navigation runs locally in the browser. The actual voice quality depends on the rider's device and installed browser voices.
 
 If an Indonesian voice is available, Gaspool tries to use it. Otherwise, the browser default voice is used.
+
+---
+
+## Webapp Limitations and Mitigations
+
+Gaspool is a webapp/PWA, not a native Android or iOS application. This keeps deployment simple and self-hosted, but it also means some behavior is controlled by the browser and operating system.
+
+The project tries to mitigate those limits where possible.
+
+| Limitation | Possible impact | What Gaspool does | What users can do |
+|---|---|---|---|
+| Browser background tracking | GPS updates may slow down or stop when the screen is off, the tab is hidden, or battery saver is active. | Uses Wake Lock API, stealth mode, local blackbox storage, and resume session. | Use HTTPS, keep the browser/PWA active, avoid force-closing the browser, and disable aggressive battery optimization for the browser. |
+| OS battery optimization | Android/iOS can suspend browser work during long rides. | Stealth mode throttles visual rendering while keeping GPS/TTS/session logic running. | Use Android Chrome/PWA for best stability, turn off extreme battery saver, and test a short ride first. |
+| Voice navigation depends on browser voices | Indonesian TTS quality varies by device/browser. | Uses the browser Web Speech API and tries to select Indonesian voices when available. | Install or enable Indonesian system voices if available, test voice before a long ride, and keep media volume audible. |
+| GPS accuracy depends on hardware and placement | Tracks may jump near buildings, under trees, in bad weather, or when the phone is deep inside a bag. | Filters large GPS jumps and records GPS accuracy status. | Place the phone where GPS can breathe, avoid thick bags, and give the device time to lock satellites before starting. |
+| Offline behavior is partial | Route generation, geocoding, peleton radar, radio, weather, and upload need network access. | Stores GPS points locally with IndexedDB blackbox and supports resume after interruption. | Generate routes before riding, keep mobile data available for live features, and verify the saved activity after finishing. |
+| iOS/Safari restrictions | Wake lock, audio, background behavior, and PWA lifecycle can be stricter than Android Chrome. | Uses progressive browser APIs and falls back where possible. | Prefer Android Chrome/PWA for serious long tracking, or test your exact iOS/Safari setup before relying on it. |
+| Upload/network failure | Saving a long activity may fail if the network drops. | Uses chunked upload and local queue patterns so data is not immediately lost. | Do not close the browser immediately after finish; wait until upload completes or retry when the connection is stable. |
+
+### Recommended Setup Before A Long Ride
+
+- Use the deployed HTTPS custom domain, not an insecure local URL.
+- Allow browser location permission.
+- Open Gaspool once before the ride and confirm GPS lock.
+- Test voice navigation on the same device.
+- Turn off aggressive battery saver for the browser/PWA.
+- Use stealth mode if you want to save power while riding.
+- Do not force-close the browser during tracking.
+- After finishing, wait until the save/upload process completes.
+
+### Browser Recommendation
+
+For the most reliable long-ride experience, Gaspool is currently best used on:
+
+```text
+Android + Chrome + installed PWA/custom domain HTTPS
+```
+
+Other modern browsers can work, but GPS background behavior and TTS support may vary.
 
 ---
 
