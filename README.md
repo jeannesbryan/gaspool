@@ -120,8 +120,8 @@ Worker name      : gaspool
 D1 database      : gaspool-db
 R2 bucket        : gaspool-media
 KV namespace     : GASPOOL_RADAR
-Custom domain    : gaspool.npc.my.id
-Cloudflare zone  : npc.my.id
+Custom domain    : your-domain.com
+Cloudflare zone  : your-domain.com
 Public profile   : /rider
 ```
 
@@ -181,7 +181,7 @@ Create these values before deployment:
 For Turnstile, register the domain that will serve Gaspool, for example:
 
 ```text
-gaspool.npc.my.id
+your-domain.com
 ```
 
 For local development, add `localhost` in the Turnstile dashboard if you want to test login locally.
@@ -238,7 +238,7 @@ Then edit `wrangler.jsonc`:
 
   "routes": [
     {
-      "pattern": "gaspool.npc.my.id",
+      "pattern": "your-domain.com",
       "custom_domain": true
     }
   ],
@@ -262,7 +262,7 @@ Gaspool can run on the default `workers.dev` URL, but a custom domain is recomme
 For a Worker custom domain such as:
 
 ```text
-https://gaspool.npc.my.id
+https://your-domain.com
 ```
 
 use:
@@ -270,7 +270,7 @@ use:
 ```jsonc
 "routes": [
   {
-    "pattern": "gaspool.npc.my.id",
+    "pattern": "your-domain.com",
     "custom_domain": true
   }
 ]
@@ -281,8 +281,8 @@ Alternative classic route under a Cloudflare zone:
 ```jsonc
 "routes": [
   {
-    "pattern": "gaspool.npc.my.id/*",
-    "zone_name": "npc.my.id"
+    "pattern": "your-domain.com/*",
+    "zone_name": "your-domain.com"
   }
 ]
 ```
@@ -343,7 +343,7 @@ npm run deploy
 Open:
 
 ```text
-https://gaspool.npc.my.id/login
+https://your-domain.com/login
 ```
 
 The first successful login creates the first captain account automatically if the `users` table is empty.
@@ -400,7 +400,7 @@ Custom domain, optional
 
 Do **not** commit your real `wrangler.jsonc`.
 
-If you are using a custom domain such as `gaspool.npc.my.id`, make sure the `routes` block exists locally before running `npm run deploy`. Wrangler treats the local config as the source of truth.
+If you are using a custom domain such as `your-domain.com`, make sure the `routes` block exists locally before running `npm run deploy`. Wrangler treats the local config as the source of truth.
 
 ---
 
@@ -468,7 +468,7 @@ Gaspool includes a single-owner public profile page for activity sharing.
 The private dashboard stays behind login at:
 
 ```text
-https://YOUR_DOMAIN.com/
+https://your-domain.com/
 ```
 
 The public profile is a separate URL controlled by `PUBLIC_PROFILE_SLUG`.
@@ -476,30 +476,30 @@ The public profile is a separate URL controlled by `PUBLIC_PROFILE_SLUG`.
 The public URL is controlled by `PUBLIC_PROFILE_SLUG`:
 
 ```text
-https://YOUR_DOMAIN.com/PUBLIC_PROFILE_SLUG
+https://your-domain.com/PUBLIC_PROFILE_SLUG
 ```
 
 Example:
 
 ```text
-PUBLIC_PROFILE_SLUG=jeannesbryan
-PUBLIC_PROFILE_NAME=Jeannes Bryan
-PUBLIC_PROFILE_AVATAR=/assets/jeannesbryan.webp
+PUBLIC_PROFILE_SLUG=rider
+PUBLIC_PROFILE_NAME=Gaspool Rider
+PUBLIC_PROFILE_AVATAR=/assets/profile.webp
 ```
 
 This makes the public page available at:
 
 ```text
-https://YOUR_DOMAIN.com/jeannesbryan
+https://your-domain.com/rider
 ```
 
 For example, on a custom domain:
 
 ```text
-https://gaspool.npc.my.id/jeannesbryan
+https://your-domain.com/rider
 ```
 
-For open source installs, change these values in `wrangler.jsonc` so cloned deployments do not all use the same public URL. The old hardcoded-style URL `/jeannesbryan` should be treated as an example, not a required project default.
+For open source installs, change these values in `wrangler.jsonc` so cloned deployments do not all use the same public URL. The default-style URL `/rider` should be treated as an example, not a required project default.
 
 `PUBLIC_PROFILE_AVATAR` should point to an image inside `/assets/` or an `https://` image URL.
 
