@@ -1082,6 +1082,62 @@ studio.get("/detail/:id", async (c) => {
               return Number.isFinite(time) ? time : null;
           }
 
+          function splitTuning() {
+              if (activityType === 'hike') return { minKmh: 0.5, maxKmh: 10, fallbackKmh: 3.5, restGapSeconds: 900 };
+              if (activityType === 'walk') return { minKmh: 0.8, maxKmh: 12, fallbackKmh: 4.5, restGapSeconds: 900 };
+              if (activityType === 'run') return { minKmh: 1.8, maxKmh: 35, fallbackKmh: 8.5, restGapSeconds: 600 };
+              return { minKmh: 2.5, maxKmh: 80, fallbackKmh: 18, restGapSeconds: 600 };
+          }
+
+          function median(values) {
+              const sorted = values
+                  .filter(function(value) { return Number.isFinite(value) && value > 0; })
+                  .sort(function(a, b) { return a - b; });
+
+              if (sorted.length === 0) return null;
+              const mid = Math.floor(sorted.length / 2);
+              return sorted.length % 2 === 0
+                  ? (sorted[mid - 1] + sorted[mid]) / 2
+                  : sorted[mid];
+          }
+
+          function estimateMovingSpeedKmh(points, tuning) {
+              const samples = [];
+
+              for (let i = 1; i < points.length; i++) {
+                  const prev = points[i - 1];
+                  const cur = points[i];
+                  const segmentKm = distanceKm(prev, cur);
+                  const prevTime = pointTimeMs(prev);
+                  const curTime = pointTimeMs(cur);
+
+                  if (!Number.isFinite(segmentKm) || segmentKm <= 0.003 || segmentKm > 2) continue;
+                  if (prevTime === null || curTime === null || curTime <= prevTime) continue;
+
+                  const elapsedSeconds = (curTime - prevTime) / 1000;
+                  const speedKmh = segmentKm / (elapsedSeconds / 3600);
+
+                  if (
+                      elapsedSeconds > 0 &&
+                      elapsedSeconds <= tuning.restGapSeconds &&
+                      speedKmh >= tuning.minKmh &&
+                      speedKmh <= tuning.maxKmh
+                  ) {
+                      samples.push(speedKmh);
+                  }
+              }
+
+              const routeMedian = median(samples);
+              if (routeMedian !== null) return routeMedian;
+
+              const rideAverage = totalMovingSeconds > 0 && totalActivityDistanceKm > 0
+                  ? totalActivityDistanceKm / (totalMovingSeconds / 3600)
+                  : 0;
+
+              if (rideAverage >= tuning.minKmh && rideAverage <= tuning.maxKmh) return rideAverage;
+              return tuning.fallbackKmh;
+          }
+
           function formatSplitTime(seconds) {
               const total = Math.max(0, Math.round(Number(seconds || 0)));
               const hours = Math.floor(total / 3600);
@@ -1106,12 +1162,18 @@ studio.get("/detail/:id", async (c) => {
           }
 
           function buildKilometerSplits(points) {
-              if (!Array.isArray(points) || points.length < 2) return [];
+              if (!Array.isArray(points) || points.length < 2) return { splits: [], adjustedGapCount: 0, adjustedGapSeconds: 0 };
+
+              const tuning = splitTuning();
+              const fallbackSpeedKmh = estimateMovingSpeedKmh(points, tuning);
 
               let total = 0;
+              let movingTotalSeconds = 0;
               let target = 1;
               let splitStartDistance = 0;
-              let splitStartTime = pointTimeMs(points[0]);
+              let splitStartMovingSeconds = 0;
+              let adjustedGapCount = 0;
+              let adjustedGapSeconds = 0;
               const splits = [];
 
               for (let i = 1; i < points.length; i++) {
@@ -1125,55 +1187,72 @@ studio.get("/detail/:id", async (c) => {
                   const after = total + segmentKm;
                   const prevTime = pointTimeMs(prev);
                   const curTime = pointTimeMs(cur);
+                  let segmentSeconds = segmentKm / (fallbackSpeedKmh / 3600);
+                  let adjustedSegment = true;
+
+                  if (prevTime !== null && curTime !== null && curTime >= prevTime) {
+                      const elapsedSeconds = (curTime - prevTime) / 1000;
+                      const speedKmh = elapsedSeconds > 0 ? segmentKm / (elapsedSeconds / 3600) : 0;
+                      const looksLikeRestGap =
+                          elapsedSeconds > tuning.restGapSeconds &&
+                          (elapsedSeconds > 7200 || speedKmh < tuning.minKmh);
+                      const looksLikeBadClock =
+                          elapsedSeconds > 0 &&
+                          (speedKmh > tuning.maxKmh || elapsedSeconds > 86400);
+
+                      if (!looksLikeRestGap && !looksLikeBadClock && elapsedSeconds > 0) {
+                          segmentSeconds = elapsedSeconds;
+                          adjustedSegment = false;
+                      } else {
+                          adjustedGapCount += 1;
+                          adjustedGapSeconds += Math.max(0, elapsedSeconds - segmentSeconds);
+                      }
+                  }
 
                   while (after >= target) {
                       const ratio = (target - before) / segmentKm;
-                      let boundaryTime = null;
-
-                      if (prevTime !== null && curTime !== null && curTime >= prevTime) {
-                          boundaryTime = prevTime + ((curTime - prevTime) * ratio);
-                      }
+                      const boundaryMovingSeconds = movingTotalSeconds + (segmentSeconds * ratio);
 
                       const distance = target - splitStartDistance;
-                      const seconds =
-                          splitStartTime !== null && boundaryTime !== null
-                              ? (boundaryTime - splitStartTime) / 1000
-                              : null;
+                      const seconds = boundaryMovingSeconds - splitStartMovingSeconds;
 
                       splits.push({
                           index: splits.length + 1,
                           distance,
                           seconds,
-                          partial: false
+                          partial: false,
+                          adjusted: adjustedSegment
                       });
 
                       splitStartDistance = target;
-                      splitStartTime = boundaryTime;
+                      splitStartMovingSeconds = boundaryMovingSeconds;
                       target += 1;
                   }
 
                   total = after;
+                  movingTotalSeconds += segmentSeconds;
               }
 
               const leftover = total - splitStartDistance;
               if (leftover >= 0.1) {
-                  const lastTime = pointTimeMs(points[points.length - 1]);
-                  const seconds =
-                      splitStartTime !== null && lastTime !== null && lastTime >= splitStartTime
-                          ? (lastTime - splitStartTime) / 1000
-                          : null;
+                  const seconds = movingTotalSeconds - splitStartMovingSeconds;
 
                   splits.push({
                       index: splits.length + 1,
                       distance: leftover,
                       seconds,
-                      partial: true
+                      partial: true,
+                      adjusted: false
                   });
               }
 
-              return splits.filter(function(split) {
+              return {
+                  splits: splits.filter(function(split) {
                   return split.distance > 0 && split.seconds !== null && split.seconds >= 0;
-              });
+                  }),
+                  adjustedGapCount,
+                  adjustedGapSeconds
+              };
           }
 
           function renderAutoSplits(points) {
@@ -1182,15 +1261,19 @@ studio.get("/detail/:id", async (c) => {
               const note = document.getElementById('split-note');
               if (!section || !list || !note) return;
 
-              const splits = buildKilometerSplits(points);
+              const splitResult = buildKilometerSplits(points);
+              const splits = splitResult.splits || [];
               if (splits.length === 0) {
                   section.style.display = 'none';
                   return;
               }
 
-              note.innerText = totalMovingSeconds > 0 && totalActivityDistanceKm > 0
+              const baseNote = totalMovingSeconds > 0 && totalActivityDistanceKm > 0
                   ? 'Dari ' + totalActivityDistanceKm.toFixed(2) + ' km aktivitas'
                   : 'Dihitung dari timestamp GPS';
+              note.innerText = splitResult.adjustedGapCount > 0
+                  ? baseNote + ' • jeda panjang diabaikan'
+                  : baseNote;
 
               list.innerHTML = splits.map(function(split) {
                   const kmLabel = split.partial

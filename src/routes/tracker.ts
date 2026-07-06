@@ -241,6 +241,7 @@ tracker.get("/record", async (c) => {
         <script>
             let map, path = [], dist = 0, startT = 0, rec = false, watchId, radarInt;
 			let clockInt, movingTime = 0, lastTick = Date.now(), isPaused = false, lastAnnouncedKm = 0, lastSave = 0;
+			let skippedClockGapSeconds = 0;
 
 			// Variabel Elevasi (Tanjakan)
 			let totalElevation = 0, lastAlt = null;
@@ -254,6 +255,9 @@ tracker.get("/record", async (c) => {
 			let lastVisualUpdate = 0;
 			let lastStealthVoiceHint = 0;
 			let rideIsPublic = false;
+			const NORMAL_MAX_CLOCK_DELTA_SECONDS = 10;
+			const STEALTH_MAX_CLOCK_DELTA_SECONDS = 30;
+			const REST_CLOCK_GAP_SECONDS = 120;
 
 			const isCap = ${isCaptain};
 			const key = 'gaspool_blackbox_session';
@@ -1159,6 +1163,7 @@ document.getElementById(
 					
 					dist = d.dist || 0; 
 					movingTime = d.movingTime || 0;
+					skippedClockGapSeconds = d.skippedClockGapSeconds || 0;
 					lastAnnouncedKm = d.lastAnnouncedKm || 0;
 					tempReadings = d.tempReadings || [];
 					lastTempCheck = d.lastTempCheck || 0;
@@ -1270,6 +1275,7 @@ function gpsQuality(acc) {
 				requestWakeLock();				
 				if(!isResume) { 
 					startT = Date.now(); path = []; dist = 0; movingTime = 0; lastAnnouncedKm = 0; 
+					skippedClockGapSeconds = 0;
 					tempReadings = []; lastTempCheck = 0; totalElevation = 0; lastAlt = null; clearDB();
 				}
 				lastTick = Date.now();
@@ -1286,6 +1292,15 @@ function gpsQuality(acc) {
 					let now = Date.now();
 					let delta = (now - lastTick) / 1000;
 					lastTick = now;
+
+					if (!Number.isFinite(delta) || delta < 0) delta = 0;
+					if (delta > REST_CLOCK_GAP_SECONDS) {
+						skippedClockGapSeconds += delta;
+						delta = 0;
+					} else {
+						const maxDelta = isStealthMode ? STEALTH_MAX_CLOCK_DELTA_SECONDS : NORMAL_MAX_CLOCK_DELTA_SECONDS;
+						delta = Math.min(delta, maxDelta);
+					}
 					
 					if (rec && !isPaused) movingTime += delta;
 					
@@ -1422,6 +1437,7 @@ if (!gpsStatus) return;
   lastTempCheck,
   totalElevation,
   lastAlt,
+  skippedClockGapSeconds,
 
   roomID,
   plannedRouteId: activePlannedRouteId,

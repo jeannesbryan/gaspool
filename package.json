@@ -8,7 +8,7 @@
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
-    "hono": "^4.12.27"
+    "hono": "^4.12.28"
   },
   "devDependencies": {
     "@types/node": "^24.13.2",

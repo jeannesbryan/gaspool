@@ -314,27 +314,37 @@ npx wrangler secret put ORS_API_KEY
 
 Never put these secrets inside `wrangler.jsonc`.
 
-### 7. Apply D1 schema and migrations
+### 7. Apply D1 schema
 
-Apply the project schema/migrations before first deploy.
+Apply the project schema before first deploy.
 
-If the repo has Wrangler migration files:
+For a fresh Gaspool install, use the bundled `schema.sql`:
 
 ```bash
-npx wrangler d1 migrations apply gaspool-db --remote
+npx wrangler d1 execute gaspool-db --remote --file schema.sql
 ```
 
-If you apply SQL files manually, run the base schema first, then feature migrations. Example:
+This creates the base Gaspool tables:
+
+- `settings`
+- `users`
+- `login_logs`
+- `rides`
+- `planned_routes`
+- `personal_segments`
+
+If you are updating an existing instance that was installed before these features existed, apply only the missing feature migrations instead of re-running the full schema. Example:
 
 ```bash
-npx wrangler d1 execute gaspool-db --remote --file migrations/0001_schema.sql
-npx wrangler d1 execute gaspool-db --remote --file migrations/0002_planned_routes.sql
-npx wrangler d1 execute gaspool-db --remote --file migrations/0002_ride_visibility.sql
 npx wrangler d1 execute gaspool-db --remote --file MIGRATION_ACTIVITY_NOTES.sql
 npx wrangler d1 execute gaspool-db --remote --file MIGRATION_ROUTE_FAVORITES.sql
 ```
 
-`0002_ride_visibility.sql` adds `rides.is_public` and makes old activities private by default.
+If the repo later ships Wrangler migration files, you can also run:
+
+```bash
+npx wrangler d1 migrations apply gaspool-db --remote
+```
 
 ### 8. Generate types and deploy
 
@@ -637,32 +647,49 @@ Gaspool uses Cloudflare D1 to store app data such as:
 
 Make sure your D1 database is connected to the Worker using the `DB` binding in `wrangler.jsonc`.
 
-Route planning requires a `planned_routes` table and a `planned_route_id` column on `rides`.
-
-If you use Wrangler migrations, apply the migration before deploying the route planner feature:
+Fresh installs should apply the bundled schema:
 
 ```bash
-npx wrangler d1 migrations apply gaspool-db --remote
+npx wrangler d1 execute gaspool-db --remote --file schema.sql
 ```
 
-Manual SQL shape:
+The schema includes current Gaspool tables and columns for:
 
-```sql
-CREATE TABLE IF NOT EXISTS planned_routes (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  name TEXT NOT NULL,
-  distance REAL DEFAULT 0,
-  duration INTEGER DEFAULT 0,
-  route_url TEXT NOT NULL,
-  provider TEXT DEFAULT 'ors',
-  profile TEXT DEFAULT 'cycling-regular',
-  waypoints TEXT,
-  is_favorite INTEGER NOT NULL DEFAULT 0,
-  created_at TEXT DEFAULT CURRENT_TIMESTAMP
-);
+- private/public activities via `rides.is_public`
+- activity notes via `rides.notes`
+- route planner links via `rides.planned_route_id`
+- saved route favorites via `planned_routes.is_favorite`
+- personal segments via `personal_segments`
 
-ALTER TABLE rides ADD COLUMN planned_route_id INTEGER;
-ALTER TABLE planned_routes ADD COLUMN is_favorite INTEGER NOT NULL DEFAULT 0;
+To generate a fresh schema from a live D1 database:
+
+```bash
+npx wrangler d1 export gaspool-db --remote --output=./schema.sql --no-data --y
+```
+
+Review exported schemas before committing them. They should contain table/index structure only, not user data.
+
+---
+
+## Dependency Updates
+
+To update only Hono:
+
+```bash
+npm install hono@latest
+```
+
+Or pin the version detected by `npm-check-updates`:
+
+```bash
+npm install hono@4.12.28
+```
+
+Then verify and deploy:
+
+```bash
+npm run cf-typegen
+npm run deploy
 ```
 
 ---
