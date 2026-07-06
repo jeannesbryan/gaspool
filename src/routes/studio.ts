@@ -68,6 +68,7 @@ studio.get("/detail/:id", async (c) => {
         .replace(/'/g, "&#39;");
 
     const safeRideName = escapeHTML(ride.name || "Aktivitas");
+    const safeRideNotes = escapeHTML(ride.notes || "");
 
     const safeGPXName = String(ride.name || "Aktivitas")
       .replace(/&/g, "&amp;")
@@ -231,6 +232,276 @@ studio.get("/detail/:id", async (c) => {
                   font-weight: bold;
               }
 
+              .split-section {
+                  display: none;
+                  margin-top: 18px;
+                  padding: 16px;
+                  border-radius: 18px;
+                  border: 1px solid var(--card-border);
+                  background: rgba(255,255,255,0.04);
+              }
+
+              .split-head {
+                  display: flex;
+                  align-items: center;
+                  justify-content: space-between;
+                  gap: 10px;
+                  margin-bottom: 12px;
+              }
+
+              .split-title {
+                  color: var(--primary);
+                  font-size: 0.78rem;
+                  font-weight: 950;
+                  letter-spacing: 0.8px;
+                  text-transform: uppercase;
+              }
+
+              .split-note {
+                  color: var(--text-muted);
+                  font-size: 0.65rem;
+                  font-weight: 800;
+                  text-align: right;
+              }
+
+              .split-table {
+                  display: grid;
+                  gap: 8px;
+              }
+
+              .split-row {
+                  display: grid;
+                  grid-template-columns: 56px 1fr 82px;
+                  gap: 10px;
+                  align-items: center;
+                  padding: 10px 11px;
+                  border-radius: 13px;
+                  background: rgba(0,0,0,0.18);
+                  border: 1px solid rgba(255,255,255,0.06);
+              }
+
+              .split-km {
+                  color: #fff;
+                  font-size: 0.78rem;
+                  font-weight: 950;
+              }
+
+              .split-time {
+                  color: var(--text-main);
+                  font-size: 0.9rem;
+                  font-weight: 950;
+              }
+
+              .split-metric {
+                  color: var(--primary);
+                  font-size: 0.78rem;
+                  font-weight: 950;
+                  text-align: right;
+              }
+
+              .match-section {
+                  display: none;
+                  margin-top: 18px;
+                  padding: 16px;
+                  border-radius: 18px;
+                  border: 1px solid var(--card-border);
+                  background: rgba(255,255,255,0.04);
+              }
+
+              .match-head {
+                  display: flex;
+                  align-items: center;
+                  justify-content: space-between;
+                  gap: 10px;
+                  margin-bottom: 12px;
+              }
+
+              .match-title {
+                  color: var(--primary);
+                  font-size: 0.78rem;
+                  font-weight: 950;
+                  letter-spacing: 0.8px;
+                  text-transform: uppercase;
+              }
+
+              .match-note {
+                  color: var(--text-muted);
+                  font-size: 0.65rem;
+                  font-weight: 800;
+                  text-align: right;
+              }
+
+              .match-list {
+                  display: grid;
+                  gap: 9px;
+              }
+
+              .match-card {
+                  display: grid;
+                  grid-template-columns: 1fr auto;
+                  gap: 10px;
+                  padding: 12px;
+                  border-radius: 14px;
+                  border: 1px solid rgba(255,255,255,0.07);
+                  background: rgba(0,0,0,0.18);
+                  text-decoration: none;
+                  color: var(--text-main);
+              }
+
+              .match-name {
+                  font-size: 0.85rem;
+                  font-weight: 950;
+                  line-height: 1.25;
+                  margin-bottom: 5px;
+              }
+
+              .match-meta {
+                  color: var(--text-muted);
+                  font-size: 0.68rem;
+                  font-weight: 800;
+                  line-height: 1.45;
+              }
+
+              .match-score {
+                  color: var(--primary);
+                  font-size: 1rem;
+                  font-weight: 950;
+                  text-align: right;
+                  white-space: nowrap;
+              }
+
+              .match-delta {
+                  margin-top: 5px;
+                  font-size: 0.72rem;
+                  font-weight: 950;
+              }
+
+              .match-better { color: #2ecc71; }
+              .match-worse { color: #e74c3c; }
+              .match-even { color: var(--text-muted); }
+
+              .segment-section {
+                  display: none;
+                  margin-top: 18px;
+                  padding: 16px;
+                  border-radius: 18px;
+                  border: 1px solid var(--card-border);
+                  background: rgba(255,255,255,0.04);
+              }
+
+              .segment-title {
+                  color: var(--primary);
+                  font-size: 0.78rem;
+                  font-weight: 950;
+                  letter-spacing: 0.8px;
+                  text-transform: uppercase;
+                  margin-bottom: 10px;
+              }
+
+              .segment-hint {
+                  color: var(--text-muted);
+                  font-size: 0.72rem;
+                  font-weight: 800;
+                  line-height: 1.45;
+                  margin-bottom: 12px;
+              }
+
+              .segment-input {
+                  width: 100%;
+                  border: 1px solid var(--card-border);
+                  background: rgba(0,0,0,0.25);
+                  color: #fff;
+                  border-radius: 13px;
+                  padding: 12px;
+                  font-weight: 850;
+                  outline: none;
+                  margin-bottom: 10px;
+              }
+
+              .segment-range-row {
+                  display: grid;
+                  grid-template-columns: 60px 1fr 54px;
+                  align-items: center;
+                  gap: 10px;
+                  margin: 9px 0;
+                  color: var(--text-muted);
+                  font-size: 0.68rem;
+                  font-weight: 900;
+              }
+
+              .segment-range-row input[type="range"] {
+                  width: 100%;
+                  accent-color: var(--primary);
+              }
+
+              .segment-preview {
+                  display: grid;
+                  grid-template-columns: repeat(3, 1fr);
+                  gap: 8px;
+                  margin: 12px 0;
+              }
+
+              .segment-stat {
+                  padding: 10px;
+                  border-radius: 13px;
+                  border: 1px solid rgba(255,255,255,0.07);
+                  background: rgba(0,0,0,0.18);
+                  text-align: center;
+              }
+
+              .segment-stat strong {
+                  display: block;
+                  color: var(--primary);
+                  font-size: 0.98rem;
+                  font-weight: 950;
+              }
+
+              .segment-stat span {
+                  display: block;
+                  color: var(--text-muted);
+                  font-size: 0.58rem;
+                  font-weight: 900;
+                  letter-spacing: 0.8px;
+                  margin-top: 4px;
+              }
+
+              .segment-status {
+                  color: var(--text-muted);
+                  font-size: 0.72rem;
+                  font-weight: 850;
+                  line-height: 1.45;
+                  min-height: 18px;
+                  margin-top: 10px;
+              }
+
+              .segment-list {
+                  display: grid;
+                  gap: 8px;
+                  margin-top: 12px;
+              }
+
+              .segment-card {
+                  border: 1px solid rgba(255,255,255,0.07);
+                  background: rgba(0,0,0,0.18);
+                  border-radius: 14px;
+                  padding: 12px;
+                  color: var(--text-main);
+                  text-decoration: none;
+              }
+
+              .segment-card-title {
+                  font-size: 0.83rem;
+                  font-weight: 950;
+                  margin-bottom: 5px;
+              }
+
+              .segment-card-meta {
+                  color: var(--text-muted);
+                  font-size: 0.68rem;
+                  font-weight: 800;
+                  line-height: 1.45;
+              }
+
               .btn-group {
                   display: grid;
                   grid-template-columns: 1fr 1fr;
@@ -298,13 +569,54 @@ studio.get("/detail/:id", async (c) => {
                   font-size: 14px;
               }
 
-              #minimal-map {
+              .activity-notes {
+                  margin: 12px 0 10px;
+                  padding: 14px;
+                  border-radius: 16px;
+                  background: rgba(255, 95, 0, 0.08);
+                  border: 1px solid rgba(255, 95, 0, 0.22);
+                  color: #cbd5e1;
+                  font-size: 13px;
+                  line-height: 1.55;
+                  font-weight: 750;
+                  white-space: pre-wrap;
+              }
+
+              .activity-notes-label {
+                  display: block;
+                  color: var(--primary);
+                  font-size: 10px;
+                  font-weight: 950;
+                  letter-spacing: 1px;
+                  text-transform: uppercase;
+                  margin-bottom: 5px;
+              }
+
+              #minimal-route-wrap {
                   width: 500px !important;
                   height: 250px !important;
                   background: transparent !important;
                   margin: 0 auto 15px auto !important;
                   border: none;
+                  display: flex;
+                  align-items: center;
+                  justify-content: center;
+                  overflow: visible;
+              }
+
+              #minimal-route-svg {
+                  width: 100%;
+                  height: 100%;
                   display: block;
+                  overflow: visible;
+              }
+
+              #minimal-route-path {
+                  fill: none;
+                  stroke: var(--primary);
+                  stroke-width: 7;
+                  stroke-linecap: round;
+                  stroke-linejoin: round;
               }
 
               ${isGuest ? ".btn-group { display: none !important; } .back-btn { display: none !important; }" : ""}
@@ -330,6 +642,12 @@ studio.get("/detail/:id", async (c) => {
                   <span class="badge-type">${type}</span>
                   <h1 class="title">${safeRideName}</h1>
                   <div class="date" id="display-date"></div>
+
+                  ${
+                    safeRideNotes
+                      ? `<div class="activity-notes"><span class="activity-notes-label">CATATAN</span>${safeRideNotes}</div>`
+                      : ""
+                  }
 
                   <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 10px;">
                       <div class="stat-box" style="padding: 12px 5px;">
@@ -383,6 +701,59 @@ studio.get("/detail/:id", async (c) => {
               </div>
           </div>
 
+          <section id="split-section" class="split-section">
+              <div class="split-head">
+                  <div class="split-title">Auto Split / KM</div>
+                  <div class="split-note" id="split-note">Dihitung dari timestamp GPS</div>
+              </div>
+              <div id="split-list" class="split-table"></div>
+          </section>
+
+          ${
+            isGuest
+              ? ""
+              : `
+          <section id="match-section" class="match-section">
+              <div class="match-head">
+                  <div class="match-title">Rute Mirip</div>
+                  <div class="match-note" id="match-note">Personal effort comparison</div>
+              </div>
+              <div id="match-list" class="match-list"></div>
+          </section>
+          `
+          }
+
+          ${
+            isGuest
+              ? ""
+              : `
+          <section id="segment-section" class="segment-section">
+              <div class="segment-title">Personal Segments</div>
+              <div class="segment-hint">Pilih potongan rute dari aktivitas ini untuk disimpan sebagai segmen pribadi. Gaspool akan mencari effort terbaik dari riwayatmu sendiri.</div>
+              <input id="segment-name" class="segment-input" maxlength="80" placeholder="Misal: Tanjakan pulang / Sprint alun-alun">
+              <div class="segment-range-row">
+                  <div>START</div>
+                  <input id="segment-start" type="range" min="0" max="100" value="20">
+                  <div id="segment-start-label">20%</div>
+              </div>
+              <div class="segment-range-row">
+                  <div>FINISH</div>
+                  <input id="segment-end" type="range" min="0" max="100" value="60">
+                  <div id="segment-end-label">60%</div>
+              </div>
+              <div class="segment-preview">
+                  <div class="segment-stat"><strong id="segment-distance">0.00</strong><span>KM</span></div>
+                  <div class="segment-stat"><strong id="segment-start-km">0.00</strong><span>START KM</span></div>
+                  <div class="segment-stat"><strong id="segment-end-km">0.00</strong><span>FINISH KM</span></div>
+              </div>
+              <button id="segment-save" class="btn" style="background:#8e44ad; width:100%;" type="button">SIMPAN SEGMEN</button>
+              <div id="segment-status" class="segment-status">Memuat koordinat aktivitas...</div>
+              <div id="segment-efforts" class="segment-list"></div>
+              <div id="activity-segments" class="segment-list"></div>
+          </section>
+          `
+          }
+
           <div class="btn-group">
               <button onclick="takeScreenshot('standard')" class="btn" style="background: var(--primary);">📸 SHARE MAP</button>
               <button onclick="takeScreenshot('minimalist')" class="btn" style="background: #333;">✨ SHARE STATS</button>
@@ -434,7 +805,11 @@ studio.get("/detail/:id", async (c) => {
               : ""
           }
 
-          <div id="minimal-map"></div>
+          <div id="minimal-route-wrap">
+              <svg id="minimal-route-svg" viewBox="0 0 500 250" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+                  <path id="minimal-route-path" d=""></path>
+              </svg>
+          </div>
           <img src="/assets/gaspool.png" alt="Gaspool" style="height: 60px; margin-top: 15px;">
       </div>
 
@@ -461,14 +836,12 @@ studio.get("/detail/:id", async (c) => {
               maxZoom: 19
           }).addTo(map);
 
-          const mapMin = L.map('minimal-map', {
-              zoomControl: false,
-              attributionControl: false,
-              dragging: false,
-              scrollWheelZoom: false
-          });
-
           const rawUrl = ${JSON.stringify(ride.polyline || "")};
+          const currentRideId = ${JSON.stringify(id)};
+          const activityType = ${JSON.stringify(type)};
+          const canLoadMatches = ${isGuest ? "false" : "true"};
+          const totalMovingSeconds = ${Math.max(0, Math.floor(Number(mTime || 0)))};
+          const totalActivityDistanceKm = ${Math.max(0, Number(ride.distance || 0))};
 
           function decodePolyline(str, precision = 5) {
               let index = 0;
@@ -513,6 +886,92 @@ studio.get("/detail/:id", async (c) => {
               return coordinates;
           }
 
+          function extractCoordinateList(value) {
+              if (Array.isArray(value)) return value;
+              if (!value || typeof value !== 'object') return [];
+              if (value.type === 'FeatureCollection' && Array.isArray(value.features)) return value.features.flatMap(extractCoordinateList);
+              if (value.type === 'Feature') return extractCoordinateList(value.geometry);
+              if (value.type === 'LineString' && Array.isArray(value.coordinates)) return value.coordinates;
+              if (value.type === 'MultiLineString' && Array.isArray(value.coordinates)) return value.coordinates.flat();
+              if (value.geometry) return extractCoordinateList(value.geometry);
+              if (value.path) return extractCoordinateList(value.path);
+              if (value.data) return extractCoordinateList(value.data);
+              if (value.polyline) return extractCoordinateList(value.polyline);
+              if (value.coordinates) return extractCoordinateList(value.coordinates);
+              return [];
+          }
+
+          function normalizeRoutePoint(point) {
+              if (Array.isArray(point)) {
+                  const first = parseFloat(point[0]);
+                  const second = parseFloat(point[1]);
+                  const ele = point.length > 2 ? parseFloat(point[2]) : 0;
+                  if (Math.abs(first) > 90 && Math.abs(second) <= 90) {
+                      return { lat: second, lng: first, ele: isNaN(ele) ? 0 : ele, time: '' };
+                  }
+                  return { lat: first, lng: second, ele: isNaN(ele) ? 0 : ele, time: '' };
+              }
+
+              if (point && point.lat !== undefined) {
+                  return {
+                      lat: parseFloat(point.lat),
+                      lng: parseFloat(point.lng !== undefined ? point.lng : point.lon),
+                      ele: point.ele || point.elevation || 0,
+                      time: point.time || ''
+                  };
+              }
+
+              return null;
+          }
+
+          function normalizeRoutePoints(value) {
+              return extractCoordinateList(value).map(normalizeRoutePoint).filter(function(p) {
+                  return p !== null && !isNaN(p.lat) && !isNaN(p.lng) && Math.abs(p.lat) <= 90 && Math.abs(p.lng) <= 180;
+              });
+          }
+
+          function renderMinimalRoute(points, dashStyle) {
+              const pathEl = document.getElementById('minimal-route-path');
+              if (!pathEl || !Array.isArray(points) || points.length < 2) return;
+
+              const width = 500;
+              const height = 250;
+              const padX = 34;
+              const padY = 28;
+              let minLat = Infinity;
+              let maxLat = -Infinity;
+              let minLng = Infinity;
+              let maxLng = -Infinity;
+
+              points.forEach(function(point) {
+                  minLat = Math.min(minLat, point.lat);
+                  maxLat = Math.max(maxLat, point.lat);
+                  minLng = Math.min(minLng, point.lng);
+                  maxLng = Math.max(maxLng, point.lng);
+              });
+
+              const latRange = Math.max(maxLat - minLat, 0.00001);
+              const lngRange = Math.max(maxLng - minLng, 0.00001);
+              const scale = Math.min((width - padX * 2) / lngRange, (height - padY * 2) / latRange);
+              const routeWidth = lngRange * scale;
+              const routeHeight = latRange * scale;
+              const offsetX = (width - routeWidth) / 2;
+              const offsetY = (height - routeHeight) / 2;
+
+              const path = points.map(function(point, index) {
+                  const x = offsetX + (point.lng - minLng) * scale;
+                  const y = offsetY + (maxLat - point.lat) * scale;
+                  return (index === 0 ? 'M ' : 'L ') + x.toFixed(2) + ' ' + y.toFixed(2);
+              }).join(' ');
+
+              pathEl.setAttribute('d', path);
+              if (dashStyle) {
+                  pathEl.setAttribute('stroke-dasharray', '10 14');
+              } else {
+                  pathEl.removeAttribute('stroke-dasharray');
+              }
+          }
+
           async function getCoordinates() {
               if (!rawUrl || typeof rawUrl !== 'string' || rawUrl.trim() === '') return [];
 
@@ -542,31 +1001,7 @@ studio.get("/detail/:id", async (c) => {
                       pts = decodePolyline(urlStr);
                   }
 
-                  if (!Array.isArray(pts)) {
-                      pts = pts.path || pts.data || pts.polyline || pts.coordinates || [];
-                  }
-
-                  return pts.map(p => {
-                      if (Array.isArray(p)) {
-                          return {
-                              lat: parseFloat(p[0]),
-                              lng: parseFloat(p[1]),
-                              ele: 0,
-                              time: ''
-                          };
-                      }
-
-                      if (p && p.lat !== undefined) {
-                          return {
-                              lat: parseFloat(p.lat),
-                              lng: parseFloat(p.lng !== undefined ? p.lng : p.lon),
-                              ele: p.ele || 0,
-                              time: p.time || ''
-                          };
-                      }
-
-                      return null;
-                  }).filter(p => p !== null && !isNaN(p.lat) && !isNaN(p.lng));
+                  return normalizeRoutePoints(pts);
               } catch (e) {
                   console.error('Gagal membaca koordinat detail:', e);
                   return [];
@@ -605,19 +1040,10 @@ studio.get("/detail/:id", async (c) => {
                           fillOpacity: 1
                       }).addTo(map);
 
-                      const pathMin = L.polyline(coordsLatLng, {
-                          color: '#FF5F00',
-                          weight: 6,
-                          dashArray: dashStyle
-                      }).addTo(mapMin);
+                      renderMinimalRoute(coordsObj, dashStyle);
 
                       map.fitBounds(outlinePath.getBounds(), {
                           padding: [30, 30]
-                      });
-
-                      mapMin.fitBounds(pathMin.getBounds(), {
-                          padding: [60, 60],
-                          animate: false
                       });
 
                       setTimeout(() => {
@@ -626,6 +1052,10 @@ studio.get("/detail/:id", async (c) => {
                               padding: [30, 30]
                           });
                       }, 500);
+
+                      renderAutoSplits(coordsObj);
+                      initSegmentBuilder(coordsObj);
+                      loadActivitySegments();
                   }
               } catch (e) {
                   console.error('Gagal drawMap:', e);
@@ -633,6 +1063,424 @@ studio.get("/detail/:id", async (c) => {
           }
 
           drawMap();
+
+          function distanceKm(a, b) {
+              const R = 6371;
+              const dLat = (b.lat - a.lat) * Math.PI / 180;
+              const dLng = (b.lng - a.lng) * Math.PI / 180;
+              const lat1 = a.lat * Math.PI / 180;
+              const lat2 = b.lat * Math.PI / 180;
+              const sinLat = Math.sin(dLat / 2);
+              const sinLng = Math.sin(dLng / 2);
+              const h = sinLat * sinLat + Math.cos(lat1) * Math.cos(lat2) * sinLng * sinLng;
+              return 2 * R * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
+          }
+
+          function pointTimeMs(point) {
+              if (!point || !point.time) return null;
+              const time = Date.parse(point.time);
+              return Number.isFinite(time) ? time : null;
+          }
+
+          function formatSplitTime(seconds) {
+              const total = Math.max(0, Math.round(Number(seconds || 0)));
+              const hours = Math.floor(total / 3600);
+              const minutes = Math.floor((total % 3600) / 60);
+              const secs = total % 60;
+
+              if (hours > 0) {
+                  return hours + ':' + String(minutes).padStart(2, '0') + ':' + String(secs).padStart(2, '0');
+              }
+
+              return minutes + ':' + String(secs).padStart(2, '0');
+          }
+
+          function formatSplitMetric(seconds, distance) {
+              if (!seconds || !distance) return '--';
+
+              if (activityType === 'run' || activityType === 'walk' || activityType === 'hike') {
+                  return formatSplitTime(seconds / distance) + '/km';
+              }
+
+              return (distance / (seconds / 3600)).toFixed(1) + ' km/h';
+          }
+
+          function buildKilometerSplits(points) {
+              if (!Array.isArray(points) || points.length < 2) return [];
+
+              let total = 0;
+              let target = 1;
+              let splitStartDistance = 0;
+              let splitStartTime = pointTimeMs(points[0]);
+              const splits = [];
+
+              for (let i = 1; i < points.length; i++) {
+                  const prev = points[i - 1];
+                  const cur = points[i];
+                  const segmentKm = distanceKm(prev, cur);
+
+                  if (!Number.isFinite(segmentKm) || segmentKm <= 0 || segmentKm > 2) continue;
+
+                  const before = total;
+                  const after = total + segmentKm;
+                  const prevTime = pointTimeMs(prev);
+                  const curTime = pointTimeMs(cur);
+
+                  while (after >= target) {
+                      const ratio = (target - before) / segmentKm;
+                      let boundaryTime = null;
+
+                      if (prevTime !== null && curTime !== null && curTime >= prevTime) {
+                          boundaryTime = prevTime + ((curTime - prevTime) * ratio);
+                      }
+
+                      const distance = target - splitStartDistance;
+                      const seconds =
+                          splitStartTime !== null && boundaryTime !== null
+                              ? (boundaryTime - splitStartTime) / 1000
+                              : null;
+
+                      splits.push({
+                          index: splits.length + 1,
+                          distance,
+                          seconds,
+                          partial: false
+                      });
+
+                      splitStartDistance = target;
+                      splitStartTime = boundaryTime;
+                      target += 1;
+                  }
+
+                  total = after;
+              }
+
+              const leftover = total - splitStartDistance;
+              if (leftover >= 0.1) {
+                  const lastTime = pointTimeMs(points[points.length - 1]);
+                  const seconds =
+                      splitStartTime !== null && lastTime !== null && lastTime >= splitStartTime
+                          ? (lastTime - splitStartTime) / 1000
+                          : null;
+
+                  splits.push({
+                      index: splits.length + 1,
+                      distance: leftover,
+                      seconds,
+                      partial: true
+                  });
+              }
+
+              return splits.filter(function(split) {
+                  return split.distance > 0 && split.seconds !== null && split.seconds >= 0;
+              });
+          }
+
+          function renderAutoSplits(points) {
+              const section = document.getElementById('split-section');
+              const list = document.getElementById('split-list');
+              const note = document.getElementById('split-note');
+              if (!section || !list || !note) return;
+
+              const splits = buildKilometerSplits(points);
+              if (splits.length === 0) {
+                  section.style.display = 'none';
+                  return;
+              }
+
+              note.innerText = totalMovingSeconds > 0 && totalActivityDistanceKm > 0
+                  ? 'Dari ' + totalActivityDistanceKm.toFixed(2) + ' km aktivitas'
+                  : 'Dihitung dari timestamp GPS';
+
+              list.innerHTML = splits.map(function(split) {
+                  const kmLabel = split.partial
+                      ? split.distance.toFixed(2) + ' km'
+                      : 'KM ' + split.index;
+                  const time = formatSplitTime(split.seconds);
+                  const metric = formatSplitMetric(split.seconds, split.distance);
+
+                  return '<div class="split-row">' +
+                      '<div class="split-km">' + kmLabel + '</div>' +
+                      '<div class="split-time">' + time + '</div>' +
+                      '<div class="split-metric">' + metric + '</div>' +
+                  '</div>';
+              }).join('');
+
+              section.style.display = 'block';
+          }
+
+          function escapeClientHTML(str) {
+              return String(str || '')
+                  .replace(/&/g, '&amp;')
+                  .replace(/</g, '&lt;')
+                  .replace(/>/g, '&gt;')
+                  .replace(/"/g, '&quot;')
+                  .replace(/'/g, '&#39;');
+          }
+
+          function formatMatchDate(value) {
+              if (!value) return '-';
+              const date = new Date(value);
+              if (Number.isNaN(date.getTime())) return String(value);
+              return date.toLocaleDateString('id-ID');
+          }
+
+          function formatMatchDelta(seconds) {
+              const delta = Math.round(Number(seconds || 0));
+              const abs = Math.abs(delta);
+              const prefix = delta < 0 ? 'Lebih cepat ' : delta > 0 ? 'Lebih lambat ' : 'Sama cepat';
+              if (delta === 0) return prefix;
+              return prefix + formatSplitTime(abs);
+          }
+
+          function renderMatchedActivities(matches) {
+              const section = document.getElementById('match-section');
+              const list = document.getElementById('match-list');
+              const note = document.getElementById('match-note');
+              if (!section || !list || !note) return;
+
+              if (!Array.isArray(matches) || matches.length === 0) {
+                  section.style.display = 'none';
+                  return;
+              }
+
+              note.innerText = matches.length + ' aktivitas mirip ditemukan';
+              list.innerHTML = matches.map(function(match) {
+                  const delta = Number(match.time_delta_seconds || 0);
+                  const deltaClass = delta < 0 ? 'match-better' : delta > 0 ? 'match-worse' : 'match-even';
+                  const speedDelta = Number(match.speed_delta_kmh || 0);
+                  const speedText = speedDelta === 0 ? '' : ' • ' + (speedDelta > 0 ? '+' : '') + speedDelta.toFixed(1) + ' km/h';
+                  const elevationDelta = Number(match.elevation_delta_m || 0);
+                  const elevationText = elevationDelta === 0 ? '' : ' • elev ' + (elevationDelta > 0 ? '+' : '') + Math.round(elevationDelta) + ' m';
+
+                  return '<a class="match-card" href="/detail/' + encodeURIComponent(match.id) + '">' +
+                      '<div>' +
+                          '<div class="match-name">' + escapeClientHTML(match.name) + '</div>' +
+                          '<div class="match-meta">' +
+                              Number(match.distance || 0).toFixed(2) + ' km • ' +
+                              formatSplitTime(match.moving_time || 0) + ' • ' +
+                              formatMatchDate(match.start_date) +
+                          '</div>' +
+                          '<div class="match-delta ' + deltaClass + '">' +
+                              formatMatchDelta(delta) + speedText + elevationText +
+                          '</div>' +
+                      '</div>' +
+                      '<div class="match-score">' + Math.round(match.similarity_percent || 0) + '%</div>' +
+                  '</a>';
+              }).join('');
+
+              section.style.display = 'block';
+          }
+
+          async function loadMatchedActivities() {
+              if (!canLoadMatches) return;
+
+              try {
+                  const res = await fetch('/api/matched_activities/' + encodeURIComponent(currentRideId), {
+                      cache: 'no-store'
+                  });
+                  const data = await res.json();
+
+                  if (!res.ok || !data.success) {
+                      throw new Error(data.message || 'Gagal memuat rute mirip.');
+                  }
+
+                  renderMatchedActivities(data.matches || []);
+              } catch (err) {
+                  console.error('Gagal memuat matched activities:', err);
+              }
+          }
+
+          loadMatchedActivities();
+
+          let segmentRoutePoints = [];
+          let segmentCumulativeKm = [];
+
+          function setSegmentStatus(text, isError) {
+              const el = document.getElementById('segment-status');
+              if (!el) return;
+              el.innerText = text;
+              el.style.color = isError ? '#e74c3c' : '#94a3b8';
+          }
+
+          function buildSegmentCumulative(points) {
+              const out = [0];
+              for (let i = 1; i < points.length; i++) {
+                  out.push(out[i - 1] + distanceKm(points[i - 1], points[i]));
+              }
+              return out;
+          }
+
+          function getSegmentSelection() {
+              const startInput = document.getElementById('segment-start');
+              const endInput = document.getElementById('segment-end');
+              if (!startInput || !endInput || segmentRoutePoints.length < 2) return null;
+
+              let startIndex = Number(startInput.value || 0);
+              let endIndex = Number(endInput.value || 0);
+
+              if (endIndex <= startIndex) {
+                  endIndex = Math.min(segmentRoutePoints.length - 1, startIndex + 1);
+                  endInput.value = String(endIndex);
+              }
+
+              return { startIndex, endIndex };
+          }
+
+          function updateSegmentPreview() {
+              const selection = getSegmentSelection();
+              if (!selection || segmentCumulativeKm.length === 0) return;
+
+              const totalIndex = Math.max(1, segmentRoutePoints.length - 1);
+              const startPercent = Math.round((selection.startIndex / totalIndex) * 100);
+              const endPercent = Math.round((selection.endIndex / totalIndex) * 100);
+              const startKm = segmentCumulativeKm[selection.startIndex] || 0;
+              const endKm = segmentCumulativeKm[selection.endIndex] || 0;
+              const distance = Math.max(0, endKm - startKm);
+
+              document.getElementById('segment-start-label').innerText = startPercent + '%';
+              document.getElementById('segment-end-label').innerText = endPercent + '%';
+              document.getElementById('segment-distance').innerText = distance.toFixed(2);
+              document.getElementById('segment-start-km').innerText = startKm.toFixed(2);
+              document.getElementById('segment-end-km').innerText = endKm.toFixed(2);
+          }
+
+          function renderSegmentEfforts(efforts, title) {
+              const el = document.getElementById('segment-efforts');
+              if (!el) return;
+
+              if (!Array.isArray(efforts) || efforts.length === 0) {
+                  el.innerHTML = '<div class="segment-card"><div class="segment-card-meta">Belum ada effort lain yang cocok untuk segmen ini.</div></div>';
+                  return;
+              }
+
+              el.innerHTML =
+                  '<div class="segment-title" style="margin-top:10px;">' + escapeClientHTML(title || 'Leaderboard Pribadi') + '</div>' +
+                  efforts.slice(0, 5).map(function(effort, index) {
+                      return '<a class="segment-card" href="/detail/' + encodeURIComponent(effort.ride_id) + '">' +
+                          '<div class="segment-card-title">#' + (index + 1) + ' ' + escapeClientHTML(effort.ride_name) + '</div>' +
+                          '<div class="segment-card-meta">' +
+                              formatSplitTime(effort.elapsed_seconds || 0) + ' • ' +
+                              Number(effort.distance_km || 0).toFixed(2) + ' km • ' +
+                              Number(effort.average_speed || 0).toFixed(1) + ' km/h' +
+                              (effort.is_source ? ' • sumber segmen' : '') +
+                          '</div>' +
+                      '</a>';
+                  }).join('');
+          }
+
+          function renderActivitySegments(matches) {
+              const el = document.getElementById('activity-segments');
+              if (!el) return;
+
+              if (!Array.isArray(matches) || matches.length === 0) {
+                  el.innerHTML = '';
+                  return;
+              }
+
+              el.innerHTML =
+                  '<div class="segment-title" style="margin-top:14px;">Segmen yang Kena di Aktivitas Ini</div>' +
+                  matches.slice(0, 5).map(function(item) {
+                      const segment = item.segment || {};
+                      const effort = item.effort || {};
+                      const best = item.best || null;
+                      const delta = Number(item.delta_seconds || 0);
+                      const deltaText = best
+                          ? (delta <= 0 ? 'PR / tercepat pribadi' : 'Lebih lambat ' + formatSplitTime(delta) + ' dari PR')
+                          : 'Effort pertama';
+
+                      return '<div class="segment-card">' +
+                          '<div class="segment-card-title">' + escapeClientHTML(segment.name || 'Personal Segment') + '</div>' +
+                          '<div class="segment-card-meta">' +
+                              formatSplitTime(effort.elapsed_seconds || 0) + ' • ' +
+                              Number(effort.distance_km || segment.distance_km || 0).toFixed(2) + ' km • ' +
+                              deltaText +
+                          '</div>' +
+                      '</div>';
+                  }).join('');
+          }
+
+          async function loadActivitySegments() {
+              if (!canLoadMatches) return;
+
+              try {
+                  const res = await fetch('/api/activity_segments/' + encodeURIComponent(currentRideId), {
+                      cache: 'no-store'
+                  });
+                  const data = await res.json();
+
+                  if (!res.ok || !data.success) return;
+                  renderActivitySegments(data.matches || []);
+              } catch (err) {
+                  console.error('Gagal memuat segment aktivitas:', err);
+              }
+          }
+
+          async function savePersonalSegment() {
+              const selection = getSegmentSelection();
+              if (!selection) return;
+
+              const name = String(document.getElementById('segment-name')?.value || '').trim() || 'Personal Segment';
+              const btn = document.getElementById('segment-save');
+              if (btn) btn.disabled = true;
+              setSegmentStatus('Menyimpan personal segment...', false);
+
+              try {
+                  const res = await fetch('/api/segments', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                          source_ride_id: currentRideId,
+                          name: name,
+                          start_index: selection.startIndex,
+                          end_index: selection.endIndex
+                      })
+                  });
+                  const data = await res.json();
+
+                  if (!res.ok || !data.success) {
+                      throw new Error(data.message || 'Gagal membuat segment.');
+                  }
+
+                  setSegmentStatus('Segment #' + data.segment.id + ' tersimpan: ' + Number(data.segment.distance_km || 0).toFixed(2) + ' km.', false);
+                  renderSegmentEfforts(data.efforts || [], 'Leaderboard Segment Baru');
+                  loadActivitySegments();
+              } catch (err) {
+                  console.error(err);
+                  setSegmentStatus(err.message || 'Gagal membuat segment.', true);
+              } finally {
+                  if (btn) btn.disabled = false;
+              }
+          }
+
+          function initSegmentBuilder(points) {
+              if (!canLoadMatches) return;
+
+              const section = document.getElementById('segment-section');
+              const startInput = document.getElementById('segment-start');
+              const endInput = document.getElementById('segment-end');
+              const saveButton = document.getElementById('segment-save');
+              if (!section || !startInput || !endInput || !saveButton) return;
+
+              if (!Array.isArray(points) || points.length < 3) {
+                  section.style.display = 'none';
+                  return;
+              }
+
+              segmentRoutePoints = points;
+              segmentCumulativeKm = buildSegmentCumulative(points);
+              const maxIndex = points.length - 1;
+              startInput.max = String(maxIndex);
+              endInput.max = String(maxIndex);
+              startInput.value = String(Math.max(0, Math.round(maxIndex * 0.2)));
+              endInput.value = String(Math.max(1, Math.round(maxIndex * 0.6)));
+              startInput.oninput = updateSegmentPreview;
+              endInput.oninput = updateSegmentPreview;
+              saveButton.onclick = savePersonalSegment;
+              updateSegmentPreview();
+              section.style.display = 'block';
+              setSegmentStatus('Pilih start dan finish segmen, lalu simpan.', false);
+          }
 
           function takeScreenshot(mode) {
               const target = (mode === 'standard')
@@ -661,19 +1509,6 @@ studio.get("/detail/:id", async (c) => {
               if (mode === 'minimalist') {
                   target.style.position = 'relative';
                   target.style.left = '0';
-
-                  setTimeout(() => {
-                      mapMin.invalidateSize(true);
-
-                      const layers = Object.values(mapMin._layers).filter(l => l._latlngs);
-
-                      if (layers.length > 0) {
-                          mapMin.fitBounds(layers[0].getBounds(), {
-                              padding: [60, 60],
-                              animate: false
-                          });
-                      }
-                  }, 50);
               }
 
               setTimeout(() => {

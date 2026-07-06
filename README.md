@@ -24,6 +24,8 @@ Gaspool is designed to run serverlessly on Cloudflare using **Workers**, **D1**,
 - Create a route plan from map points
 - Use OpenRouteService Directions for cycling, walking, running, and hiking routes
 - Save planned routes to Cloudflare R2 and D1
+- Pin favorite planned routes to the top of the route library
+- Export saved planned routes as GPX files
 - Start tracking from a saved route plan
 - Display planned route and actual GPS track together in the tracker
 - Voice navigation using the browser Web Speech API
@@ -43,6 +45,7 @@ Gaspool is designed to run serverlessly on Cloudflare using **Workers**, **D1**,
 - Share map card
 - Share minimalist stats card
 - Export GPX route file
+- Export saved route plans as GPX files
 - Generate cinematic route recap video
 - Peleton video recap with stable rider initials and roster display
 
@@ -327,6 +330,8 @@ If you apply SQL files manually, run the base schema first, then feature migrati
 npx wrangler d1 execute gaspool-db --remote --file migrations/0001_schema.sql
 npx wrangler d1 execute gaspool-db --remote --file migrations/0002_planned_routes.sql
 npx wrangler d1 execute gaspool-db --remote --file migrations/0002_ride_visibility.sql
+npx wrangler d1 execute gaspool-db --remote --file MIGRATION_ACTIVITY_NOTES.sql
+npx wrangler d1 execute gaspool-db --remote --file MIGRATION_ROUTE_FAVORITES.sql
 ```
 
 `0002_ride_visibility.sql` adds `rides.is_public` and makes old activities private by default.
@@ -652,10 +657,12 @@ CREATE TABLE IF NOT EXISTS planned_routes (
   provider TEXT DEFAULT 'ors',
   profile TEXT DEFAULT 'cycling-regular',
   waypoints TEXT,
+  is_favorite INTEGER NOT NULL DEFAULT 0,
   created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
 ALTER TABLE rides ADD COLUMN planned_route_id INTEGER;
+ALTER TABLE planned_routes ADD COLUMN is_favorite INTEGER NOT NULL DEFAULT 0;
 ```
 
 ---
@@ -669,6 +676,8 @@ GET  /route_plan
 POST /api/route_plan
 GET  /api/route_plans
 GET  /api/route_plan/:id
+GET  /api/route_plan/:id/gpx
+POST /api/route_plan/:id/favorite
 ```
 
 Basic route creation flow:
@@ -680,6 +689,7 @@ Basic route creation flow:
 5. The tracker opens as `/record?type=ride&route=ROUTE_ID`.
 
 The route planner stores normalized route data in R2 and metadata in D1.
+Saved routes can be pinned to the top of the library and exported back to GPX.
 
 Supported routing profiles:
 

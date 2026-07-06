@@ -371,7 +371,10 @@ function clearDB() {
 
   }
 );
-			L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(map);
+			L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+				maxZoom: 19,
+				attribution: '&copy; OpenStreetMap contributors'
+			}).addTo(map);
 			const line = L.polyline([], { color: '#FF5F00', weight: 6 }).addTo(map);
 			const marker = L.circleMarker([0,0], { radius: 8, color: '#fff', fillColor: '#FF5F00', fillOpacity: 1 }).addTo(map);
 
@@ -1773,7 +1776,10 @@ tracker.get("/radar/:room", async (c) => {
         <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
         <script>
             const map = L.map('map', { zoomControl: false }).setView([-7.25, 112.76], 13);
-            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(map);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19,
+                attribution: '&copy; OpenStreetMap contributors'
+            }).addTo(map);
             
             // ==============================================================
             // TAMBAHAN: AUTO-CENTER PENONTON SAAT PERTAMA KALI DIBUKA

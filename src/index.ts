@@ -69,7 +69,7 @@ app.use(
         "'self'",
         "data:",
         "blob:",
-        "https://*.basemaps.cartocdn.com", // Peta CartoDB Dark Mode
+        "https://*.tile.openstreetmap.org", // Peta terang OpenStreetMap
         "https://server.arcgisonline.com", // Peta Satelit ArcGIS
       ],
       fontSrc: ["'self'", "https://fonts.gstatic.com", "data:"],

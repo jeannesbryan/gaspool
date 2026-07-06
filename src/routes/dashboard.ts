@@ -93,7 +93,29 @@ dashboard.get("/", async (c) => {
           .stat-value { font-size: 26px; font-weight: 900; color: var(--primary); margin: 5px 0; font-style: italic; }
           .stat-label { font-size: 9px; color: #94a3b8; font-weight: 900; letter-spacing: 1.5px; text-transform: uppercase; }
 
+          .best-section { margin-bottom: 25px; }
+          .section-title { color: #fff; font-size: 0.85rem; font-weight: 950; letter-spacing: 1px; text-transform: uppercase; margin: 0 0 12px 0; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+          .section-title span { color: #94a3b8; font-size: 0.62rem; font-weight: 900; letter-spacing: 0.8px; }
+          .best-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+          .best-card { background: rgba(255,255,255,0.055); border: 1px solid rgba(255,255,255,0.08); border-radius: 18px; padding: 14px; cursor: pointer; min-height: 118px; display: flex; flex-direction: column; justify-content: space-between; transition: 0.2s; }
+          .best-card:hover { border-color: rgba(255,95,0,0.45); background: rgba(255,95,0,0.06); }
+          .best-label { color: #94a3b8; font-size: 0.62rem; font-weight: 950; letter-spacing: 0.8px; text-transform: uppercase; line-height: 1.3; }
+          .best-value { color: var(--primary); font-size: 1.32rem; line-height: 1; font-weight: 950; font-style: italic; margin: 10px 0 6px; }
+          .best-value small { color: #94a3b8; font-size: 0.62rem; font-style: normal; margin-left: 3px; }
+          .best-meta { color: #cbd5e1; font-size: 0.68rem; font-weight: 800; line-height: 1.35; opacity: 0.88; }
+          .best-empty { color: #94a3b8; border: 1px dashed rgba(255,255,255,0.12); border-radius: 18px; padding: 16px; font-size: 0.76rem; font-weight: 800; text-align: center; }
+
+          .period-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin: -8px 0 25px; }
+          .period-card { background: rgba(255,255,255,0.045); border: 1px solid rgba(255,255,255,0.08); border-radius: 18px; padding: 14px; }
+          .period-title { color: #fff; font-size: 0.72rem; font-weight: 950; letter-spacing: 0.8px; text-transform: uppercase; margin-bottom: 10px; }
+          .period-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+          .period-value { color: var(--primary); font-size: 1rem; font-weight: 950; font-style: italic; line-height: 1.1; }
+          .period-label { color: #94a3b8; font-size: 0.54rem; font-weight: 900; letter-spacing: 0.8px; text-transform: uppercase; margin-top: 3px; }
+
           .filter-search-row { margin-bottom: 20px; }
+          .filter-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+          .search-input { grid-column: 1 / -1; background: var(--card); color: #fff; border: 1px solid rgba(255,255,255,0.1); padding: 15px; border-radius: 12px; width: 100%; outline: none; font-weight: 900; font-size: 13px; backdrop-filter: blur(10px); }
+          .search-input::placeholder { color: #64748b; }
           select.dropdown { background: var(--card); color: #fff; border: 1px solid rgba(255,255,255,0.1); padding: 15px; border-radius: 12px; width: 100%; outline: none; font-weight: 900; font-size: 13px; cursor: pointer; backdrop-filter: blur(10px); -webkit-appearance: none; text-align: center; }
           select.dropdown option { background: #0a0a12; }
           
@@ -110,13 +132,17 @@ dashboard.get("/", async (c) => {
           
           .modal { display: none; position: fixed; z-index: 2000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); backdrop-filter: blur(10px); justify-content: center; align-items: center; padding: 20px; }
           .modal-content { background: #16161d; border-radius: 30px; width: 100%; max-width: 500px; border: 1px solid rgba(255,255,255,0.1); padding: 25px; box-shadow: 0 25px 50px rgba(0,0,0,0.5); }
-          #map-modal { height: 350px; width: 100%; border-radius: 20px; margin: 15px 0; background: #000; border: 1px solid rgba(255,255,255,0.1); }
+          #map-modal { height: 350px; width: 100%; border-radius: 20px; margin: 15px 0; background: #e5e7eb; border: 1px solid rgba(255,255,255,0.1); }
           
           #btnLoadMore { display: none; width: 100%; background: transparent; color: var(--primary); border: 2px solid var(--primary); padding: 18px; border-radius: 15px; font-weight: 900; font-style: italic; cursor: pointer; margin-top: 20px; text-transform: uppercase; transition: 0.3s; }
           #btnLoadMore:hover { background: var(--primary); color: #fff; }
 		  
 		  #bunker-alert { position: fixed; bottom: 25px; left: 50%; transform: translateX(-50%); background: rgba(231,76,60,0.9); color: white; padding: 12px 25px; border-radius: 30px; font-weight: 900; font-size: 0.8rem; z-index: 9999; box-shadow: 0 10px 20px rgba(0,0,0,0.5); display: none; align-items: center; gap: 10px; border: 2px solid #c0392b; animation: pulseBunker 2s infinite; backdrop-filter: blur(10px); }
 		  @keyframes pulseBunker { 0% { box-shadow: 0 0 0 0 rgba(231,76,60,0.7); } 70% { box-shadow: 0 0 0 10px rgba(231,76,60,0); } 100% { box-shadow: 0 0 0 0 rgba(231,76,60,0); } }
+          @media (max-width: 560px) {
+            .period-grid { grid-template-columns: 1fr; }
+            .filter-grid { grid-template-columns: 1fr; }
+          }
         </style>
       </head>
       <body>
@@ -131,6 +157,7 @@ dashboard.get("/", async (c) => {
             <button class="btn btn-accent" onclick="openModal('peletonModal')">👥 GOWES PELETON</button>
             <button class="btn btn-outline" style="grid-column: span 2; border-color: var(--primary); color: var(--primary);" onclick="window.location.href='/route_plan'">🧭 RUTE PLAN</button>
             <button class="btn btn-outline" style="grid-column: span 2; border-color: #3498db; color: #3498db;" onclick="window.location.href='/routes'">🗺️ RUTE TERSIMPAN</button>
+            <button class="btn btn-outline" style="grid-column: span 2; border-color: #f1c40f; color: #f1c40f;" onclick="window.location.href='/segments'">🏁 PERSONAL SEGMENTS</button>
             <button class="btn btn-orange" style="grid-column: span 2;" onclick="openModal('runModal')">🏃 PACE MODE</button>
             <button class="btn btn-outline" onclick="window.location.href='/sync_strava'">🧡 STRAVA SYNC</button>
             <button class="btn btn-outline" onclick="window.location.href='/gpx_import'">📥 GPX IMPORT</button>
@@ -160,14 +187,61 @@ dashboard.get("/", async (c) => {
             </div>
           </div>
 
+          <div class="period-grid">
+            <div class="period-card">
+              <div class="period-title">BULAN INI</div>
+              <div class="period-row">
+                <div><div class="period-value" id="month-dist">0.0</div><div class="period-label">KM</div></div>
+                <div><div class="period-value" id="month-count">0</div><div class="period-label">SESI</div></div>
+                <div><div class="period-value" id="month-time">0</div><div class="period-label">JAM</div></div>
+              </div>
+            </div>
+            <div class="period-card">
+              <div class="period-title">TAHUN INI</div>
+              <div class="period-row">
+                <div><div class="period-value" id="year-dist">0.0</div><div class="period-label">KM</div></div>
+                <div><div class="period-value" id="year-count">0</div><div class="period-label">SESI</div></div>
+                <div><div class="period-value" id="year-time">0</div><div class="period-label">JAM</div></div>
+              </div>
+            </div>
+          </div>
+
+          <section class="best-section">
+            <h2 class="section-title">🏆 REKOR PRIBADI <span>PERSONAL BEST</span></h2>
+            <div id="best-grid" class="best-grid">
+              <div class="best-empty" style="grid-column:1 / -1;">Memuat rekor pribadi...</div>
+            </div>
+          </section>
+
           <div class="filter-search-row">
-            <select id="filterSelect" class="dropdown" onchange="changeFilter()">
+            <div class="filter-grid">
+              <input id="searchInput" class="search-input" type="search" placeholder="CARI AKTIVITAS..." oninput="scheduleFilterChange()">
+              <select id="filterSelect" class="dropdown" onchange="changeFilter()">
                 <option value="all">🌐 SHOW ALL ACTIVITIES</option>
                 <option value="ride">🚴 CYCLING (RIDE)</option>
                 <option value="run">🏃 RUNNING (RUN)</option>
                 <option value="walk">🚶 WALKING (WALK)</option>
                 <option value="hike">⛰️ HIKING (HIKE)</option>
-            </select>
+              </select>
+              <select id="visibilitySelect" class="dropdown" onchange="changeFilter()">
+                <option value="all">SEMUA STATUS</option>
+                <option value="public">PUBLIC SAJA</option>
+                <option value="private">PRIVATE SAJA</option>
+              </select>
+              <select id="periodSelect" class="dropdown" onchange="changeFilter()">
+                <option value="all">SEMUA WAKTU</option>
+                <option value="month">BULAN INI</option>
+                <option value="year">TAHUN INI</option>
+              </select>
+              <select id="sortSelect" class="dropdown" onchange="changeFilter()">
+                <option value="latest">TERBARU</option>
+                <option value="oldest">TERLAMA</option>
+                <option value="distance_desc">JARAK TERJAUH</option>
+                <option value="duration_desc">DURASI TERLAMA</option>
+                <option value="speed_desc">TERCEPAT</option>
+                <option value="elev_desc">ELEVASI TERTINGGI</option>
+              </select>
+            </div>
           </div>
 
           <div class="rides-container">
@@ -214,6 +288,7 @@ dashboard.get("/", async (c) => {
                     <span onclick="closeModal('mapModal')" style="font-size:28px; color:#666; cursor:pointer; font-weight:bold;">&times;</span>
                 </div>
                 <p id="mDist" style="color:#aaa; font-size:0.9rem; margin:5px 0; font-weight:900;"></p>
+                <p id="mNotes" style="display:none; color:#cbd5e1; font-size:0.78rem; line-height:1.5; margin:8px 0 0; font-weight:700; white-space:pre-wrap;"></p>
                 
                 <div id="map-modal"></div>
                 
@@ -232,6 +307,11 @@ dashboard.get("/", async (c) => {
           let activeL = [];
           let curP = 1;
           let curF = 'all';
+          let curVisibility = 'all';
+          let curPeriod = 'all';
+          let curSort = 'latest';
+          let curSearch = '';
+          let searchTimer = null;
           const primaryColor = '#FF5F00';
 
           function openModal(id) { document.getElementById(id).style.display = 'flex'; }
@@ -263,23 +343,54 @@ dashboard.get("/", async (c) => {
             window.open('https://api.whatsapp.com/send?text=' + encodeURIComponent(text), '_blank');
           }
           
+          function renderPeriodStats(periodStats) {
+             const month = periodStats && periodStats.month ? periodStats.month : {};
+             const year = periodStats && periodStats.year ? periodStats.year : {};
+             document.getElementById('month-dist').innerText = parseFloat(month.total_dist || 0).toFixed(1);
+             document.getElementById('month-count').innerText = month.total_count || 0;
+             document.getElementById('month-time').innerText = Math.floor((month.total_time || 0) / 3600);
+             document.getElementById('year-dist').innerText = parseFloat(year.total_dist || 0).toFixed(1);
+             document.getElementById('year-count').innerText = year.total_count || 0;
+             document.getElementById('year-time').innerText = Math.floor((year.total_time || 0) / 3600);
+          }
+
           async function fetchRides(append) {
-             const res = await fetch('/api/rides?filter=' + curF + '&page=' + curP); 
+             const params = new URLSearchParams({
+               filter: curF,
+               page: String(curP),
+               visibility: curVisibility,
+               period: curPeriod,
+               sort: curSort
+             });
+             if (curSearch) params.set('q', curSearch);
+             const res = await fetch('/api/rides?' + params.toString()); 
              const data = await res.json();
+
+             if (!res.ok || data.success === false) {
+               throw new Error(data.error || 'Gagal memuat aktivitas.');
+             }
              
-             document.getElementById('stat-dist').innerText = parseFloat(data.stats.total_dist || 0).toFixed(1);
-             document.getElementById('stat-count').innerText = data.stats.total_count || 0;
-             document.getElementById('stat-time').innerText = Math.floor((data.stats.total_time || 0) / 3600);
-             document.getElementById('stat-elev').innerText = Math.round(data.stats.total_elev || 0);
+             const stats = data.stats || {};
+             document.getElementById('stat-dist').innerText = parseFloat(stats.total_dist || 0).toFixed(1);
+             document.getElementById('stat-count').innerText = stats.total_count || 0;
+             document.getElementById('stat-time').innerText = Math.floor((stats.total_time || 0) / 3600);
+             document.getElementById('stat-elev').innerText = Math.round(stats.total_elev || 0);
+             renderPeriodStats(data.period_stats);
 
              const tb = document.getElementById('rides-tbody'); 
              if(!append) tb.innerHTML = '';
-             
-             data.rides.forEach(r => {
+
+             const rides = Array.isArray(data.rides) ? data.rides : [];
+
+             if (!append && rides.length === 0) {
+               tb.innerHTML = '<tr><td colspan="3" style="text-align:center; color:#94a3b8; font-weight:900; padding:24px;">Tidak ada aktivitas yang cocok.</td></tr>';
+             }
+
+             rides.forEach(r => {
                const tr = document.createElement('tr');
                const icon = r.activity_type === 'run' ? '🏃' : (r.activity_type === 'walk' ? '🚶' : (r.activity_type === 'hike' ? '⛰️' : '🚴'));
                
-               tr.onclick = () => bukaPeta(r.polyline, r.name, r.distance, r.id, Number(r.is_public || 0) === 1);
+               tr.onclick = () => bukaPeta(r.polyline, r.name, r.distance, r.id, Number(r.is_public || 0) === 1, r.notes || '');
                const visibilityBadge = Number(r.is_public || 0) === 1
                  ? '<span class="visibility-badge visibility-public">PUBLIC</span>'
                  : '<span class="visibility-badge visibility-private">PRIVATE</span>';
@@ -291,7 +402,42 @@ dashboard.get("/", async (c) => {
                tb.appendChild(tr);
              });
              
-             document.getElementById('btnLoadMore').style.display = data.rides.length < 10 ? 'none' : 'block';
+             document.getElementById('btnLoadMore').style.display = rides.length < 10 ? 'none' : 'block';
+          }
+
+          async function fetchPersonalBests() {
+            const grid = document.getElementById('best-grid');
+            if (!grid) return;
+
+            try {
+              const res = await fetch('/api/personal_bests');
+              const data = await res.json();
+              const records = Array.isArray(data.records) ? data.records : [];
+
+              if (!res.ok || !data.success) {
+                throw new Error(data.message || 'Gagal memuat rekor pribadi.');
+              }
+
+              if (records.length === 0) {
+                grid.innerHTML = '<div class="best-empty" style="grid-column:1 / -1;">Belum ada rekor. Selesaikan beberapa aktivitas dulu.</div>';
+                return;
+              }
+
+              grid.innerHTML = records.map(function(record) {
+                const unit = record.unit ? '<small>' + escapeHTML(record.unit) + '</small>' : '';
+                const id = record.ride_id ? String(record.ride_id).replace(/[^0-9]/g, '') : '';
+                const click = id ? ' onclick="window.location.href=\\'/detail/' + id + '\\'"' : '';
+
+                return '<article class="best-card"' + click + '>' +
+                  '<div class="best-label">' + escapeHTML(record.label) + '</div>' +
+                  '<div class="best-value">' + escapeHTML(record.value) + unit + '</div>' +
+                  '<div class="best-meta">' + escapeHTML(record.meta || '') + '</div>' +
+                '</article>';
+              }).join('');
+            } catch (err) {
+              console.error(err);
+              grid.innerHTML = '<div class="best-empty" style="grid-column:1 / -1;">Rekor pribadi belum bisa dimuat.</div>';
+            }
           }
 
 function escapeHTML(str) {
@@ -305,8 +451,32 @@ function escapeHTML(str) {
 
 }
 
-          function changeFilter() { curF = document.getElementById('filterSelect').value; curP = 1; fetchRides(false); }
-          function loadMore() { curP++; fetchRides(true); }
+          function changeFilter() {
+            curF = document.getElementById('filterSelect').value;
+            curVisibility = document.getElementById('visibilitySelect').value;
+            curPeriod = document.getElementById('periodSelect').value;
+            curSort = document.getElementById('sortSelect').value;
+            curSearch = String(document.getElementById('searchInput').value || '').trim();
+            curP = 1;
+            fetchRides(false).catch(function(err) {
+              console.error(err);
+              document.getElementById('rides-tbody').innerHTML = '<tr><td colspan="3" style="text-align:center; color:#e74c3c; font-weight:900; padding:24px;">' + escapeHTML(err.message || 'Gagal memuat aktivitas.') + '</td></tr>';
+            });
+          }
+
+          function scheduleFilterChange() {
+            clearTimeout(searchTimer);
+            searchTimer = setTimeout(changeFilter, 300);
+          }
+
+          function loadMore() {
+            curP++;
+            fetchRides(true).catch(function(err) {
+              console.error(err);
+              curP = Math.max(1, curP - 1);
+              alert(err.message || 'Gagal memuat aktivitas berikutnya.');
+            });
+          }
           
           // ALAT PENERJEMAH SANDI STRAVA
           function decodePolyline(str, precision = 5) {
@@ -323,16 +493,54 @@ function escapeHTML(str) {
               return coordinates;
           }
 
+          function extractCoordinateList(value) {
+              if (Array.isArray(value)) return value;
+              if (!value || typeof value !== 'object') return [];
+              if (value.type === 'FeatureCollection' && Array.isArray(value.features)) {
+                  return value.features.flatMap(extractCoordinateList);
+              }
+              if (value.type === 'Feature') return extractCoordinateList(value.geometry);
+              if (value.type === 'LineString' && Array.isArray(value.coordinates)) return value.coordinates;
+              if (value.type === 'MultiLineString' && Array.isArray(value.coordinates)) return value.coordinates.flat();
+              if (value.geometry) return extractCoordinateList(value.geometry);
+              if (value.path) return extractCoordinateList(value.path);
+              if (value.data) return extractCoordinateList(value.data);
+              if (value.polyline) return extractCoordinateList(value.polyline);
+              if (value.coordinates) return extractCoordinateList(value.coordinates);
+              return [];
+          }
+
+          function normalizeRoutePoints(value) {
+              return extractCoordinateList(value).map(function(p) {
+                  if (Array.isArray(p)) {
+                      const first = parseFloat(p[0]);
+                      const second = parseFloat(p[1]);
+                      if (Math.abs(first) > 90 && Math.abs(second) <= 90) return [second, first];
+                      return [first, second];
+                  }
+                  if (p && p.lat !== undefined) {
+                      return [parseFloat(p.lat), parseFloat(p.lng !== undefined ? p.lng : p.lon)];
+                  }
+                  return null;
+              }).filter(function(p) {
+                  return p !== null && !isNaN(p[0]) && !isNaN(p[1]) && Math.abs(p[0]) <= 90 && Math.abs(p[1]) <= 180;
+              });
+          }
+
           function setVisibilityButton(isPublic) {
             const btn = document.getElementById('btn-visibility-link');
             btn.innerText = isPublic ? '🌐 PUBLIC' : '🔒 PRIVATE';
             btn.style.background = isPublic ? '#2ecc71' : '#555';
           }
 
-          async function bukaPeta(url, name, dist, id, isPublic) {
+          async function bukaPeta(url, name, dist, id, isPublic, notes) {
             openModal('mapModal');
             document.getElementById('mTitle').innerText = name;
             document.getElementById('mDist').innerText = parseFloat(dist).toFixed(2) + ' KM';
+            const notesEl = document.getElementById('mNotes');
+            const currentNotes = String(notes || '').trim();
+            notesEl.style.display = currentNotes ? 'block' : 'none';
+            notesEl.innerText = currentNotes ? currentNotes : '';
             document.getElementById('btn-detail-link').onclick = () => window.location.href = '/detail/' + id;
             setVisibilityButton(isPublic);
             document.getElementById('btn-visibility-link').onclick = async () => {
@@ -360,10 +568,28 @@ function escapeHTML(str) {
             
             document.getElementById('btn-edit-link').onclick = async () => {
                 const n = prompt('Rename Activity:', name);
-                if (n && n !== name) {
-                    await fetch('/api/edit_ride/' + id, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: n }) });
-                    closeModal('mapModal'); changeFilter();
+                if (n === null) return;
+                const nextNotes = prompt('Catatan aktivitas:', currentNotes);
+                if (nextNotes === null) return;
+
+                const payload = {
+                    name: String(n || '').trim() || name,
+                    notes: String(nextNotes || '').trim()
+                };
+
+                const res = await fetch('/api/edit_ride/' + id, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const data = await res.json();
+
+                if (!res.ok || !data.success) {
+                    alert(data.message || 'Gagal menyimpan aktivitas.');
+                    return;
                 }
+
+                closeModal('mapModal'); changeFilter();
             };
             
             document.getElementById('btn-delete-link').onclick = async () => {
@@ -375,7 +601,10 @@ function escapeHTML(str) {
 
             if(!modalMap) {
               modalMap = L.map('map-modal', { zoomControl: false });
-              L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(modalMap);
+              L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19,
+                attribution: '&copy; OpenStreetMap contributors'
+              }).addTo(modalMap);
             }
             activeL.forEach(l => modalMap.removeLayer(l)); activeL = [];
             
@@ -396,15 +625,7 @@ function escapeHTML(str) {
                   pts = decodePolyline(urlStr);
               }
               
-              // 3. Normalisasi jika bentuknya Objek { path: [...] }
-              if (!Array.isArray(pts)) pts = pts.path || pts.data || pts.polyline || pts.coordinates || [];
-              
-              // 4. Universal Normalizer
-              pts = pts.map(p => {
-                  if (Array.isArray(p)) return [parseFloat(p[0]), parseFloat(p[1])];
-                  if (p && p.lat !== undefined) return [parseFloat(p.lat), parseFloat(p.lng !== undefined ? p.lng : p.lon)];
-                  return null;
-              }).filter(p => p !== null && !isNaN(p[0]) && !isNaN(p[1]));
+              pts = normalizeRoutePoints(pts);
               
               if (pts.length > 0) {
                   const l = L.polyline(pts, { color: primaryColor, weight: 5 }).addTo(modalMap);
@@ -417,7 +638,13 @@ function escapeHTML(str) {
             } catch(e) { console.error("Gagal load peta:", e); }
           }
           
-          window.onload = () => fetchRides(false);
+          window.onload = () => {
+            fetchRides(false).catch(function(err) {
+              console.error(err);
+              document.getElementById('rides-tbody').innerHTML = '<tr><td colspan="3" style="text-align:center; color:#e74c3c; font-weight:900; padding:24px;">' + escapeHTML(err.message || 'Gagal memuat aktivitas.') + '</td></tr>';
+            });
+            fetchPersonalBests();
+          };
 		  
 		  // --- BUNKER MODE SYNC ENGINE ---
           let bunkerDB;
@@ -756,8 +983,9 @@ dashboard.get("/route_plan", async (c) => {
 
             function initMap() {
                 map = L.map('map', { zoomControl: false }).setView([-7.25, 112.76], 13);
-                L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-                    maxZoom: 19
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    maxZoom: 19,
+                    attribution: '&copy; OpenStreetMap contributors'
                 }).addTo(map);
 
                 map.on('click', function(e) {
@@ -1299,9 +1527,17 @@ dashboard.get("/route_plan", async (c) => {
                 }
             }
 
+            function profileToActivityType(profile) {
+                if (profile === 'foot-running') return 'run';
+                if (profile === 'foot-hiking') return 'hike';
+                if (profile === 'foot-walking') return 'walk';
+                return 'ride';
+            }
+
             function startRoute() {
                 if (!savedRoute || !savedRoute.id) return;
-                window.location.href = '/record?type=ride&route=' + encodeURIComponent(savedRoute.id);
+                const profile = savedRoute.profile || (savedRoute.data ? savedRoute.data.profile : '');
+                window.location.href = '/record?type=' + profileToActivityType(profile) + '&route=' + encodeURIComponent(savedRoute.id);
             }
 
             window.onload = initMap;
@@ -1334,7 +1570,7 @@ dashboard.get("/routes", async (c) => {
           h1 { margin: 0; color: var(--primary); font-style: italic; font-size: 1.8rem; font-weight: 900; letter-spacing: -1px; }
           .subtitle { color: var(--muted); font-size: 0.75rem; font-weight: 800; margin-top: 4px; }
           .back { color: #fff; text-decoration: none; border: 1px solid var(--line); background: var(--card); border-radius: 12px; padding: 12px 14px; font-weight: 900; font-size: 0.76rem; }
-          .toolbar { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px; }
+          .toolbar { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 14px; }
           .btn { border: none; border-radius: 12px; padding: 12px 10px; font-size: 0.75rem; font-weight: 900; cursor: pointer; color: #fff; background: rgba(255,255,255,0.08); text-transform: uppercase; }
           .btn:active { transform: scale(0.97); }
           .btn-primary { background: var(--primary); }
@@ -1345,9 +1581,10 @@ dashboard.get("/routes", async (c) => {
           .status { color: var(--muted); font-size: 0.78rem; font-weight: 800; min-height: 20px; margin: 8px 2px 12px; }
           .routes { display: grid; gap: 10px; }
           .route-card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 14px; box-shadow: 0 14px 35px rgba(0,0,0,0.22); }
+          .route-card.favorite { border-color: rgba(241,196,15,0.55); background: rgba(241,196,15,0.07); }
           .route-title { font-size: 1rem; font-weight: 900; line-height: 1.25; margin-bottom: 8px; }
           .route-meta { color: var(--muted); font-size: 0.72rem; font-weight: 800; line-height: 1.45; margin-bottom: 12px; }
-          .route-actions { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+          .route-actions { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }
           .empty { border: 1px dashed var(--line); border-radius: 16px; padding: 26px 18px; text-align: center; color: var(--muted); font-weight: 800; }
           #btnMore { width: 100%; margin-top: 14px; display: none; }
           @media (max-width: 560px) {
@@ -1368,6 +1605,7 @@ dashboard.get("/routes", async (c) => {
 
         <div class="toolbar">
           <button class="btn btn-primary" onclick="window.location.href='/route_plan'">BUAT RUTE BARU</button>
+          <button class="btn btn-route" onclick="window.location.href='/route_import'">IMPORT GPX</button>
           <button class="btn btn-outline" onclick="reloadRoutes()">REFRESH</button>
         </div>
 
@@ -1409,6 +1647,13 @@ dashboard.get("/routes", async (c) => {
           return d.toLocaleDateString('id-ID') + ' ' + d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
         }
 
+        function profileToActivityType(profile) {
+          if (profile === 'foot-running') return 'run';
+          if (profile === 'foot-hiking') return 'hike';
+          if (profile === 'foot-walking') return 'walk';
+          return 'ride';
+        }
+
         function renderRoute(route) {
           const card = document.createElement('div');
           const title = document.createElement('div');
@@ -1416,6 +1661,8 @@ dashboard.get("/routes", async (c) => {
           const actions = document.createElement('div');
           const startBtn = document.createElement('button');
           const openBtn = document.createElement('button');
+          const exportBtn = document.createElement('button');
+          const favoriteBtn = document.createElement('button');
           const renameBtn = document.createElement('button');
           const deleteBtn = document.createElement('button');
 
@@ -1425,7 +1672,15 @@ dashboard.get("/routes", async (c) => {
           meta.className = 'route-meta';
           actions.className = 'route-actions';
 
-          title.innerText = route.name || 'Route Plan #' + route.id;
+          function updateFavoriteState() {
+            const isFavorite = Number(route.is_favorite || 0) === 1;
+            card.classList.toggle('favorite', isFavorite);
+            title.innerText = (isFavorite ? '★ ' : '') + (route.name || 'Route Plan #' + route.id);
+            favoriteBtn.innerText = isFavorite ? 'UNPIN' : 'PIN';
+            favoriteBtn.className = isFavorite ? 'btn btn-primary' : 'btn btn-outline';
+          }
+
+          updateFavoriteState();
           meta.innerText =
             Number(route.distance || 0).toFixed(1) + ' KM • ' +
             formatDuration(route.duration) + ' • ' +
@@ -1435,7 +1690,7 @@ dashboard.get("/routes", async (c) => {
           startBtn.className = 'btn btn-route';
           startBtn.innerText = 'MULAI';
           startBtn.onclick = function() {
-            window.location.href = '/record?type=ride&route=' + encodeURIComponent(route.id);
+            window.location.href = '/record?type=' + profileToActivityType(route.profile) + '&route=' + encodeURIComponent(route.id);
           };
 
           openBtn.className = 'btn btn-outline';
@@ -1444,10 +1699,20 @@ dashboard.get("/routes", async (c) => {
             window.location.href = '/route_plan?route=' + encodeURIComponent(route.id);
           };
 
+          exportBtn.className = 'btn btn-outline';
+          exportBtn.innerText = 'GPX';
+          exportBtn.onclick = function() {
+            exportRouteGPX(route, exportBtn);
+          };
+
+          favoriteBtn.onclick = function() {
+            toggleFavorite(route, favoriteBtn);
+          };
+
           renameBtn.className = 'btn btn-outline';
           renameBtn.innerText = 'RENAME';
           renameBtn.onclick = function() {
-            renameRoute(route, title);
+            renameRoute(route, title, updateFavoriteState);
           };
 
           deleteBtn.className = 'btn btn-danger';
@@ -1458,6 +1723,8 @@ dashboard.get("/routes", async (c) => {
 
           actions.appendChild(startBtn);
           actions.appendChild(openBtn);
+          actions.appendChild(exportBtn);
+          actions.appendChild(favoriteBtn);
           actions.appendChild(renameBtn);
           actions.appendChild(deleteBtn);
           card.appendChild(title);
@@ -1512,7 +1779,78 @@ dashboard.get("/routes", async (c) => {
           loadRoutes();
         }
 
-        async function renameRoute(route, titleEl) {
+        function getRouteFileName(route) {
+          return (String(route.name || ('route-' + route.id))
+            .trim()
+            .replace(/[^a-z0-9_-]+/ig, '-')
+            .replace(/^-+|-+$/g, '')
+            .slice(0, 70) || 'gaspool-route') + '.gpx';
+        }
+
+        async function exportRouteGPX(route, button) {
+          const originalText = button.innerText;
+          button.disabled = true;
+          button.innerText = 'EXPORT...';
+
+          try {
+            const res = await fetch('/api/route_plan/' + encodeURIComponent(route.id) + '/gpx');
+
+            if (!res.ok) {
+              let message = 'Gagal export GPX.';
+              try {
+                const data = await res.json();
+                message = data.message || message;
+              } catch {}
+              throw new Error(message);
+            }
+
+            const blob = await res.blob();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = getRouteFileName(route);
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(url);
+            setStatus('GPX rute berhasil diexport.', false);
+          } catch (err) {
+            console.error(err);
+            setStatus(err.message || 'Gagal export GPX.', true);
+          } finally {
+            button.disabled = false;
+            button.innerText = originalText;
+          }
+        }
+
+        async function toggleFavorite(route, button) {
+          const nextFavorite = Number(route.is_favorite || 0) === 1 ? 0 : 1;
+          button.disabled = true;
+
+          try {
+            const res = await fetch('/api/route_plan/' + encodeURIComponent(route.id) + '/favorite', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ is_favorite: nextFavorite })
+            });
+            const data = await res.json();
+
+            if (!res.ok || !data.success) {
+              throw new Error(data.message || 'Gagal mengubah favorit rute.');
+            }
+
+            route.is_favorite = nextFavorite;
+            setStatus(nextFavorite ? 'Rute dipin ke atas library.' : 'Pin rute dilepas.', false);
+            reloadRoutes();
+          } catch (err) {
+            console.error(err);
+            setStatus(err.message || 'Gagal mengubah favorit rute.', true);
+          } finally {
+            button.disabled = false;
+          }
+        }
+
+        async function renameRoute(route, titleEl, afterRename) {
           const name = prompt('Nama baru rute:', route.name || '');
           const nextName = String(name || '').trim();
 
@@ -1531,7 +1869,8 @@ dashboard.get("/routes", async (c) => {
             }
 
             route.name = nextName;
-            titleEl.innerText = nextName;
+            if (typeof afterRename === 'function') afterRename();
+            else titleEl.innerText = nextName;
             setStatus('Rute berhasil direname.', false);
           } catch (err) {
             console.error(err);
@@ -1561,6 +1900,648 @@ dashboard.get("/routes", async (c) => {
         }
 
         window.onload = loadRoutes;
+      </script>
+    </body>
+    </html>
+  `);
+});
+
+dashboard.get("/segments", async (c) => {
+  const token = getCookie(c, "gaspool_session");
+  if (!token) return c.redirect("/login");
+
+  return c.html(`
+    <!DOCTYPE html>
+    <html lang="id">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Personal Segments - Gaspool</title>
+        <style>
+          :root { --primary: #FF5F00; --bg: #0a0a12; --card: rgba(255,255,255,0.06); --line: rgba(255,255,255,0.1); --muted: #94a3b8; --gold: #f1c40f; --green: #2ecc71; --blue: #3498db; }
+          * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+          body { margin: 0; min-height: 100vh; background: var(--bg); background-image: radial-gradient(circle at 50% 0%, rgba(241,196,15,0.16) 0%, #0a0a12 70%); color: #fff; font-family: 'Inter', sans-serif; padding: 18px; }
+          .wrap { max-width: 780px; margin: 0 auto; }
+          .topbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 18px; }
+          h1 { margin: 0; color: var(--gold); font-style: italic; font-size: 1.8rem; font-weight: 950; letter-spacing: -1px; }
+          .subtitle { color: var(--muted); font-size: 0.75rem; font-weight: 800; margin-top: 4px; line-height: 1.45; }
+          .back { color: #fff; text-decoration: none; border: 1px solid var(--line); background: var(--card); border-radius: 12px; padding: 12px 14px; font-weight: 900; font-size: 0.76rem; white-space: nowrap; }
+          .toolbar { display: grid; grid-template-columns: 1fr auto; gap: 10px; margin-bottom: 14px; }
+          select { width: 100%; border: 1px solid var(--line); border-radius: 12px; padding: 13px 12px; color: #fff; background: rgba(255,255,255,0.07); font-weight: 900; outline: none; text-transform: uppercase; }
+          select option { background: #0a0a12; }
+          .btn { border: none; border-radius: 12px; padding: 12px 10px; font-size: 0.72rem; font-weight: 950; cursor: pointer; color: #fff; background: rgba(255,255,255,0.08); text-transform: uppercase; }
+          .btn:active { transform: scale(0.97); }
+          .btn-primary { background: var(--gold); color: #111; }
+          .btn-blue { background: var(--blue); }
+          .btn-danger { background: rgba(231,76,60,0.85); }
+          .btn-outline { border: 1px solid var(--line); }
+          .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+          .status { color: var(--muted); font-size: 0.78rem; font-weight: 800; min-height: 20px; margin: 8px 2px 12px; }
+          .segments { display: grid; gap: 10px; }
+          .segment-card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 14px; box-shadow: 0 14px 35px rgba(0,0,0,0.22); }
+          .segment-head { display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: start; margin-bottom: 10px; }
+          .segment-title { font-size: 1rem; font-weight: 950; line-height: 1.25; }
+          .segment-type { color: #111; background: var(--gold); border-radius: 999px; padding: 5px 8px; font-size: 0.62rem; font-weight: 950; letter-spacing: 0.6px; text-transform: uppercase; }
+          .segment-meta { color: var(--muted); font-size: 0.72rem; font-weight: 800; line-height: 1.55; margin-bottom: 12px; }
+          .segment-actions { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+          .efforts { margin-top: 12px; border-top: 1px solid var(--line); padding-top: 10px; display: none; }
+          .effort-row { display: grid; grid-template-columns: 34px 1fr auto; gap: 10px; align-items: center; padding: 9px 0; border-bottom: 1px solid rgba(255,255,255,0.06); cursor: pointer; }
+          .effort-row:last-child { border-bottom: none; }
+          .rank { width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; border-radius: 10px; background: rgba(241,196,15,0.16); color: var(--gold); font-size: 0.76rem; font-weight: 950; }
+          .effort-name { font-size: 0.82rem; font-weight: 900; line-height: 1.3; }
+          .effort-meta { color: var(--muted); font-size: 0.66rem; font-weight: 800; margin-top: 2px; }
+          .effort-time { color: var(--primary); font-size: 0.82rem; font-weight: 950; font-style: italic; white-space: nowrap; }
+          .empty { border: 1px dashed var(--line); border-radius: 16px; padding: 26px 18px; text-align: center; color: var(--muted); font-weight: 800; line-height: 1.5; }
+          @media (max-width: 600px) {
+            .topbar { align-items: flex-start; }
+            .toolbar { grid-template-columns: 1fr; }
+            .segment-head { grid-template-columns: 1fr; }
+            .segment-type { width: fit-content; }
+            .segment-actions { grid-template-columns: 1fr 1fr; }
+          }
+        </style>
+    </head>
+    <body>
+      <div class="wrap">
+        <div class="topbar">
+          <div>
+            <h1>PERSONAL SEGMENTS</h1>
+            <div class="subtitle">Kelola tanjakan, sprint pendek, loop favorit, dan leaderboard pribadi dari aktivitasmu sendiri.</div>
+          </div>
+          <a class="back" href="/">KEMBALI</a>
+        </div>
+
+        <div class="toolbar">
+          <select id="activityFilter" onchange="reloadSegments()">
+            <option value="">SEMUA JENIS AKTIVITAS</option>
+            <option value="ride">GOWES</option>
+            <option value="run">LARI</option>
+            <option value="walk">JALAN</option>
+            <option value="hike">HIKE</option>
+          </select>
+          <button class="btn btn-primary" onclick="reloadSegments()">REFRESH</button>
+        </div>
+
+        <div id="status" class="status">Memuat personal segment...</div>
+        <div id="segments" class="segments"></div>
+      </div>
+
+      <script>
+        const activityLabels = {
+          ride: 'GOWES',
+          run: 'LARI',
+          walk: 'JALAN',
+          hike: 'HIKE'
+        };
+
+        function escapeHTML(str) {
+          return String(str || '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+        }
+
+        function setStatus(text, isError) {
+          const el = document.getElementById('status');
+          el.innerText = text;
+          el.style.color = isError ? '#e74c3c' : '#94a3b8';
+        }
+
+        function formatDate(value) {
+          if (!value) return '-';
+          const d = new Date(value);
+          if (isNaN(d.getTime())) return String(value);
+          return d.toLocaleDateString('id-ID') + ' ' + d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+        }
+
+        function formatSpeed(value) {
+          const speed = Number(value || 0);
+          return Number.isFinite(speed) && speed > 0 ? speed.toFixed(1) + ' km/jam' : '-';
+        }
+
+        function renderSegment(segment) {
+          const card = document.createElement('article');
+          const head = document.createElement('div');
+          const title = document.createElement('div');
+          const badge = document.createElement('div');
+          const meta = document.createElement('div');
+          const actions = document.createElement('div');
+          const efforts = document.createElement('div');
+          const leaderboardBtn = document.createElement('button');
+          const sourceBtn = document.createElement('button');
+          const renameBtn = document.createElement('button');
+          const deleteBtn = document.createElement('button');
+          const sourceName = segment.source_ride_name || ('Aktivitas #' + (segment.source_ride_id || '-'));
+
+          card.className = 'segment-card';
+          card.dataset.id = segment.id;
+          head.className = 'segment-head';
+          title.className = 'segment-title';
+          badge.className = 'segment-type';
+          meta.className = 'segment-meta';
+          actions.className = 'segment-actions';
+          efforts.className = 'efforts';
+          efforts.id = 'efforts-' + segment.id;
+
+          title.innerText = segment.name || ('Personal Segment #' + segment.id);
+          badge.innerText = activityLabels[segment.activity_type] || String(segment.activity_type || 'AKTIVITAS').toUpperCase();
+          meta.innerText =
+            Number(segment.distance_km || 0).toFixed(2) + ' KM • sumber: ' +
+            sourceName + ' • dibuat ' + formatDate(segment.created_at || segment.source_start_date);
+
+          leaderboardBtn.className = 'btn btn-primary';
+          leaderboardBtn.innerText = 'LEADERBOARD';
+          leaderboardBtn.onclick = function() {
+            toggleEfforts(segment, efforts, leaderboardBtn);
+          };
+
+          sourceBtn.className = 'btn btn-blue';
+          sourceBtn.innerText = 'SUMBER';
+          sourceBtn.disabled = !segment.source_ride_id;
+          sourceBtn.onclick = function() {
+            if (segment.source_ride_id) window.location.href = '/detail/' + encodeURIComponent(segment.source_ride_id);
+          };
+
+          renameBtn.className = 'btn btn-outline';
+          renameBtn.innerText = 'RENAME';
+          renameBtn.onclick = function() {
+            renameSegment(segment, title);
+          };
+
+          deleteBtn.className = 'btn btn-danger';
+          deleteBtn.innerText = 'HAPUS';
+          deleteBtn.onclick = function() {
+            deleteSegment(segment, card);
+          };
+
+          head.appendChild(title);
+          head.appendChild(badge);
+          actions.appendChild(leaderboardBtn);
+          actions.appendChild(sourceBtn);
+          actions.appendChild(renameBtn);
+          actions.appendChild(deleteBtn);
+          card.appendChild(head);
+          card.appendChild(meta);
+          card.appendChild(actions);
+          card.appendChild(efforts);
+          return card;
+        }
+
+        function renderEfforts(target, efforts) {
+          if (!efforts.length) {
+            target.innerHTML = '<div class="empty">Belum ada aktivitas yang cocok dengan segment ini.</div>';
+            return;
+          }
+
+          target.innerHTML = efforts.map(function(effort, index) {
+            return '<div class="effort-row" onclick="window.location.href=\\'/detail/' + encodeURIComponent(effort.ride_id) + '\\'">' +
+              '<div class="rank">' + (index + 1) + '</div>' +
+              '<div>' +
+                '<div class="effort-name">' + escapeHTML(effort.ride_name || 'Aktivitas') + (effort.is_source ? ' · SUMBER' : '') + '</div>' +
+                '<div class="effort-meta">' + Number(effort.distance_km || 0).toFixed(2) + ' KM • ' + formatSpeed(effort.average_speed) + ' • ' + formatDate(effort.start_date) + '</div>' +
+              '</div>' +
+              '<div class="effort-time">' + escapeHTML(effort.elapsed_label || (effort.elapsed_seconds + ' dtk')) + '</div>' +
+            '</div>';
+          }).join('');
+        }
+
+        async function toggleEfforts(segment, target, button) {
+          if (target.style.display === 'block') {
+            target.style.display = 'none';
+            button.innerText = 'LEADERBOARD';
+            return;
+          }
+
+          target.style.display = 'block';
+          button.innerText = 'MEMUAT...';
+
+          try {
+            const res = await fetch('/api/segments/' + encodeURIComponent(segment.id) + '/efforts');
+            const data = await res.json();
+
+            if (!res.ok || !data.success) {
+              throw new Error(data.message || 'Gagal memuat leaderboard segment.');
+            }
+
+            renderEfforts(target, Array.isArray(data.efforts) ? data.efforts : []);
+            button.innerText = 'TUTUP';
+          } catch (err) {
+            console.error(err);
+            target.innerHTML = '<div class="empty">Leaderboard belum bisa dimuat.</div>';
+            button.innerText = 'LEADERBOARD';
+          }
+        }
+
+        async function loadSegments() {
+          const list = document.getElementById('segments');
+          const filter = document.getElementById('activityFilter').value;
+          const query = filter ? '?activity_type=' + encodeURIComponent(filter) : '';
+          setStatus('Memuat personal segment...', false);
+          list.innerHTML = '';
+
+          try {
+            const res = await fetch('/api/segments' + query);
+            const data = await res.json();
+
+            if (!res.ok || !data.success) {
+              throw new Error(data.message || 'Gagal memuat personal segment.');
+            }
+
+            const segments = Array.isArray(data.segments) ? data.segments : [];
+            if (!segments.length) {
+              list.innerHTML = '<div class="empty">Belum ada personal segment. Buka detail aktivitas, lalu buat segment dari potongan track favoritmu.</div>';
+              setStatus('0 segment termuat.', false);
+              return;
+            }
+
+            segments.forEach(function(segment) {
+              list.appendChild(renderSegment(segment));
+            });
+            setStatus(segments.length + ' segment termuat.', false);
+          } catch (err) {
+            console.error(err);
+            list.innerHTML = '<div class="empty">Personal segment belum bisa dimuat.</div>';
+            setStatus(err.message || 'Gagal memuat personal segment.', true);
+          }
+        }
+
+        function reloadSegments() {
+          loadSegments();
+        }
+
+        async function renameSegment(segment, titleEl) {
+          const name = prompt('Nama baru personal segment:', segment.name || '');
+          const nextName = String(name || '').trim();
+          if (!nextName) return;
+
+          try {
+            const res = await fetch('/api/segments/' + encodeURIComponent(segment.id), {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ name: nextName })
+            });
+            const data = await res.json();
+
+            if (!res.ok || !data.success) {
+              throw new Error(data.message || 'Gagal rename personal segment.');
+            }
+
+            segment.name = nextName;
+            titleEl.innerText = nextName;
+            setStatus('Personal segment berhasil direname.', false);
+          } catch (err) {
+            console.error(err);
+            setStatus(err.message || 'Gagal rename personal segment.', true);
+          }
+        }
+
+        async function deleteSegment(segment, card) {
+          if (!confirm('Hapus personal segment "' + (segment.name || ('#' + segment.id)) + '"?')) return;
+
+          try {
+            const res = await fetch('/api/segments/' + encodeURIComponent(segment.id), {
+              method: 'DELETE'
+            });
+            const data = await res.json();
+
+            if (!res.ok || !data.success) {
+              throw new Error(data.message || 'Gagal menghapus personal segment.');
+            }
+
+            card.remove();
+            setStatus('Personal segment berhasil dihapus.', false);
+            if (!document.querySelector('.segment-card')) {
+              document.getElementById('segments').innerHTML = '<div class="empty">Belum ada personal segment untuk filter ini.</div>';
+            }
+          } catch (err) {
+            console.error(err);
+            setStatus(err.message || 'Gagal menghapus personal segment.', true);
+          }
+        }
+
+        window.onload = loadSegments;
+      </script>
+    </body>
+    </html>
+  `);
+});
+
+dashboard.get("/route_import", async (c) => {
+  const token = getCookie(c, "gaspool_session");
+  if (!token) return c.redirect("/login");
+
+  return c.html(`
+    <!DOCTYPE html>
+    <html lang="id">
+    <head>
+      <meta charset="UTF-8" />
+      <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+      <title>Import GPX Route - Gaspool</title>
+      <style>
+        :root {
+          --bg: #0a0a12;
+          --card: #171821;
+          --line: rgba(255,255,255,0.1);
+          --primary: #FF5F00;
+          --route: #3498db;
+          --muted: #94a3b8;
+          --success: #2ecc71;
+          --danger: #e74c3c;
+        }
+        * { box-sizing: border-box; }
+        body { margin: 0; background: var(--bg); color: #fff; font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; padding: 18px; min-height: 100vh; }
+        .wrap { max-width: 720px; margin: 0 auto; }
+        .topbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 18px; }
+        h1 { margin: 0; color: var(--primary); font-style: italic; font-size: 1.8rem; font-weight: 900; letter-spacing: -1px; }
+        .subtitle { color: var(--muted); font-size: 0.76rem; font-weight: 800; margin-top: 4px; line-height: 1.45; }
+        .back { color: #fff; text-decoration: none; border: 1px solid var(--line); background: var(--card); border-radius: 12px; padding: 12px 14px; font-weight: 900; font-size: 0.76rem; }
+        .panel { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 16px; box-shadow: 0 18px 45px rgba(0,0,0,0.28); }
+        .grid { display: grid; grid-template-columns: 1fr 180px; gap: 10px; margin-bottom: 10px; }
+        label { display: block; color: var(--muted); font-size: 0.7rem; font-weight: 900; text-transform: uppercase; margin-bottom: 7px; }
+        input, select {
+          width: 100%; border: 1px solid var(--line); background: rgba(255,255,255,0.05); color: #fff;
+          border-radius: 12px; padding: 13px 14px; font-weight: 850; outline: none;
+        }
+        input[type="file"] { padding: 11px; color: var(--muted); }
+        .hint { color: var(--muted); font-size: 0.78rem; font-weight: 750; line-height: 1.55; margin: 10px 0 14px; }
+        .summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 14px 0; }
+        .stat { border: 1px solid var(--line); border-radius: 14px; padding: 14px 12px; text-align: center; background: rgba(255,255,255,0.035); }
+        .stat strong { display: block; color: var(--primary); font-size: 1.25rem; font-style: italic; font-weight: 950; }
+        .stat span { display: block; color: var(--muted); font-size: 0.68rem; font-weight: 900; letter-spacing: 1px; margin-top: 5px; }
+        .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
+        .btn { border: none; border-radius: 12px; padding: 13px 12px; color: #fff; font-size: 0.78rem; font-weight: 950; cursor: pointer; text-transform: uppercase; }
+        .btn:active { transform: scale(0.98); }
+        .btn-primary { background: var(--primary); }
+        .btn-route { background: var(--route); }
+        .btn-outline { background: rgba(255,255,255,0.06); border: 1px solid var(--line); }
+        .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+        #status { min-height: 21px; color: var(--muted); font-size: 0.8rem; font-weight: 850; margin-top: 12px; line-height: 1.45; }
+        .result { display: none; margin-top: 14px; border: 1px solid rgba(46,204,113,0.35); background: rgba(46,204,113,0.09); border-radius: 14px; padding: 14px; color: #d9ffe8; font-weight: 850; line-height: 1.5; }
+        .result-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
+        @media (max-width: 620px) {
+          body { padding: 14px; }
+          .topbar { align-items: flex-start; }
+          .grid, .summary, .actions, .result-actions { grid-template-columns: 1fr; }
+        }
+      </style>
+    </head>
+    <body>
+      <div class="wrap">
+        <div class="topbar">
+          <div>
+            <h1>IMPORT GPX ROUTE</h1>
+            <div class="subtitle">Ubah file GPX menjadi rute tersimpan yang bisa dipakai di tracker.</div>
+          </div>
+          <a class="back" href="/routes">KEMBALI</a>
+        </div>
+
+        <div class="panel">
+          <div class="grid">
+            <div>
+              <label for="routeName">Nama Rute</label>
+              <input id="routeName" placeholder="Misal: Loop Mojokerto pagi" maxlength="80" />
+            </div>
+            <div>
+              <label for="activityType">Mode</label>
+              <select id="activityType">
+                <option value="ride">Gowes</option>
+                <option value="run">Lari</option>
+                <option value="walk">Jalan</option>
+                <option value="hike">Hiking</option>
+              </select>
+            </div>
+          </div>
+
+          <label for="gpxFile">File GPX</label>
+          <input id="gpxFile" type="file" accept=".gpx,application/gpx+xml,application/xml,text/xml" />
+          <div class="hint">Pilih GPX dari Komoot, Garmin, Strava, OSM, atau editor rute lain. Gaspool akan mengambil track/route point, menghitung jarak, lalu menyimpannya sebagai route plan.</div>
+
+          <div class="summary">
+            <div class="stat"><strong id="statDistance">0.0</strong><span>KM</span></div>
+            <div class="stat"><strong id="statPoints">0</strong><span>TITIK</span></div>
+            <div class="stat"><strong id="statDuration">0</strong><span>MENIT</span></div>
+          </div>
+
+          <div class="actions">
+            <button id="btnImport" class="btn btn-primary" disabled>IMPORT KE ROUTE LIBRARY</button>
+            <button class="btn btn-outline" onclick="resetImport()">RESET</button>
+          </div>
+          <div id="status">Belum ada file GPX dipilih.</div>
+
+          <div id="result" class="result">
+            <div id="resultText"></div>
+            <div class="result-actions">
+              <button id="btnOpenRoutes" class="btn btn-outline">BUKA ROUTE LIBRARY</button>
+              <button id="btnStartRoute" class="btn btn-route">MULAI RUTE</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <script>
+        let parsedPoints = [];
+        let parsedDistanceM = 0;
+        let savedRouteId = null;
+
+        const fileInput = document.getElementById('gpxFile');
+        const nameInput = document.getElementById('routeName');
+        const typeInput = document.getElementById('activityType');
+        const btnImport = document.getElementById('btnImport');
+
+        function setStatus(text, isError) {
+          const el = document.getElementById('status');
+          el.innerText = text;
+          el.style.color = isError ? '#e74c3c' : '#94a3b8';
+        }
+
+        function toRad(value) {
+          return value * Math.PI / 180;
+        }
+
+        function distanceMeters(a, b) {
+          const earth = 6371000;
+          const dLat = toRad(b.lat - a.lat);
+          const dLng = toRad(b.lng - a.lng);
+          const lat1 = toRad(a.lat);
+          const lat2 = toRad(b.lat);
+          const hav =
+            Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+            Math.cos(lat1) * Math.cos(lat2) *
+            Math.sin(dLng / 2) * Math.sin(dLng / 2);
+          return earth * 2 * Math.atan2(Math.sqrt(hav), Math.sqrt(1 - hav));
+        }
+
+        function calculateDistance(points) {
+          let total = 0;
+          for (let i = 1; i < points.length; i++) {
+            total += distanceMeters(points[i - 1], points[i]);
+          }
+          return total;
+        }
+
+        function estimatedMinutes(distanceM) {
+          const type = typeInput.value;
+          const speedKmh = type === 'hike' ? 3.5 : type === 'run' ? 9.5 : type === 'walk' ? 5 : 18;
+          return Math.max(1, Math.round((distanceM / 1000 / speedKmh) * 60));
+        }
+
+        function textContent(doc, selector) {
+          const el = doc.querySelector(selector);
+          return el ? String(el.textContent || '').trim() : '';
+        }
+
+        function pointFromNode(node) {
+          const lat = Number(node.getAttribute('lat'));
+          const lon = Number(node.getAttribute('lon'));
+          const eleEl = node.querySelector('ele');
+          const timeEl = node.querySelector('time');
+          const point = { lat: lat, lng: lon };
+
+          if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+          if (lat < -90 || lat > 90 || lon < -180 || lon > 180) return null;
+          if (eleEl && Number.isFinite(Number(eleEl.textContent))) point.ele = Number(eleEl.textContent);
+          if (timeEl && String(timeEl.textContent || '').trim()) point.time = String(timeEl.textContent || '').trim();
+
+          return point;
+        }
+
+        function parseGPX(text) {
+          const doc = new DOMParser().parseFromString(text, 'application/xml');
+          const parserError = doc.querySelector('parsererror');
+
+          if (parserError) {
+            throw new Error('File GPX tidak valid atau gagal dibaca.');
+          }
+
+          let nodes = Array.from(doc.querySelectorAll('trkpt'));
+          if (!nodes.length) nodes = Array.from(doc.querySelectorAll('rtept'));
+          if (!nodes.length) nodes = Array.from(doc.querySelectorAll('wpt'));
+
+          const points = nodes.map(pointFromNode).filter(Boolean).filter(function(point, index, list) {
+            if (index === 0) return true;
+            const prev = list[index - 1];
+            return point.lat !== prev.lat || point.lng !== prev.lng;
+          });
+
+          if (points.length < 2) {
+            throw new Error('GPX harus punya minimal dua titik track atau route.');
+          }
+
+          if (points.length > 25000) {
+            throw new Error('GPX terlalu besar. Maksimal 25.000 titik.');
+          }
+
+          const name =
+            textContent(doc, 'trk > name') ||
+            textContent(doc, 'rte > name') ||
+            textContent(doc, 'metadata > name') ||
+            '';
+
+          return { name: name, points: points };
+        }
+
+        function updateStats() {
+          parsedDistanceM = calculateDistance(parsedPoints);
+          document.getElementById('statDistance').innerText = (parsedDistanceM / 1000).toFixed(1);
+          document.getElementById('statPoints').innerText = String(parsedPoints.length);
+          document.getElementById('statDuration').innerText = String(estimatedMinutes(parsedDistanceM));
+        }
+
+        function resetImport() {
+          parsedPoints = [];
+          parsedDistanceM = 0;
+          savedRouteId = null;
+          fileInput.value = '';
+          nameInput.value = '';
+          btnImport.disabled = true;
+          document.getElementById('result').style.display = 'none';
+          document.getElementById('statDistance').innerText = '0.0';
+          document.getElementById('statPoints').innerText = '0';
+          document.getElementById('statDuration').innerText = '0';
+          setStatus('Belum ada file GPX dipilih.', false);
+        }
+
+        async function readSelectedFile(file) {
+          const text = await file.text();
+          const parsed = parseGPX(text);
+          parsedPoints = parsed.points;
+
+          if (!String(nameInput.value || '').trim()) {
+            nameInput.value = parsed.name || file.name.replace(/\\.gpx$/i, '');
+          }
+
+          updateStats();
+          btnImport.disabled = false;
+          document.getElementById('result').style.display = 'none';
+          setStatus('GPX siap diimport: ' + parsedPoints.length + ' titik ditemukan.', false);
+        }
+
+        async function importRoute() {
+          if (parsedPoints.length < 2) return;
+
+          const name = String(nameInput.value || '').trim() || 'Import GPX Route';
+          btnImport.disabled = true;
+          setStatus('Menyimpan route plan ke Gaspool...', false);
+
+          try {
+            const res = await fetch('/api/route_plan_gpx', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                name: name,
+                activity_type: typeInput.value,
+                points: parsedPoints
+              })
+            });
+            const data = await res.json();
+
+            if (!res.ok || !data.success) {
+              throw new Error(data.message || 'Gagal import GPX.');
+            }
+
+            savedRouteId = data.route.id;
+            document.getElementById('resultText').innerText =
+              'Route #' + savedRouteId + ' tersimpan: ' +
+              Number(data.route.distance || 0).toFixed(1) + ' km, ' +
+              data.route.coordinates_count + ' titik.';
+            document.getElementById('result').style.display = 'block';
+            setStatus('GPX berhasil dijadikan route plan.', false);
+          } catch (err) {
+            console.error(err);
+            setStatus(err.message || 'Gagal import GPX.', true);
+          } finally {
+            btnImport.disabled = parsedPoints.length < 2;
+          }
+        }
+
+        fileInput.addEventListener('change', async function() {
+          const file = fileInput.files && fileInput.files[0];
+          if (!file) return;
+
+          try {
+            setStatus('Membaca file GPX...', false);
+            await readSelectedFile(file);
+          } catch (err) {
+            console.error(err);
+            resetImport();
+            setStatus(err.message || 'Gagal membaca GPX.', true);
+          }
+        });
+
+        typeInput.addEventListener('change', function() {
+          if (parsedPoints.length) updateStats();
+        });
+
+        btnImport.addEventListener('click', importRoute);
+        document.getElementById('btnOpenRoutes').onclick = function() {
+          window.location.href = '/routes';
+        };
+        document.getElementById('btnStartRoute').onclick = function() {
+          if (!savedRouteId) return;
+          window.location.href = '/record?type=' + encodeURIComponent(typeInput.value) + '&route=' + encodeURIComponent(savedRouteId);
+        };
       </script>
     </body>
     </html>
@@ -1634,6 +2615,36 @@ dashboard.get("/heatmap", async (c) => {
               return coordinates;
           }
 
+          function extractCoordinateList(value) {
+              if (Array.isArray(value)) return value;
+              if (!value || typeof value !== 'object') return [];
+              if (value.type === 'FeatureCollection' && Array.isArray(value.features)) return value.features.flatMap(extractCoordinateList);
+              if (value.type === 'Feature') return extractCoordinateList(value.geometry);
+              if (value.type === 'LineString' && Array.isArray(value.coordinates)) return value.coordinates;
+              if (value.type === 'MultiLineString' && Array.isArray(value.coordinates)) return value.coordinates.flat();
+              if (value.geometry) return extractCoordinateList(value.geometry);
+              if (value.path) return extractCoordinateList(value.path);
+              if (value.data) return extractCoordinateList(value.data);
+              if (value.polyline) return extractCoordinateList(value.polyline);
+              if (value.coordinates) return extractCoordinateList(value.coordinates);
+              return [];
+          }
+
+          function normalizeRoutePoints(value) {
+              return extractCoordinateList(value).map(function(p) {
+                  if (Array.isArray(p)) {
+                      const first = parseFloat(p[0]);
+                      const second = parseFloat(p[1]);
+                      if (Math.abs(first) > 90 && Math.abs(second) <= 90) return [second, first];
+                      return [first, second];
+                  }
+                  if (p && p.lat !== undefined) return [parseFloat(p.lat), parseFloat(p.lng !== undefined ? p.lng : p.lon)];
+                  return null;
+              }).filter(function(p) {
+                  return p !== null && !isNaN(p[0]) && !isNaN(p[1]) && Math.abs(p[0]) <= 90 && Math.abs(p[1]) <= 180;
+              });
+          }
+
           const polylines = ${JSON.stringify(allPolylines)};
           const map = L.map('map', { zoomControl: false, attributionControl: false }).setView([-2.5489, 118.0149], 5);
           const tileUrl = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
@@ -1662,13 +2673,7 @@ dashboard.get("/heatmap", async (c) => {
                               pts = decodePolyline(urlStr);
                           }
                           
-                          if (!Array.isArray(pts)) pts = pts.path || pts.data || pts.polyline || pts.coordinates || [];
-                          
-                          return pts.map(p => {
-                              if (Array.isArray(p)) return [parseFloat(p[0]), parseFloat(p[1])];
-                              if (p && p.lat !== undefined) return [parseFloat(p.lat), parseFloat(p.lng !== undefined ? p.lng : p.lon)];
-                              return null;
-                          }).filter(p => p !== null && !isNaN(p[0]) && !isNaN(p[1]));
+                          return normalizeRoutePoints(pts);
                       } catch (e) { return []; }
                   });
 
@@ -2095,7 +3100,9 @@ dashboard.get("/:username", async (c, next) => {
     "detail",
     "video_flex",
     "routes",
+    "segments",
     "route_plan",
+    "route_import",
     "heatmap",
     "gpx_import",
     "sync_strava",
@@ -2130,6 +3137,7 @@ dashboard.get("/:username", async (c, next) => {
         <link rel="icon" type="image/png" sizes="192x192" href="/assets/android-chrome-192x192.png">
         <link rel="icon" type="image/png" sizes="512x512" href="/assets/android-chrome-512x512.png">
         <link rel="apple-touch-icon" href="/assets/apple-touch-icon.png">
+        <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
         <style>
           :root { --primary: #FF5F00; --bg: #0a0a12; --card: rgba(255,255,255,0.05); }
           * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -2152,6 +3160,15 @@ dashboard.get("/:username", async (c, next) => {
           .ride-meta { font-size: 0.75rem; color: #aaa; font-weight: bold; }
           .ride-arrow { color: var(--primary); font-weight: bold; font-size: 1.2rem; }
           #btnLoadMore { width: 100%; background: transparent; color: var(--primary); border: 2px solid var(--primary); padding: 18px; border-radius: 15px; font-weight: 900; font-style: italic; cursor: pointer; margin-top: 20px; text-transform: uppercase; }
+          .modal { display: none; position: fixed; z-index: 2000; inset: 0; background: rgba(0,0,0,0.82); backdrop-filter: blur(10px); justify-content: center; align-items: center; padding: 18px; }
+          .modal-content { width: 100%; max-width: 560px; background: #16161d; border: 1px solid rgba(255,255,255,0.12); border-radius: 22px; padding: 18px; box-shadow: 0 25px 60px rgba(0,0,0,0.55); }
+          .modal-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+          .modal-title { margin: 0; color: var(--primary); font-size: 1.15rem; font-weight: 900; font-style: italic; line-height: 1.2; }
+          .modal-meta { margin: 4px 0 0; color: #aaa; font-size: 0.78rem; font-weight: 800; }
+          .modal-close { border: none; background: transparent; color: #777; font-size: 28px; font-weight: 900; cursor: pointer; line-height: 1; }
+          #public-map-modal { height: 340px; width: 100%; border-radius: 16px; background: #ddd; overflow: hidden; border: 1px solid rgba(255,255,255,0.1); }
+          .modal-actions { display: grid; grid-template-columns: 1fr; gap: 10px; margin-top: 12px; }
+          .modal-btn { display: block; text-align: center; background: var(--primary); color: #fff; border: none; border-radius: 12px; padding: 13px; font-weight: 900; text-decoration: none; text-transform: uppercase; font-size: 0.78rem; }
         </style>
       </head>
       <body>
@@ -2197,8 +3214,27 @@ dashboard.get("/:username", async (c, next) => {
           <div style="text-align: center; margin-top: 40px;"><img src="/assets/gaspool.png" style="height: 40px; opacity: 0.5;"></div>
         </div>
 
+        <div id="publicMapModal" class="modal">
+          <div class="modal-content">
+            <div class="modal-head">
+              <div>
+                <h3 id="publicModalTitle" class="modal-title">Aktivitas</h3>
+                <p id="publicModalMeta" class="modal-meta"></p>
+              </div>
+              <button class="modal-close" onclick="closePublicMapModal()">&times;</button>
+            </div>
+            <div id="public-map-modal"></div>
+            <div class="modal-actions">
+              <a id="publicModalDetail" class="modal-btn" href="#">BUKA DETAIL</a>
+            </div>
+          </div>
+        </div>
+
+        <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
         <script>
           let curP = 1;
+          let publicMap = null;
+          let publicMapLayers = [];
 		  function escapeHTML(str) {
 
   return String(str || '')
@@ -2209,6 +3245,106 @@ dashboard.get("/:username", async (c, next) => {
     .replace(/'/g, '&#39;');
 
 }
+
+          function decodePolyline(str, precision = 5) {
+              let index = 0, lat = 0, lng = 0, coordinates = [], shift = 0, result = 0, byte = null, factor = Math.pow(10, precision);
+              while (index < str.length) {
+                  byte = null; shift = 0; result = 0;
+                  do { byte = str.charCodeAt(index++) - 63; result |= (byte & 0x1f) << shift; shift += 5; } while (byte >= 0x20);
+                  let lat_change = ((result & 1) ? ~(result >> 1) : (result >> 1)); shift = result = 0;
+                  do { byte = str.charCodeAt(index++) - 63; result |= (byte & 0x1f) << shift; shift += 5; } while (byte >= 0x20);
+                  let lng_change = ((result & 1) ? ~(result >> 1) : (result >> 1));
+                  lat += lat_change; lng += lng_change;
+                  coordinates.push([lat / factor, lng / factor]);
+              }
+              return coordinates;
+          }
+
+          function extractCoordinateList(value) {
+              if (Array.isArray(value)) return value;
+              if (!value || typeof value !== 'object') return [];
+              if (value.type === 'FeatureCollection' && Array.isArray(value.features)) return value.features.flatMap(extractCoordinateList);
+              if (value.type === 'Feature') return extractCoordinateList(value.geometry);
+              if (value.type === 'LineString' && Array.isArray(value.coordinates)) return value.coordinates;
+              if (value.type === 'MultiLineString' && Array.isArray(value.coordinates)) return value.coordinates.flat();
+              if (value.geometry) return extractCoordinateList(value.geometry);
+              if (value.path) return extractCoordinateList(value.path);
+              if (value.data) return extractCoordinateList(value.data);
+              if (value.polyline) return extractCoordinateList(value.polyline);
+              if (value.coordinates) return extractCoordinateList(value.coordinates);
+              return [];
+          }
+
+          function normalizeRoutePoints(value) {
+              return extractCoordinateList(value).map(function(p) {
+                  if (Array.isArray(p)) {
+                      const first = parseFloat(p[0]);
+                      const second = parseFloat(p[1]);
+                      if (Math.abs(first) > 90 && Math.abs(second) <= 90) return [second, first];
+                      return [first, second];
+                  }
+                  if (p && p.lat !== undefined) return [parseFloat(p.lat), parseFloat(p.lng !== undefined ? p.lng : p.lon)];
+                  return null;
+              }).filter(function(p) {
+                  return p !== null && !isNaN(p[0]) && !isNaN(p[1]) && Math.abs(p[0]) <= 90 && Math.abs(p[1]) <= 180;
+              });
+          }
+
+          async function readRoutePoints(raw) {
+              let pts = [];
+              let urlStr = typeof raw === 'string' ? raw.trim() : '';
+              if (!urlStr) return [];
+              if (urlStr.startsWith('"')) {
+                  try { urlStr = JSON.parse(urlStr); }
+                  catch { urlStr = urlStr.slice(1, -1).replace(/\\"/g, '"'); }
+              }
+              if (urlStr.startsWith('[') || urlStr.startsWith('{')) pts = JSON.parse(urlStr);
+              else if (urlStr.startsWith('http')) {
+                  const res = await fetch(urlStr, { cache: 'no-store' });
+                  pts = await res.json();
+              } else pts = decodePolyline(urlStr);
+              return normalizeRoutePoints(pts);
+          }
+
+          function closePublicMapModal() {
+              document.getElementById('publicMapModal').style.display = 'none';
+          }
+
+          async function openPublicMapModal(ride) {
+              document.getElementById('publicMapModal').style.display = 'flex';
+              document.getElementById('publicModalTitle').innerText = ride.name || 'Aktivitas';
+              document.getElementById('publicModalMeta').innerText = parseFloat(ride.distance || 0).toFixed(2) + ' KM • ' + new Date(ride.start_date).toLocaleDateString('id-ID');
+              document.getElementById('publicModalDetail').href = '/detail/' + encodeURIComponent(ride.id);
+
+              if (!publicMap) {
+                  publicMap = L.map('public-map-modal', { zoomControl: false });
+                  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                      maxZoom: 19,
+                      attribution: '&copy; OpenStreetMap contributors'
+                  }).addTo(publicMap);
+              }
+
+              publicMapLayers.forEach(function(layer) { publicMap.removeLayer(layer); });
+              publicMapLayers = [];
+
+              try {
+                  const pts = await readRoutePoints(ride.polyline || '');
+                  if (pts.length > 1) {
+                      const line = L.polyline(pts, { color: '#FF5F00', weight: 5 }).addTo(publicMap);
+                      publicMapLayers.push(line);
+                      setTimeout(function() {
+                          publicMap.invalidateSize();
+                          publicMap.fitBounds(line.getBounds(), { padding: [24, 24] });
+                      }, 100);
+                  } else {
+                      setTimeout(function() { publicMap.invalidateSize(); }, 100);
+                  }
+              } catch (err) {
+                  console.error('Gagal memuat peta public:', err);
+                  setTimeout(function() { publicMap.invalidateSize(); }, 100);
+              }
+          }
+
           async function loadMore() {
             const res = await fetch('/api/public_rides/${publicProfile.slug}?page=' + curP);
             const data = await res.json();
@@ -2218,7 +3354,7 @@ dashboard.get("/:username", async (c, next) => {
                 const icon = r.activity_type === 'run' ? '🏃' : (r.activity_type === 'walk' ? '🚶' : (r.activity_type === 'hike' ? '⛰️' : '🚴'));
                 const div = document.createElement('div');
                 div.className = 'ride-card';
-                div.onclick = () => window.location.href = '/detail/' + r.id;
+                div.onclick = () => openPublicMapModal(r);
                 
                 // FIX: Hapus backtick, gunakan string concatenation murni
                 div.innerHTML = '<div class="ride-icon">' + icon + '</div>' +
