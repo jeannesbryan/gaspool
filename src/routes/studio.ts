@@ -894,6 +894,7 @@ studio.get("/detail/:id", async (c) => {
               if (value.type === 'LineString' && Array.isArray(value.coordinates)) return value.coordinates;
               if (value.type === 'MultiLineString' && Array.isArray(value.coordinates)) return value.coordinates.flat();
               if (value.geometry) return extractCoordinateList(value.geometry);
+              if (value.points) return extractCoordinateList(value.points);
               if (value.path) return extractCoordinateList(value.path);
               if (value.data) return extractCoordinateList(value.data);
               if (value.polyline) return extractCoordinateList(value.polyline);

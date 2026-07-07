@@ -35,6 +35,31 @@ const sanitizeRadioUser = (value: string) =>
     .replace(/[^a-zA-Z0-9_-]/g, "")
     .slice(0, 32) || "user";
 
+const normalizeIsoDate = (value: any, fallback: string) => {
+  const parsed = Date.parse(String(value || ""));
+
+  if (Number.isFinite(parsed)) {
+    return new Date(parsed).toISOString();
+  }
+
+  return fallback;
+};
+
+const normalizeTimezoneOffset = (value: any) => {
+  const offset = Number(value);
+
+  if (Number.isFinite(offset) && Math.abs(offset) <= 14 * 60) {
+    return Math.round(offset);
+  }
+
+  return null;
+};
+
+const normalizeTimezoneName = (value: any) =>
+  String(value || "")
+    .trim()
+    .slice(0, 80);
+
 type RoutePoint = {
   lat: number;
   lng: number;
@@ -51,6 +76,12 @@ type RouteInstruction = {
   point?: RoutePoint | null;
 };
 
+type RouteCheckpoint = RoutePoint & {
+  name: string;
+  type: string;
+  reminder_m: number;
+};
+
 type PlannedRoutePayload = {
   version: 1;
   provider: "ors" | "gpx";
@@ -60,6 +91,7 @@ type PlannedRoutePayload = {
   distance_m: number;
   duration_s: number;
   waypoints: RoutePoint[];
+  checkpoints?: RouteCheckpoint[];
   coordinates: RoutePoint[];
   instructions: RouteInstruction[];
   created_at: string;
@@ -126,6 +158,36 @@ const normalizeRoutePoint = (point: any): RoutePoint | null => {
   if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return null;
 
   return { lat, lng };
+};
+
+const normalizeRouteCheckpoint = (checkpoint: any): RouteCheckpoint | null => {
+  const point = normalizeRoutePoint(checkpoint);
+
+  if (!point) return null;
+
+  const allowedTypes = new Set([
+    "food",
+    "water",
+    "minimarket",
+    "fuel",
+    "mosque",
+    "camp",
+    "medical",
+    "other",
+  ]);
+  const type = allowedTypes.has(String(checkpoint?.type || ""))
+    ? String(checkpoint.type)
+    : "other";
+  const reminderM = Number(checkpoint?.reminder_m ?? checkpoint?.reminderM ?? 1000);
+
+  return {
+    ...point,
+    name: String(checkpoint?.name || "Checkpoint").trim().slice(0, 80) || "Checkpoint",
+    type,
+    reminder_m: Number.isFinite(reminderM)
+      ? Math.max(0, Math.min(10000, Math.round(reminderM)))
+      : 1000,
+  };
 };
 
 const normalizeImportedRoutePoint = (point: any): RoutePoint | null => {
@@ -205,6 +267,29 @@ const getImportedRouteDurationSeconds = (
   return estimateRouteDurationSeconds(distanceM, profile);
 };
 
+const readPlannedRouteWithData = async (env: Bindings, routeId: number) => {
+  const route: any = await env.DB.prepare(
+    "SELECT * FROM planned_routes WHERE id = ?",
+  )
+    .bind(routeId)
+    .first();
+
+  if (!route) return null;
+
+  const routeRes = await fetch(route.route_url);
+
+  if (!routeRes.ok) {
+    throw new Error("Metadata ada, tapi file rute gagal dibaca dari R2.");
+  }
+
+  const data = await routeRes.json();
+
+  return {
+    ...route,
+    data,
+  };
+};
+
 const normalizeGPXRoute = (body: any): PlannedRoutePayload => {
   const rawPoints = Array.isArray(body?.points)
     ? body.points
@@ -246,6 +331,11 @@ const normalizeGPXRoute = (body: any): PlannedRoutePayload => {
   const name =
     String(body?.name || "").trim().slice(0, 80) ||
     "Import GPX " + new Date().toLocaleDateString("id-ID");
+  const checkpoints = Array.isArray(body?.checkpoints)
+    ? (body.checkpoints
+        .map(normalizeRouteCheckpoint)
+        .filter(Boolean) as RouteCheckpoint[])
+    : [];
   const distanceM = calculateRouteDistanceMeters(coordinates);
   const durationS = getImportedRouteDurationSeconds(
     coordinates,
@@ -262,6 +352,7 @@ const normalizeGPXRoute = (body: any): PlannedRoutePayload => {
     distance_m: distanceM,
     duration_s: durationS,
     waypoints: [coordinates[0], coordinates[coordinates.length - 1]],
+    checkpoints,
     coordinates,
     instructions: [],
     created_at: new Date().toISOString(),
@@ -323,12 +414,132 @@ const extractCoordinateList = (value: any): any[] => {
   }
 
   if (value?.geometry) return extractCoordinateList(value.geometry);
+  if (value?.points) return extractCoordinateList(value.points);
   if (value?.path) return extractCoordinateList(value.path);
   if (value?.data) return extractCoordinateList(value.data);
   if (value?.polyline) return extractCoordinateList(value.polyline);
   if (value?.coordinates) return extractCoordinateList(value.coordinates);
 
   return [];
+};
+
+const normalizeActivityStages = (value: any) => {
+  const stages = Array.isArray(value) ? value : [];
+
+  return stages
+    .map((stage: any, index: number) => {
+      const startDistance = Math.max(0, Number(stage?.start_distance_km || 0));
+      const endDistanceRaw =
+        stage?.end_distance_km === undefined || stage?.end_distance_km === null
+          ? startDistance
+          : Number(stage.end_distance_km);
+      const startMoving = Math.max(0, Math.floor(Number(stage?.start_moving_time || 0)));
+      const endMovingRaw =
+        stage?.end_moving_time === undefined || stage?.end_moving_time === null
+          ? startMoving
+          : Math.floor(Number(stage.end_moving_time));
+
+      return {
+        index: Math.max(1, Math.floor(Number(stage?.index || index + 1))),
+        name: String(stage?.name || `Etape ${index + 1}`).trim().slice(0, 80) || `Etape ${index + 1}`,
+        reason: String(stage?.reason || "manual").trim().slice(0, 40) || "manual",
+        start_time: String(stage?.start_time || "").slice(0, 40),
+        end_time: String(stage?.end_time || "").slice(0, 40),
+        start_distance_km: Number(startDistance.toFixed(3)),
+        end_distance_km: Number(Math.max(startDistance, Number.isFinite(endDistanceRaw) ? endDistanceRaw : startDistance).toFixed(3)),
+        start_moving_time: startMoving,
+        end_moving_time: Math.max(startMoving, Number.isFinite(endMovingRaw) ? endMovingRaw : startMoving),
+        start_point_index: Math.max(0, Math.floor(Number(stage?.start_point_index || 0))),
+        end_point_index: Math.max(0, Math.floor(Number(stage?.end_point_index || 0))),
+      };
+    })
+    .filter((stage) => stage.start_time || stage.end_time || stage.end_distance_km > stage.start_distance_km)
+    .slice(0, 100);
+};
+
+const normalizeSignalLogs = (value: any) => {
+  const logs = Array.isArray(value) ? value : [];
+
+  return logs
+    .map((log: any) => {
+      const start = Number(log?.start || 0);
+      const end =
+        log?.end === undefined || log?.end === null ? null : Number(log.end);
+      const duration = Number(
+        log?.duration_s || (end && start ? (end - start) / 1000 : 0),
+      );
+
+      return {
+        type: String(log?.type || "unknown").trim().slice(0, 40) || "unknown",
+        label: String(log?.label || "No signal").trim().slice(0, 80) || "No signal",
+        start: Number.isFinite(start) && start > 0 ? start : Date.now(),
+        end: Number.isFinite(end) && end && end > 0 ? end : null,
+        duration_s: Math.max(
+          0,
+          Math.min(7 * 24 * 3600, Math.floor(Number.isFinite(duration) ? duration : 0)),
+        ),
+        distance_km: Number(Number(log?.distance_km || 0).toFixed(3)),
+        moving_time: Math.max(0, Math.floor(Number(log?.moving_time || 0))),
+        detail: String(log?.detail || "").trim().slice(0, 160),
+      };
+    })
+    .filter((log) => log.duration_s >= 5 || log.type === "network_offline")
+    .slice(-120);
+};
+
+const summarizeSignalLogs = (logs: ReturnType<typeof normalizeSignalLogs>) => {
+  const totalSeconds = logs.reduce(
+    (sum, log) => sum + Number(log.duration_s || 0),
+    0,
+  );
+  const byType = logs.reduce<Record<string, number>>((acc, log) => {
+    acc[log.type] = (acc[log.type] || 0) + 1;
+    return acc;
+  }, {});
+
+  return {
+    count: logs.length,
+    total_seconds: totalSeconds,
+    by_type: byType,
+  };
+};
+
+const normalizeNutritionSummary = (value: any) => {
+  const rawEvents = Array.isArray(value?.events) ? value.events : [];
+  const events = rawEvents
+    .map((event: any) => ({
+      type: String(event?.type || "water").trim().slice(0, 20),
+      time: Number(event?.time || Date.now()),
+      moving_time: Math.max(0, Math.floor(Number(event?.moving_time || 0))),
+      distance_km: Number(Number(event?.distance_km || 0).toFixed(3)),
+    }))
+    .filter(
+      (event) =>
+        event.type === "water" ||
+        event.type === "food" ||
+        event.type === "water_food",
+    )
+    .slice(-120);
+
+  const waterFromEvents = events.filter(
+    (event) => event.type === "water" || event.type === "water_food",
+  ).length;
+  const foodFromEvents = events.filter(
+    (event) => event.type === "food" || event.type === "water_food",
+  ).length;
+
+  return {
+    enabled: value?.enabled !== false,
+    water_count: Math.max(
+      waterFromEvents,
+      Math.floor(Number(value?.water_count || 0)),
+    ),
+    food_count: Math.max(
+      foodFromEvents,
+      Math.floor(Number(value?.food_count || 0)),
+    ),
+    events,
+  };
 };
 
 const normalizeCoordinateList = (value: any): RoutePoint[] => {
@@ -1317,6 +1528,11 @@ api.post("/route_plan", protectAPI, async (c) => {
     const name =
       String(body?.name || "").trim().slice(0, 80) ||
       "Route Plan " + new Date().toLocaleDateString("id-ID");
+    const checkpoints = Array.isArray(body?.checkpoints)
+      ? (body.checkpoints
+          .map(normalizeRouteCheckpoint)
+          .filter(Boolean) as RouteCheckpoint[])
+      : [];
 
     const orsRes = await fetch(
       `https://api.openrouteservice.org/v2/directions/${profile}/geojson`,
@@ -1354,6 +1570,7 @@ api.post("/route_plan", protectAPI, async (c) => {
       profile,
       waypoints,
     });
+    routeData.checkpoints = checkpoints;
     const fileName = `gaspool/routes/route_${Date.now()}_${Math.floor(
       Math.random() * 1000,
     )}.json`;
@@ -1624,11 +1841,10 @@ api.get("/route_plan/:id/gpx", protectAPI, async (c) => {
 
 api.get("/route_plan/:id", protectAPI, async (c) => {
   try {
-    const route: any = await c.env.DB.prepare(
-      "SELECT * FROM planned_routes WHERE id = ?",
-    )
-      .bind(c.req.param("id"))
-      .first();
+    const routeId = Number(c.req.param("id"));
+    const route = Number.isFinite(routeId)
+      ? await readPlannedRouteWithData(c.env, routeId)
+      : null;
 
     if (!route) {
       return c.json(
@@ -1640,33 +1856,130 @@ api.get("/route_plan/:id", protectAPI, async (c) => {
       );
     }
 
-    const routeRes = await fetch(route.route_url);
-
-    if (!routeRes.ok) {
-      return c.json(
-        {
-          success: false,
-          message: "Metadata ada, tapi file rute gagal dibaca dari R2.",
-          route,
-        },
-        502,
-      );
-    }
-
-    const data = await routeRes.json();
-
     return c.json({
       success: true,
-      route: {
-        ...route,
-        data,
-      },
+      route,
     });
   } catch (e: any) {
     return c.json(
       {
         success: false,
         message: e.message,
+      },
+      500,
+    );
+  }
+});
+
+api.post("/peleton_route", protectAPI, async (c) => {
+  try {
+    const body = await c.req.json().catch(() => ({}));
+    const room = sanitizeRoomId(body?.room);
+    const routeId = Number(body?.route_id || body?.routeId || 0);
+
+    if (!room || room === "SINGLE_MODE") {
+      return c.json(
+        {
+          success: false,
+          message: "Room peleton tidak valid.",
+        },
+        400,
+      );
+    }
+
+    if (!Number.isFinite(routeId) || routeId <= 0) {
+      return c.json(
+        {
+          success: false,
+          message: "Route ID tidak valid.",
+        },
+        400,
+      );
+    }
+
+    const route = await readPlannedRouteWithData(c.env, routeId);
+
+    if (!route) {
+      return c.json(
+        {
+          success: false,
+          message: "Route plan tidak ditemukan.",
+        },
+        404,
+      );
+    }
+
+    const key = `PELETON_ROUTE:${room}`;
+    const currentRaw = await c.env.GASPOOL_RADAR.get(key);
+    const current = currentRaw ? JSON.parse(currentRaw) : null;
+    const version =
+      current && Number(current.route_id) === routeId
+        ? Number(current.version || 1)
+        : Number(current?.version || 0) + 1;
+    const payload = {
+      room,
+      route_id: routeId,
+      route_name: route.name || route.data?.name || "Route Plan",
+      version,
+      updated_at: Date.now(),
+    };
+
+    await c.env.GASPOOL_RADAR.put(key, JSON.stringify(payload), {
+      expirationTtl: 12 * 60 * 60,
+    });
+
+    return c.json({
+      success: true,
+      peleton_route: payload,
+      route,
+    });
+  } catch (e: any) {
+    return c.json(
+      {
+        success: false,
+        message: e.message || "Gagal publish rute peleton.",
+      },
+      500,
+    );
+  }
+});
+
+api.get("/peleton_route/:room", async (c) => {
+  try {
+    const room = sanitizeRoomId(c.req.param("room"));
+
+    if (!room || room === "SINGLE_MODE") {
+      return c.json({ success: true, route: null, peleton_route: null });
+    }
+
+    const key = `PELETON_ROUTE:${room}`;
+    const payloadRaw = await c.env.GASPOOL_RADAR.get(key);
+
+    if (!payloadRaw) {
+      return c.json({ success: true, route: null, peleton_route: null });
+    }
+
+    const payload = JSON.parse(payloadRaw);
+    const routeId = Number(payload?.route_id || 0);
+    const route = Number.isFinite(routeId)
+      ? await readPlannedRouteWithData(c.env, routeId)
+      : null;
+
+    if (!route) {
+      await c.env.GASPOOL_RADAR.delete(key);
+      return c.json({ success: true, route: null, peleton_route: null });
+    }
+
+    return c.json({
+      success: true,
+      peleton_route: payload,
+      route,
+    });
+  } catch (e: any) {
+    return c.json(
+      {
+        success: false,
+        message: e.message || "Gagal membaca rute peleton.",
       },
       500,
     );
@@ -1784,6 +2097,29 @@ api.post("/save_ride", protectAPI, async (c) => {
       avg_temp,
       total_elevation,
     } = b;
+    const stages = normalizeActivityStages(b.stages);
+    const nutritionSummary = normalizeNutritionSummary(b.nutrition_summary);
+    const signalLogs = normalizeSignalLogs(b.signal_logs);
+    const signalSummary = summarizeSignalLogs(signalLogs);
+    const skippedClockGapSeconds = Math.max(
+      0,
+      Math.floor(Number(b.skipped_clock_gap_seconds || 0)),
+    );
+    const savedAtIso = new Date().toISOString();
+    const startDateIso = normalizeIsoDate(b.start_date, savedAtIso);
+    const finishDateIso = normalizeIsoDate(b.finish_date, savedAtIso);
+    const timeContext = {
+      start_date: startDateIso,
+      finish_date: finishDateIso,
+      start_timezone_offset_min: normalizeTimezoneOffset(
+        b.start_timezone_offset_min,
+      ),
+      finish_timezone_offset_min: normalizeTimezoneOffset(
+        b.finish_timezone_offset_min,
+      ),
+      start_timezone_name: normalizeTimezoneName(b.start_timezone_name),
+      finish_timezone_name: normalizeTimezoneName(b.finish_timezone_name),
+    };
     const plannedRouteId =
       b.planned_route_id === undefined || b.planned_route_id === null
         ? null
@@ -1861,9 +2197,30 @@ api.post("/save_ride", protectAPI, async (c) => {
       }
 
       const fileName = `gaspool/gaspool_ride_${Date.now()}_${Math.floor(Math.random() * 1000)}.json`;
+      const routePayload = {
+        points: fullPolyline,
+        stages,
+        nutrition_summary: nutritionSummary,
+        signal_logs: signalLogs,
+        metadata: {
+          activity_type: activity_type || "ride",
+          distance_km: distance || 0,
+          moving_time: duration || 0,
+          time_context: timeContext,
+          skipped_clock_gap_seconds: skippedClockGapSeconds,
+          nutrition_summary: {
+            enabled: nutritionSummary.enabled,
+            water_count: nutritionSummary.water_count,
+            food_count: nutritionSummary.food_count,
+          },
+          signal_summary: signalSummary,
+          source: b.source || "GASPOOL",
+          exported_at: savedAtIso,
+        },
+      };
 
       // Upload Rute Utuh ke R2
-      await c.env.R2_BUCKET.put(fileName, JSON.stringify(fullPolyline), {
+      await c.env.R2_BUCKET.put(fileName, JSON.stringify(routePayload), {
         httpMetadata: {
           contentType: "application/json",
         },
@@ -1899,7 +2256,7 @@ api.post("/save_ride", protectAPI, async (c) => {
           total_elevation || 0,
           avg_temp || 0,
           b.participants ? JSON.stringify(b.participants) : "[]",
-          b.start_date || new Date().toISOString(),
+          startDateIso,
           publicUrl,
           activity_type || "ride",
           b.source || "GASPOOL",
@@ -2628,8 +2985,17 @@ api.post("/radar_sync", async (c) => {
         return { user: k.name.split(":")[2], ...JSON.parse(val || "{}") };
       }),
     );
+    const peletonRouteRaw = await c.env.GASPOOL_RADAR.get(
+      `PELETON_ROUTE:${room}`,
+    );
+    const peletonRoute = peletonRouteRaw ? JSON.parse(peletonRouteRaw) : null;
 
-    return c.json({ success: true, participants, radios });
+    return c.json({
+      success: true,
+      participants,
+      radios,
+      peleton_route: peletonRoute,
+    });
   } catch (e) {
     return c.json({ success: false }, 500);
   }

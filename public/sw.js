@@ -1,4 +1,5 @@
 const CACHE_NAME = "gaspool-pwa-v2";
+const NAV_CACHE_NAME = "gaspool-nav-v1";
 const OFFLINE_URL = "/offline.html";
 
 const PRECACHE_URLS = [
@@ -27,7 +28,12 @@ self.addEventListener("activate", (event) => {
       caches.keys().then((keys) =>
         Promise.all(
           keys
-            .filter((key) => key.startsWith("gaspool-") && key !== CACHE_NAME)
+            .filter(
+              (key) =>
+                key.startsWith("gaspool-") &&
+                key !== CACHE_NAME &&
+                key !== NAV_CACHE_NAME,
+            )
             .map((key) => caches.delete(key)),
         ),
       ),
@@ -56,7 +62,19 @@ self.addEventListener("fetch", (event) => {
   if (!isNavigation) return;
 
   event.respondWith(
-    fetch(request).catch(async () => {
+    fetch(request)
+      .then(async (response) => {
+        if (response && response.ok && response.type === "basic") {
+          const cache = await caches.open(NAV_CACHE_NAME);
+          await cache.put(request, response.clone());
+        }
+
+        return response;
+      })
+      .catch(async () => {
+      const cachedPage = await caches.match(request);
+      if (cachedPage) return cachedPage;
+
       const cachedOffline = await caches.match(OFFLINE_URL);
       return (
         cachedOffline ||

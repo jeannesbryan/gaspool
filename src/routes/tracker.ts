@@ -78,6 +78,23 @@ tracker.get("/record", async (c) => {
             .btn-repeat-nav { background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.18); padding:10px; font-size:10px; color:#fff; }
             .btn-repeat-nav:disabled { opacity: 0.42; cursor: not-allowed; }
             .nav-voice-status { margin-top:-4px; margin-bottom:10px; color:#94a3b8; font-size:9px; font-weight:900; letter-spacing:1px; text-transform:uppercase; pointer-events:none; }
+            .tracking-mode-panel { margin-bottom: 10px; padding: 10px; border-radius: 14px; background: rgba(255,255,255,0.055); border: 1px solid rgba(255,255,255,0.1); pointer-events:auto; }
+            .tracking-mode-head { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:8px; color:#94a3b8; font-size:9px; font-weight:900; letter-spacing:1px; text-transform:uppercase; }
+            .tracking-mode-options { display:grid; grid-template-columns: repeat(3, 1fr); gap:8px; }
+            .mode-btn { border:1px solid rgba(255,255,255,0.12); background:rgba(0,0,0,0.25); color:#fff; border-radius:10px; padding:9px 6px; font-size:9px; font-weight:950; letter-spacing:0.8px; text-transform:uppercase; cursor:pointer; }
+            .mode-btn.active { border-color:var(--primary); color:var(--primary); box-shadow:0 0 0 1px rgba(255,95,0,0.35) inset; background:rgba(255,95,0,0.1); }
+            .stage-panel { display:grid; grid-template-columns:1fr 118px; gap:10px; align-items:center; margin-bottom:10px; padding:10px; border-radius:14px; background:rgba(255,95,0,0.08); border:1px solid rgba(255,95,0,0.22); pointer-events:auto; }
+            .stage-title { color:#fff; font-size:10px; font-weight:950; letter-spacing:1px; text-transform:uppercase; margin-bottom:3px; }
+            .stage-meta { color:#94a3b8; font-size:9px; line-height:1.35; font-weight:900; }
+            .btn-stage { background:rgba(255,95,0,0.18); border:1px solid var(--primary); color:var(--primary); padding:10px; font-size:9px; }
+            .signal-panel { display:grid; grid-template-columns:1fr auto; gap:10px; align-items:center; margin-bottom:10px; padding:9px 10px; border-radius:14px; background:rgba(241,196,15,0.08); border:1px solid rgba(241,196,15,0.18); pointer-events:none; }
+            .signal-title { color:#fff; font-size:9px; font-weight:950; letter-spacing:1px; text-transform:uppercase; margin-bottom:3px; }
+            .signal-meta { color:#94a3b8; font-size:9px; line-height:1.35; font-weight:900; }
+            .signal-pill { color:#f1c40f; font-size:9px; font-weight:950; text-transform:uppercase; border:1px solid rgba(241,196,15,0.32); border-radius:999px; padding:5px 8px; background:rgba(0,0,0,0.22); white-space:nowrap; }
+            .nutrition-panel { display:grid; grid-template-columns:1fr 94px; gap:10px; align-items:center; margin-bottom:10px; padding:9px 10px; border-radius:14px; background:rgba(46,204,113,0.08); border:1px solid rgba(46,204,113,0.2); pointer-events:auto; }
+            .nutrition-title { color:#fff; font-size:9px; font-weight:950; letter-spacing:1px; text-transform:uppercase; margin-bottom:3px; }
+            .nutrition-meta { color:#94a3b8; font-size:9px; line-height:1.35; font-weight:900; }
+            .btn-nutrition { background:rgba(46,204,113,0.14); border:1px solid rgba(46,204,113,0.42); color:#2ecc71; padding:10px; font-size:9px; }
             .privacy-row { display: grid; grid-template-columns: 140px 1fr; gap: 10px; align-items: center; margin-bottom: 10px; pointer-events:auto; }
             .privacy-hint { color: #94a3b8; font-size: 9px; font-weight: 900; line-height: 1.35; text-transform: uppercase; letter-spacing: 0.8px; }
             .resume-summary { width: 100%; max-width: 380px; margin: 0 auto 18px; padding: 14px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); border-radius: 16px; text-align: left; }
@@ -112,6 +129,7 @@ tracker.get("/record", async (c) => {
                     <div class="resume-item"><div class="resume-label">Update</div><div class="resume-value" id="resume-saved">-</div></div>
                     <div class="resume-item"><div class="resume-label">Titik GPS</div><div class="resume-value" id="resume-points">-</div></div>
                     <div class="resume-item"><div class="resume-label">Status</div><div class="resume-value" id="resume-privacy">PRIVATE</div></div>
+                    <div class="resume-item" style="grid-column:1 / -1;"><div class="resume-label">No Signal</div><div class="resume-value" id="resume-signal">Belum ada log</div></div>
                     <div class="resume-item" style="grid-column:1 / -1;"><div class="resume-label">Rute</div><div class="resume-value" id="resume-route">Tanpa route plan</div></div>
                 </div>
                 <div id="resume-warning" class="resume-warning">Data mungkin tidak lengkap. Cek jarak dan titik GPS sebelum lanjut.</div>
@@ -228,6 +246,40 @@ tracker.get("/record", async (c) => {
                 ${isPeleton ? `<button class="btn" style="background:rgba(37, 211, 102, 0.2); border: 1px solid #25D366; padding:10px; font-size:10px; color:#2ecc71;" onclick="shareSpectator()">📡 SHARE RADAR</button>` : ""}
             </div>
             <div id="nav-voice-status" class="nav-voice-status">SUARA NAV SIAP</div>
+            <div class="signal-panel">
+                <div>
+                    <div class="signal-title">NO SIGNAL LOG</div>
+                    <div class="signal-meta" id="signal-meta">Memantau GPS dan jaringan.</div>
+                </div>
+                <div class="signal-pill" id="signal-pill">OK</div>
+            </div>
+            <div class="nutrition-panel">
+                <div>
+                    <div class="nutrition-title">WATER & FOOD</div>
+                    <div class="nutrition-meta" id="nutrition-meta">Reminder minum dan makan siap.</div>
+                </div>
+                <button id="btn-nutrition" class="btn btn-nutrition" onclick="toggleNutritionReminders()">ON</button>
+            </div>
+            <div class="tracking-mode-panel">
+                <div class="tracking-mode-head">
+                    <span>MODE GPS</span>
+                    <span id="tracking-mode-hint">NORMAL</span>
+                </div>
+                <div class="tracking-mode-options">
+                    <button id="mode-normal" class="mode-btn" onclick="setTrackingMode('normal')">NORMAL</button>
+                    <button id="mode-hemat" class="mode-btn" onclick="setTrackingMode('hemat')">HEMAT</button>
+                    <button id="mode-expedition" class="mode-btn" onclick="setTrackingMode('expedition')">EKSPEDISI</button>
+                </div>
+            </div>
+            ${isCaptain ? `
+            <div class="stage-panel">
+                <div>
+                    <div class="stage-title" id="stage-title">ETAPE 1</div>
+                    <div class="stage-meta" id="stage-meta">Siap untuk perjalanan multi-day.</div>
+                </div>
+                <button id="btn-stage" class="btn btn-stage" onclick="startManualStage()" disabled>ETAPE BARU</button>
+            </div>
+            ` : ""}
             <div class="privacy-row">
                 <button id="btn-privacy" class="btn" style="background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.14); padding:10px; font-size:10px; color:#fff;" onclick="toggleRidePrivacy()">🔒 PRIVATE</button>
                 <div id="privacy-hint" class="privacy-hint">Tidak tampil di profil publik.</div>
@@ -239,7 +291,7 @@ tracker.get("/record", async (c) => {
 
         <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
         <script>
-            let map, path = [], dist = 0, startT = 0, rec = false, watchId, radarInt;
+            let map, path = [], dist = 0, startT = 0, rec = false, watchId, radarInt, peletonRoutePollInt, restartGpsWatch = null;
 			let clockInt, movingTime = 0, lastTick = Date.now(), isPaused = false, lastAnnouncedKm = 0, lastSave = 0;
 			let skippedClockGapSeconds = 0;
 
@@ -255,20 +307,51 @@ tracker.get("/record", async (c) => {
 			let lastVisualUpdate = 0;
 			let lastStealthVoiceHint = 0;
 			let rideIsPublic = false;
+			let lastPointSavedAt = 0;
+			let startTimezoneOffsetMin = null;
+			let startTimezoneName = '';
+			let tripStages = [];
+			let nutritionReminderState = {
+				enabled: true,
+				waterCount: 0,
+				foodCount: 0,
+				nextWaterMovingTime: 0,
+				nextFoodMovingTime: 0,
+				nextWaterDistanceKm: 0,
+				nextFoodDistanceKm: 0
+			};
+			let nutritionReminderEvents = [];
+			let signalLogs = [];
+			let signalState = {
+				gpsErrorStartedAt: 0,
+				poorAccuracyStartedAt: 0,
+				networkOfflineStartedAt: 0,
+				lastGpsOkAt: 0,
+				lastSignalSpeechAt: 0
+			};
 			const NORMAL_MAX_CLOCK_DELTA_SECONDS = 10;
 			const STEALTH_MAX_CLOCK_DELTA_SECONDS = 30;
 			const REST_CLOCK_GAP_SECONDS = 120;
+			const MULTI_DAY_STAGE_GAP_MS = 4 * 60 * 60 * 1000;
 
 			const isCap = ${isCaptain};
 			const key = 'gaspool_blackbox_session';
+			const trackingModeKey = 'gaspool_tracking_mode';
+			const offlineRoutePackKey = 'gaspool_offline_route_packs_v1';
 			const roomID = "${room}";
 			const plannedRouteId = "${routeId}";
 			let activePlannedRouteId = plannedRouteId;
+			let peletonRouteVersion = 0;
+			let lastPeletonRouteCheck = 0;
 			let userName = "${captainName}";
 			let plannedRouteData = null;
 			let plannedRouteLine = null;
 			let plannedRouteInstructions = [];
 			let plannedRouteCoords = [];
+			let plannedRouteCumulativeM = [];
+			let plannedRouteCheckpoints = [];
+			let checkpointMarkers = [];
+			let checkpointReminderMarks = {};
 			let routeNextInstructionIndex = 0;
 			let routeInstructionMarks = {};
 			let routeVoiceEnabled = true;
@@ -278,21 +361,87 @@ tracker.get("/record", async (c) => {
 			let routeSpeechBusy = false;
 			let lastSpokenRouteText = '';
 			let lastInstructionSpeechText = '';
+			let lastRouteEtaSpeechText = '';
 			let latestPosition = null;
 			let rerouteInProgress = false;
+			let autoRerouteCount = 0;
+			let lastAutoRerouteAt = 0;
 			let offRouteState = {
 				active: false,
 				warned: false,
 				lastWarn: 0,
-				lastDistance: null
+				lastDistance: null,
+				firstOffAt: 0,
+				lastDiscoverySpeech: 0,
+				lastDestinationM: null,
+				peakDistanceM: 0,
+				autoCandidateAt: 0
 			};
 
 			const OFF_ROUTE_WARN_M = 80;
 			const OFF_ROUTE_M = 120;
 			const BACK_ON_ROUTE_M = 60;
+			const OFF_ROUTE_DISCOVERY_M = 220;
+			const OFF_ROUTE_DISCOVERY_SECONDS = 45;
+			const AUTO_REROUTE_M = 500;
+			const AUTO_REROUTE_SECONDS = 180;
+			const AUTO_REROUTE_COOLDOWN_MS = 15 * 60 * 1000;
+			const AUTO_REROUTE_MAX_PER_ACTIVITY = 3;
+			const AUTO_REROUTE_MAX_ACCURACY_M = 120;
 			const ROUTE_SPEECH_COOLDOWN = 6500;
 			const STEALTH_VISUAL_INTERVAL = 15000;
 			const NORMAL_VISUAL_INTERVAL = 1000;
+			const TRACKING_MODES = {
+				normal: {
+					label: 'NORMAL',
+					hint: 'GPS akurat, cocok aktivitas pendek.',
+					enableHighAccuracy: true,
+					maximumAge: 0,
+					timeout: 15000,
+					accuracyLimit: 80,
+					minPointMeters: 3,
+					minPointSeconds: 0,
+					visualInterval: 1000,
+					stealthVisualInterval: 15000,
+					radarSeconds: 4,
+					stealthRadarSeconds: 16,
+					maxClockDelta: NORMAL_MAX_CLOCK_DELTA_SECONDS,
+					stealthMaxClockDelta: STEALTH_MAX_CLOCK_DELTA_SECONDS
+				},
+				hemat: {
+					label: 'HEMAT',
+					hint: 'Lebih irit, titik GPS diringkas ringan.',
+					enableHighAccuracy: true,
+					maximumAge: 5000,
+					timeout: 20000,
+					accuracyLimit: 100,
+					minPointMeters: 7,
+					minPointSeconds: 3,
+					visualInterval: 3000,
+					stealthVisualInterval: 22000,
+					radarSeconds: 8,
+					stealthRadarSeconds: 28,
+					maxClockDelta: 12,
+					stealthMaxClockDelta: 35
+				},
+				expedition: {
+					label: 'EKSPEDISI',
+					hint: 'Untuk multi-jam/hari, hemat daya dan tahan sinyal jelek.',
+					enableHighAccuracy: false,
+					maximumAge: 15000,
+					timeout: 30000,
+					accuracyLimit: 150,
+					minPointMeters: 15,
+					minPointSeconds: 8,
+					visualInterval: 8000,
+					stealthVisualInterval: 35000,
+					radarSeconds: 20,
+					stealthRadarSeconds: 60,
+					maxClockDelta: 20,
+					stealthMaxClockDelta: 50
+				}
+			};
+			let trackingMode = sanitizeTrackingMode(localStorage.getItem(trackingModeKey));
 
 			// --- INISIALISASI INDEXEDDB (ANTI NGE-LAG & BUNKER MODE) ---
 			const DB_NAME = "GaspoolDB_TS";
@@ -399,13 +548,141 @@ function clearDB() {
 				el.innerHTML = escapeHTML(title) + (detail ? '<span>' + escapeHTML(detail) + '</span>' : '');
 			}
 
+			function readOfflineRoutePacks() {
+				try {
+					const raw = localStorage.getItem(offlineRoutePackKey);
+					const parsed = raw ? JSON.parse(raw) : null;
+					return parsed && typeof parsed === 'object' && parsed.routes ? parsed : { version: 1, routes: {} };
+				} catch(e) {
+					return { version: 1, routes: {} };
+				}
+			}
+
+			function writeOfflineRoutePacks(store) {
+				try {
+					const routes = store && store.routes ? store.routes : {};
+					const entries = Object.keys(routes)
+						.map(function(id) {
+							return [id, routes[id]];
+						})
+						.sort(function(a, b) {
+							return Number(b[1].saved_at || 0) - Number(a[1].saved_at || 0);
+						})
+						.slice(0, 30);
+					const nextStore = { version: 1, routes: {} };
+
+					entries.forEach(function(entry) {
+						nextStore.routes[entry[0]] = entry[1];
+					});
+
+					localStorage.setItem(offlineRoutePackKey, JSON.stringify(nextStore));
+					return true;
+				} catch(e) {
+					console.warn('Offline route pack gagal disimpan:', e);
+					return false;
+				}
+			}
+
+			function saveOfflineRoutePack(route) {
+				if (!route || !route.id || !route.data) return false;
+
+				const store = readOfflineRoutePacks();
+				const routeId = String(route.id);
+				store.routes[routeId] = {
+					saved_at: Date.now(),
+					route: {
+						id: route.id,
+						name: route.name || route.data.name || 'Route Plan',
+						distance: Number(route.distance || route.data.distance_km || 0),
+						duration: Number(route.duration || route.data.duration_s || 0),
+						profile: route.profile || route.data.profile || 'cycling-regular',
+						provider: route.provider || route.data.provider || 'offline-pack',
+						created_at: route.created_at || new Date().toISOString(),
+						data: route.data
+					}
+				};
+
+				return writeOfflineRoutePacks(store);
+			}
+
+			function loadOfflineRoutePack(routeId) {
+				const id = String(routeId || '');
+				if (!id) return null;
+
+				const store = readOfflineRoutePacks();
+				const pack = store.routes ? store.routes[id] : null;
+				if (!pack || !pack.route || !pack.route.data) return null;
+				return pack.route;
+			}
+
 			function shouldUpdateVisuals(force = false) {
 				if (force) return true;
 				const now = Date.now();
-				const interval = isStealthMode ? STEALTH_VISUAL_INTERVAL : NORMAL_VISUAL_INTERVAL;
+				const config = currentTrackingConfig();
+				const interval = isStealthMode ? config.stealthVisualInterval : config.visualInterval;
 
 				if (now - lastVisualUpdate < interval) return false;
 				lastVisualUpdate = now;
+				return true;
+			}
+
+			function sanitizeTrackingMode(mode) {
+				return TRACKING_MODES[mode] ? mode : 'normal';
+			}
+
+			function currentTrackingConfig() {
+				return TRACKING_MODES[sanitizeTrackingMode(trackingMode)];
+			}
+
+			function geolocationOptions() {
+				const config = currentTrackingConfig();
+				return {
+					enableHighAccuracy: config.enableHighAccuracy,
+					maximumAge: config.maximumAge,
+					timeout: config.timeout
+				};
+			}
+
+			function updateTrackingModeUI() {
+				const config = currentTrackingConfig();
+				const hint = document.getElementById('tracking-mode-hint');
+
+				if (hint) hint.innerText = config.label + ' • ' + config.hint;
+
+				Object.keys(TRACKING_MODES).forEach(function(mode) {
+					const btn = document.getElementById('mode-' + mode);
+					if (!btn) return;
+					btn.classList.toggle('active', mode === trackingMode);
+				});
+			}
+
+			function setTrackingMode(mode) {
+				trackingMode = sanitizeTrackingMode(mode);
+				localStorage.setItem(trackingModeKey, trackingMode);
+				updateTrackingModeUI();
+
+				if (rec && navigator.geolocation && watchId) {
+					navigator.geolocation.clearWatch(watchId);
+					if (typeof restartGpsWatch === 'function') restartGpsWatch();
+				}
+			}
+
+			function activityAutoPauseSpeedKmh() {
+				if ('${type}' === 'hike') return 0.7;
+				if ('${type}' === 'walk') return 0.8;
+				if ('${type}' === 'run') return 1.4;
+				return 2.0;
+			}
+
+			function shouldStoreTrackPoint(distanceKm, speedKmh) {
+				const config = currentTrackingConfig();
+				const now = Date.now();
+				const elapsedSeconds = lastPointSavedAt > 0 ? (now - lastPointSavedAt) / 1000 : Infinity;
+				const minDistanceKm = Math.max(0.003, config.minPointMeters / 1000);
+
+				if (distanceKm >= 0.05) return true;
+				if (distanceKm < minDistanceKm) return false;
+				if (elapsedSeconds < config.minPointSeconds && speedKmh < 8) return false;
 				return true;
 			}
 
@@ -483,6 +760,61 @@ function clearDB() {
 				}
 			}
 
+			function currentTimezoneOffsetMin() {
+				return -new Date().getTimezoneOffset();
+			}
+
+			function currentTimezoneName() {
+				try {
+					return Intl.DateTimeFormat().resolvedOptions().timeZone || '';
+				} catch(e) {
+					return '';
+				}
+			}
+
+			function normalizeTimezoneOffset(value) {
+				const offset = Number(value);
+				if (Number.isFinite(offset) && Math.abs(offset) <= 14 * 60) {
+					return Math.round(offset);
+				}
+
+				return currentTimezoneOffsetMin();
+			}
+
+			function normalizeTimezoneName(value) {
+				return String(value || '').trim().slice(0, 80) || currentTimezoneName();
+			}
+
+			function captureStartTimezone() {
+				startTimezoneOffsetMin = currentTimezoneOffsetMin();
+				startTimezoneName = currentTimezoneName();
+			}
+
+			function activityTimeContext(finishMs) {
+				const safeStart = Number(startT || Date.now());
+				const safeFinish = Number(finishMs || Date.now());
+
+				return {
+					start_date: new Date(safeStart).toISOString(),
+					finish_date: new Date(safeFinish).toISOString(),
+					start_timezone_offset_min: normalizeTimezoneOffset(startTimezoneOffsetMin),
+					finish_timezone_offset_min: currentTimezoneOffsetMin(),
+					start_timezone_name: normalizeTimezoneName(startTimezoneName),
+					finish_timezone_name: currentTimezoneName()
+				};
+			}
+
+			function formatDateWithTimezoneOffset(ts, offsetMin) {
+				const time = Number(ts || Date.now());
+				const offset = normalizeTimezoneOffset(offsetMin);
+				const local = new Date(time + (offset * 60000));
+				const day = String(local.getUTCDate()).padStart(2, '0');
+				const month = String(local.getUTCMonth() + 1).padStart(2, '0');
+				const year = local.getUTCFullYear();
+
+				return day + '/' + month + '/' + year;
+			}
+
 			function formatResumeAge(ts) {
 				const value = Number(ts || 0);
 				if (!value) return 'Tidak diketahui';
@@ -498,6 +830,488 @@ function clearDB() {
 				return 'Baru saja';
 			}
 
+			function formatStageDuration(seconds) {
+				const total = Math.max(0, Math.floor(Number(seconds || 0)));
+				const hours = Math.floor(total / 3600);
+				const minutes = Math.floor((total % 3600) / 60);
+
+				if (hours > 0 && minutes > 0) return hours + 'j ' + minutes + 'm';
+				if (hours > 0) return hours + 'j';
+				if (minutes > 0) return minutes + 'm';
+				return '<1m';
+			}
+
+			function signalReasonLabel(type) {
+				const labels = {
+					network_offline: 'Jaringan offline',
+					gps_error: 'GPS error',
+					poor_accuracy: 'Akurasi GPS buruk',
+					system_gap: 'Jeda sistem'
+				};
+				return labels[type] || 'No signal';
+			}
+
+			function normalizeSignalLogs(list) {
+				if (!Array.isArray(list)) return [];
+
+				return list.map(function(log) {
+					const start = Number(log.start || 0);
+					const end = Number(log.end || 0);
+					const duration = Number(log.duration_s || ((end - start) / 1000) || 0);
+					return {
+						type: String(log.type || 'unknown').slice(0, 40),
+						label: String(log.label || signalReasonLabel(log.type)).slice(0, 80),
+						start: Number.isFinite(start) ? start : Date.now(),
+						end: Number.isFinite(end) && end > 0 ? end : null,
+						duration_s: Math.max(0, Math.floor(Number.isFinite(duration) ? duration : 0)),
+						distance_km: Number(Number(log.distance_km || 0).toFixed(3)),
+						moving_time: Math.max(0, Math.floor(Number(log.moving_time || 0))),
+						detail: String(log.detail || '').slice(0, 160)
+					};
+				}).filter(function(log) {
+					return log.type && log.start;
+				}).slice(-120);
+			}
+
+			function serializeSignalLogs(includeOpen) {
+				const logs = normalizeSignalLogs(signalLogs);
+				const now = Date.now();
+
+				if (includeOpen) {
+					if (signalState.networkOfflineStartedAt) {
+						logs.push(buildSignalLog('network_offline', signalState.networkOfflineStartedAt, now, 'Masih offline saat disimpan.'));
+					}
+					if (signalState.gpsErrorStartedAt) {
+						logs.push(buildSignalLog('gps_error', signalState.gpsErrorStartedAt, now, 'GPS belum pulih saat disimpan.'));
+					}
+					if (signalState.poorAccuracyStartedAt) {
+						logs.push(buildSignalLog('poor_accuracy', signalState.poorAccuracyStartedAt, now, 'Akurasi masih buruk saat disimpan.'));
+					}
+				}
+
+				return normalizeSignalLogs(logs);
+			}
+
+			function buildSignalLog(type, start, end, detail) {
+				const safeStart = Number(start || Date.now());
+				const safeEnd = Number(end || Date.now());
+				return {
+					type: type,
+					label: signalReasonLabel(type),
+					start: safeStart,
+					end: safeEnd,
+					duration_s: Math.max(0, Math.floor((safeEnd - safeStart) / 1000)),
+					distance_km: Number((dist || 0).toFixed(3)),
+					moving_time: Math.floor(movingTime || 0),
+					detail: String(detail || '').slice(0, 160)
+				};
+			}
+
+			function pushSignalLog(type, start, end, detail) {
+				const log = buildSignalLog(type, start, end, detail);
+				if (log.duration_s < 5 && type !== 'network_offline') return;
+
+				signalLogs = normalizeSignalLogs(signalLogs.concat([log]));
+				updateSignalUI();
+			}
+
+			function startSignalEvent(type, detail) {
+				const now = Date.now();
+
+				if (type === 'network_offline' && !signalState.networkOfflineStartedAt) {
+					signalState.networkOfflineStartedAt = now;
+				}
+				if (type === 'gps_error' && !signalState.gpsErrorStartedAt) {
+					signalState.gpsErrorStartedAt = now;
+				}
+				if (type === 'poor_accuracy' && !signalState.poorAccuracyStartedAt) {
+					signalState.poorAccuracyStartedAt = now;
+				}
+
+				if (rec && now - signalState.lastSignalSpeechAt > 120000) {
+					signalState.lastSignalSpeechAt = now;
+					speakRoute(detail || (signalReasonLabel(type) + ' terdeteksi.'), false);
+				}
+
+				updateSignalUI();
+			}
+
+			function closeSignalEvent(type, detail) {
+				const now = Date.now();
+
+				if (type === 'network_offline' && signalState.networkOfflineStartedAt) {
+					pushSignalLog(type, signalState.networkOfflineStartedAt, now, detail || 'Jaringan kembali online.');
+					signalState.networkOfflineStartedAt = 0;
+				}
+				if (type === 'gps_error' && signalState.gpsErrorStartedAt) {
+					pushSignalLog(type, signalState.gpsErrorStartedAt, now, detail || 'GPS kembali menerima posisi.');
+					signalState.gpsErrorStartedAt = 0;
+				}
+				if (type === 'poor_accuracy' && signalState.poorAccuracyStartedAt) {
+					pushSignalLog(type, signalState.poorAccuracyStartedAt, now, detail || 'Akurasi GPS kembali masuk batas.');
+					signalState.poorAccuracyStartedAt = 0;
+				}
+
+				updateSignalUI();
+			}
+
+			function signalSummary(logs) {
+				const list = normalizeSignalLogs(logs);
+				const totalSeconds = list.reduce(function(sum, log) {
+					return sum + Number(log.duration_s || 0);
+				}, 0);
+
+				return {
+					count: list.length,
+					totalSeconds: totalSeconds,
+					label: list.length + ' log • ' + formatStageDuration(totalSeconds)
+				};
+			}
+
+			function updateSignalUI() {
+				const meta = document.getElementById('signal-meta');
+				const pill = document.getElementById('signal-pill');
+				if (!meta || !pill) return;
+
+				const open = [];
+				if (signalState.networkOfflineStartedAt) open.push('jaringan offline');
+				if (signalState.gpsErrorStartedAt) open.push('GPS error');
+				if (signalState.poorAccuracyStartedAt) open.push('GPS buruk');
+
+				const summary = signalSummary(signalLogs);
+				if (open.length > 0) {
+					pill.innerText = 'WARNING';
+					pill.style.color = '#e74c3c';
+					pill.style.borderColor = 'rgba(231,76,60,0.45)';
+					meta.innerText = open.join(' • ') + ' aktif. ' + summary.label + ' tersimpan.';
+				} else {
+					pill.innerText = summary.count > 0 ? 'LOGGED' : 'OK';
+					pill.style.color = summary.count > 0 ? '#f1c40f' : '#2ecc71';
+					pill.style.borderColor = summary.count > 0 ? 'rgba(241,196,15,0.32)' : 'rgba(46,204,113,0.35)';
+					meta.innerText = summary.count > 0 ? summary.label + ' no signal.' : 'GPS dan jaringan terpantau normal.';
+				}
+			}
+
+			function nutritionConfig() {
+				if ('${type}' === 'run') {
+					return {
+						waterSeconds: 20 * 60,
+						foodSeconds: 45 * 60,
+						waterKm: 4,
+						foodKm: 10,
+						label: 'lari'
+					};
+				}
+				if ('${type}' === 'walk') {
+					return {
+						waterSeconds: 25 * 60,
+						foodSeconds: 60 * 60,
+						waterKm: 2.5,
+						foodKm: 6,
+						label: 'jalan'
+					};
+				}
+				if ('${type}' === 'hike') {
+					return {
+						waterSeconds: 25 * 60,
+						foodSeconds: 60 * 60,
+						waterKm: 2,
+						foodKm: 5,
+						label: 'hiking'
+					};
+				}
+				return {
+					waterSeconds: 20 * 60,
+					foodSeconds: 60 * 60,
+					waterKm: 10,
+					foodKm: 25,
+					label: 'gowes'
+				};
+			}
+
+			function defaultNutritionState() {
+				const config = nutritionConfig();
+				return {
+					enabled: true,
+					waterCount: 0,
+					foodCount: 0,
+					nextWaterMovingTime: config.waterSeconds,
+					nextFoodMovingTime: config.foodSeconds,
+					nextWaterDistanceKm: config.waterKm,
+					nextFoodDistanceKm: config.foodKm
+				};
+			}
+
+			function normalizeNutritionState(value) {
+				const defaults = defaultNutritionState();
+				const state = value && typeof value === 'object' ? value : {};
+
+				return {
+					enabled: state.enabled !== false,
+					waterCount: Math.max(0, Math.floor(Number(state.waterCount || 0))),
+					foodCount: Math.max(0, Math.floor(Number(state.foodCount || 0))),
+					nextWaterMovingTime: Math.max(defaults.nextWaterMovingTime, Number(state.nextWaterMovingTime || defaults.nextWaterMovingTime)),
+					nextFoodMovingTime: Math.max(defaults.nextFoodMovingTime, Number(state.nextFoodMovingTime || defaults.nextFoodMovingTime)),
+					nextWaterDistanceKm: Math.max(defaults.nextWaterDistanceKm, Number(state.nextWaterDistanceKm || defaults.nextWaterDistanceKm)),
+					nextFoodDistanceKm: Math.max(defaults.nextFoodDistanceKm, Number(state.nextFoodDistanceKm || defaults.nextFoodDistanceKm))
+				};
+			}
+
+			function normalizeNutritionEvents(list) {
+				if (!Array.isArray(list)) return [];
+
+				return list.map(function(event) {
+					return {
+						type: String(event.type || 'water').slice(0, 20),
+						time: Number(event.time || Date.now()),
+						moving_time: Math.max(0, Math.floor(Number(event.moving_time || 0))),
+						distance_km: Number(Number(event.distance_km || 0).toFixed(3))
+					};
+				}).filter(function(event) {
+					return event.type === 'water' || event.type === 'food' || event.type === 'water_food';
+				}).slice(-120);
+			}
+
+			function pushNutritionEvent(type) {
+				nutritionReminderEvents = normalizeNutritionEvents(nutritionReminderEvents.concat([{
+					type: type,
+					time: Date.now(),
+					moving_time: Math.floor(movingTime || 0),
+					distance_km: Number((dist || 0).toFixed(3))
+				}]));
+			}
+
+			function serializeNutritionSummary() {
+				const state = normalizeNutritionState(nutritionReminderState);
+				const events = normalizeNutritionEvents(nutritionReminderEvents);
+
+				return {
+					enabled: state.enabled,
+					water_count: state.waterCount,
+					food_count: state.foodCount,
+					events: events
+				};
+			}
+
+			function updateNutritionUI() {
+				const meta = document.getElementById('nutrition-meta');
+				const btn = document.getElementById('btn-nutrition');
+				if (!meta || !btn) return;
+
+				nutritionReminderState = normalizeNutritionState(nutritionReminderState);
+				const config = nutritionConfig();
+
+				btn.innerText = nutritionReminderState.enabled ? 'ON' : 'OFF';
+				btn.style.color = nutritionReminderState.enabled ? '#2ecc71' : '#aaa';
+				btn.style.borderColor = nutritionReminderState.enabled ? 'rgba(46,204,113,0.42)' : 'rgba(255,255,255,0.18)';
+
+				if (!nutritionReminderState.enabled) {
+					meta.innerText = 'Reminder asupan dimatikan.';
+					return;
+				}
+
+				const waterMinutes = Math.max(0, Math.ceil((nutritionReminderState.nextWaterMovingTime - movingTime) / 60));
+				const foodMinutes = Math.max(0, Math.ceil((nutritionReminderState.nextFoodMovingTime - movingTime) / 60));
+				const waterKmLeft = Math.max(0, nutritionReminderState.nextWaterDistanceKm - dist);
+				const foodKmLeft = Math.max(0, nutritionReminderState.nextFoodDistanceKm - dist);
+
+				meta.innerText =
+					'Minum ~' + waterMinutes + 'm / ' + waterKmLeft.toFixed(1) + 'km' +
+					' • makan ~' + foodMinutes + 'm / ' + foodKmLeft.toFixed(1) + 'km' +
+					' • ' + config.label;
+			}
+
+			function toggleNutritionReminders() {
+				nutritionReminderState = normalizeNutritionState(nutritionReminderState);
+				nutritionReminderState.enabled = !nutritionReminderState.enabled;
+				updateNutritionUI();
+				speakRoute(nutritionReminderState.enabled ? 'Reminder minum dan makan aktif.' : 'Reminder minum dan makan dimatikan.', true);
+			}
+
+			function advanceNutritionTargets(type) {
+				const config = nutritionConfig();
+				nutritionReminderState = normalizeNutritionState(nutritionReminderState);
+
+				if (type === 'water' || type === 'water_food') {
+					nutritionReminderState.waterCount += 1;
+					while (nutritionReminderState.nextWaterMovingTime <= movingTime) {
+						nutritionReminderState.nextWaterMovingTime += config.waterSeconds;
+					}
+					while (nutritionReminderState.nextWaterDistanceKm <= dist) {
+						nutritionReminderState.nextWaterDistanceKm += config.waterKm;
+					}
+				}
+
+				if (type === 'food' || type === 'water_food') {
+					nutritionReminderState.foodCount += 1;
+					while (nutritionReminderState.nextFoodMovingTime <= movingTime) {
+						nutritionReminderState.nextFoodMovingTime += config.foodSeconds;
+					}
+					while (nutritionReminderState.nextFoodDistanceKm <= dist) {
+						nutritionReminderState.nextFoodDistanceKm += config.foodKm;
+					}
+				}
+			}
+
+			function updateNutritionReminders() {
+				if (!rec) {
+					updateNutritionUI();
+					return;
+				}
+
+				nutritionReminderState = normalizeNutritionState(nutritionReminderState);
+				if (!nutritionReminderState.enabled) {
+					updateNutritionUI();
+					return;
+				}
+
+				const waterDue =
+					movingTime >= nutritionReminderState.nextWaterMovingTime ||
+					dist >= nutritionReminderState.nextWaterDistanceKm;
+				const foodDue =
+					movingTime >= nutritionReminderState.nextFoodMovingTime ||
+					dist >= nutritionReminderState.nextFoodDistanceKm;
+
+				if (waterDue && foodDue) {
+					pushNutritionEvent('water_food');
+					advanceNutritionTargets('water_food');
+					speakRoute('Saatnya minum dan makan kecil. Isi tenaga sebelum kosong.', false);
+				} else if (foodDue) {
+					pushNutritionEvent('food');
+					advanceNutritionTargets('food');
+					speakRoute('Saatnya makan kecil. Ambil karbo atau snack ringan.', false);
+				} else if (waterDue) {
+					pushNutritionEvent('water');
+					advanceNutritionTargets('water');
+					speakRoute('Saatnya minum. Ambil beberapa teguk air.', false);
+				}
+
+				updateNutritionUI();
+			}
+
+			function normalizeTripStages(list) {
+				if (!Array.isArray(list)) return [];
+
+				return list.map(function(stage, index) {
+					return {
+						index: Math.max(1, Math.floor(Number(stage.index || index + 1))),
+						name: String(stage.name || ('Etape ' + (index + 1))).slice(0, 80),
+						reason: String(stage.reason || 'manual').slice(0, 40),
+						start_time: String(stage.start_time || new Date().toISOString()).slice(0, 40),
+						end_time: stage.end_time ? String(stage.end_time).slice(0, 40) : '',
+						start_distance_km: Math.max(0, Number(stage.start_distance_km || 0)),
+						end_distance_km: stage.end_distance_km === undefined || stage.end_distance_km === null ? null : Math.max(0, Number(stage.end_distance_km || 0)),
+						start_moving_time: Math.max(0, Math.floor(Number(stage.start_moving_time || 0))),
+						end_moving_time: stage.end_moving_time === undefined || stage.end_moving_time === null ? null : Math.max(0, Math.floor(Number(stage.end_moving_time || 0))),
+						start_point_index: Math.max(0, Math.floor(Number(stage.start_point_index || 0))),
+						end_point_index: stage.end_point_index === undefined || stage.end_point_index === null ? null : Math.max(0, Math.floor(Number(stage.end_point_index || 0)))
+					};
+				}).filter(function(stage) {
+					return stage.name && Number.isFinite(stage.start_distance_km);
+				}).slice(0, 100);
+			}
+
+			function serializeTripStages(includeLive) {
+				return normalizeTripStages(tripStages).map(function(stage) {
+					const copy = Object.assign({}, stage);
+
+					if (includeLive && (!copy.end_time || copy.end_distance_km === null || copy.end_moving_time === null)) {
+						copy.end_time = new Date().toISOString();
+						copy.end_distance_km = dist;
+						copy.end_moving_time = Math.floor(movingTime);
+						copy.end_point_index = Math.max(0, path.length - 1);
+					}
+
+					if (copy.end_distance_km !== null) copy.end_distance_km = Number(copy.end_distance_km.toFixed(3));
+					copy.start_distance_km = Number(copy.start_distance_km.toFixed(3));
+					return copy;
+				});
+			}
+
+			function updateStageUI() {
+				const title = document.getElementById('stage-title');
+				const meta = document.getElementById('stage-meta');
+				const btn = document.getElementById('btn-stage');
+				if (!title || !meta) return;
+
+				const stages = normalizeTripStages(tripStages);
+				const current = stages[stages.length - 1];
+				const stageNumber = current ? current.index : 1;
+				const stageDistance = current ? Math.max(0, dist - Number(current.start_distance_km || 0)) : 0;
+				const stageMoving = current ? Math.max(0, movingTime - Number(current.start_moving_time || 0)) : 0;
+
+				title.innerText = 'ETAPE ' + stageNumber;
+				meta.innerText = stageDistance.toFixed(2) + ' km etape ini • ' + formatStageDuration(stageMoving) + ' moving';
+				if (btn) btn.disabled = !rec || stageDistance < 0.2;
+			}
+
+			function ensureCurrentStage(reason) {
+				tripStages = normalizeTripStages(tripStages);
+				if (tripStages.length === 0) {
+					tripStages.push({
+						index: 1,
+						name: 'Etape 1',
+						reason: reason || 'start',
+						start_time: new Date(startT || Date.now()).toISOString(),
+						end_time: '',
+						start_distance_km: Number((dist || 0).toFixed(3)),
+						end_distance_km: null,
+						start_moving_time: Math.floor(movingTime || 0),
+						end_moving_time: null,
+						start_point_index: Math.max(0, path.length - 1),
+						end_point_index: null
+					});
+				}
+				updateStageUI();
+			}
+
+			function closeCurrentStage(reason) {
+				ensureCurrentStage(reason || 'manual');
+				const current = tripStages[tripStages.length - 1];
+				if (!current) return;
+
+				current.end_time = new Date().toISOString();
+				current.end_distance_km = Number((dist || 0).toFixed(3));
+				current.end_moving_time = Math.floor(movingTime || 0);
+				current.end_point_index = Math.max(0, path.length - 1);
+				if (reason) current.reason = reason;
+			}
+
+			function beginNextStage(reason) {
+				closeCurrentStage(reason || 'manual');
+				const nextIndex = tripStages.length + 1;
+				tripStages.push({
+					index: nextIndex,
+					name: 'Etape ' + nextIndex,
+					reason: reason || 'manual',
+					start_time: new Date().toISOString(),
+					end_time: '',
+					start_distance_km: Number((dist || 0).toFixed(3)),
+					end_distance_km: null,
+					start_moving_time: Math.floor(movingTime || 0),
+					end_moving_time: null,
+					start_point_index: Math.max(0, path.length - 1),
+					end_point_index: null
+				});
+				updateStageUI();
+			}
+
+			function startManualStage() {
+				if (!rec) return;
+				beginNextStage('manual');
+				speakRoute('Etape baru dimulai.', false);
+			}
+
+			function maybeStartResumeStage(savedAt) {
+				const gap = Date.now() - Number(savedAt || 0);
+				if (!Number.isFinite(gap) || gap < MULTI_DAY_STAGE_GAP_MS) return false;
+				if (dist < 0.2 && path.length < 2) return false;
+
+				beginNextStage('resume_gap');
+				speakRoute('Jeda panjang terdeteksi. Gaspool memulai etape baru.', true);
+				return true;
+			}
+
 			function renderResumeSummary(data, isCorrupt = false) {
 				const d = data || {};
 				const distance = Number(d.dist || 0);
@@ -505,6 +1319,7 @@ function clearDB() {
 				const points = Number(d.trackPointCount || 0);
 				const routeName = d.plannedRouteName || (d.plannedRouteId ? 'Route ID #' + d.plannedRouteId : 'Tanpa route plan');
 				const privacy = d.isPublic ? 'PUBLIC' : 'PRIVATE';
+				const signals = signalSummary(d.signalLogs || []);
 				const warning = document.getElementById('resume-warning');
 				const copy = document.getElementById('resume-copy');
 
@@ -520,7 +1335,8 @@ function clearDB() {
 				setText('resume-saved', formatResumeAge(d.savedAt));
 				setText('resume-points', points > 0 ? points + ' titik' : 'Belum terbaca');
 				setText('resume-privacy', privacy);
-				setText('resume-route', routeName);
+				setText('resume-signal', signals.count > 0 ? signals.label : 'Belum ada log');
+				setText('resume-route', routeName + (Array.isArray(d.tripStages) && d.tripStages.length > 1 ? ' • ' + d.tripStages.length + ' etape' : ''));
 
 				if (warning) {
 					const looksIncomplete = isCorrupt || points === 0 || distance === 0 || moving === 0;
@@ -567,6 +1383,49 @@ function clearDB() {
 				return Math.max(10, Math.round(distance / 10) * 10) + ' meter';
 			}
 
+			function formatEtaDuration(seconds) {
+				const total = Math.max(0, Math.round(Number(seconds || 0)));
+				const hours = Math.floor(total / 3600);
+				const minutes = Math.floor((total % 3600) / 60);
+
+				if (hours > 0 && minutes > 0) return hours + 'j ' + minutes + 'm';
+				if (hours > 0) return hours + 'j';
+				if (minutes > 0) return minutes + 'm';
+				return '<1m';
+			}
+
+			function formatEtaClock(seconds) {
+				try {
+					return new Date(Date.now() + (Number(seconds || 0) * 1000)).toLocaleTimeString('id-ID', {
+						hour: '2-digit',
+						minute: '2-digit'
+					});
+				} catch(e) {
+					return '';
+				}
+			}
+
+			function defaultEtaSpeedKmh() {
+				if ('${type}' === 'hike') return 3.5;
+				if ('${type}' === 'walk') return 4.5;
+				if ('${type}' === 'run') return 8.5;
+				return 16;
+			}
+
+			function effectiveEtaSpeedKmh(speedKmh) {
+				const gpsSpeed = Number(speedKmh || 0);
+				const avgSpeed = movingTime > 120 && dist > 0.2 ? dist / (movingTime / 3600) : 0;
+				const minMoving = activityAutoPauseSpeedKmh();
+
+				if (gpsSpeed >= minMoving && avgSpeed >= minMoving) {
+					return Math.max(minMoving, (avgSpeed * 0.7) + (gpsSpeed * 0.3));
+				}
+
+				if (avgSpeed >= minMoving) return avgSpeed;
+				if (gpsSpeed >= minMoving) return gpsSpeed;
+				return defaultEtaSpeedKmh();
+			}
+
 			function projectPointMeters(lat, lng, originLat) {
 				const latRad = originLat * Math.PI / 180;
 				return {
@@ -601,6 +1460,152 @@ function clearDB() {
 				return Math.sqrt(px * px + py * py);
 			}
 
+			function buildRouteCumulativeMeters(coords) {
+				const out = [0];
+
+				for (let i = 1; i < coords.length; i++) {
+					out.push(out[i - 1] + map.distance(coords[i - 1], coords[i]));
+				}
+
+				return out;
+			}
+
+			function nearestRouteProgressMeters(lat, lng) {
+				if (!plannedRouteCoords || plannedRouteCoords.length < 2) return null;
+
+				let best = null;
+				const originLat = lat;
+				const p = projectPointMeters(lat, lng, originLat);
+
+				for (let i = 1; i < plannedRouteCoords.length; i++) {
+					const start = plannedRouteCoords[i - 1];
+					const end = plannedRouteCoords[i];
+					const a = projectPointMeters(start[0], start[1], originLat);
+					const b = projectPointMeters(end[0], end[1], originLat);
+					const dx = b.x - a.x;
+					const dy = b.y - a.y;
+					const lenSq = dx * dx + dy * dy;
+					const ratio = lenSq === 0 ? 0 : Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / lenSq));
+					const closest = {
+						x: a.x + ratio * dx,
+						y: a.y + ratio * dy
+					};
+					const px = p.x - closest.x;
+					const py = p.y - closest.y;
+					const distanceM = Math.sqrt(px * px + py * py);
+					const segmentM = map.distance(start, end);
+					const progressM = (plannedRouteCumulativeM[i - 1] || 0) + (segmentM * ratio);
+
+					if (!best || distanceM < best.distanceM) {
+						best = { distanceM, progressM, index: i, ratio };
+					}
+				}
+
+				return best;
+			}
+
+			function routeEtaSummary(lat, lng, speedKmh, nextDistanceM) {
+				const progress = nearestRouteProgressMeters(lat, lng);
+				const totalRouteM = plannedRouteCumulativeM.length > 0
+					? plannedRouteCumulativeM[plannedRouteCumulativeM.length - 1]
+					: 0;
+
+				if (!progress || totalRouteM <= 0) return { detail: '', speech: '', remainingM: null };
+
+				const remainingM = Math.max(0, totalRouteM - progress.progressM);
+				const etaSpeed = Math.max(activityAutoPauseSpeedKmh(), effectiveEtaSpeedKmh(speedKmh));
+				const destinationSeconds = (remainingM / 1000) / etaSpeed * 3600;
+				const destinationEta = formatEtaDuration(destinationSeconds);
+				const destinationClock = formatEtaClock(destinationSeconds);
+				const nextSeconds = Number(nextDistanceM || 0) > 0
+					? (Number(nextDistanceM) / 1000) / etaSpeed * 3600
+					: 0;
+				const nextEta = nextSeconds > 0 ? formatEtaDuration(nextSeconds) : '';
+				const detailParts = [];
+
+				if (nextEta) detailParts.push('Instruksi ~' + nextEta);
+				detailParts.push('Tujuan ' + roundDistanceMeters(remainingM) + ' / ' + destinationEta + (destinationClock ? ' / ' + destinationClock : ''));
+
+				return {
+					detail: detailParts.join(' • '),
+					speech: 'Sisa ke tujuan ' + roundDistanceMeters(remainingM) + ', kira-kira ' + destinationEta + (destinationClock ? ', estimasi sampai ' + destinationClock : ''),
+					remainingM
+				};
+			}
+
+			function checkpointTypeLabel(type) {
+				const labels = {
+					food: 'makan atau warung',
+					water: 'air',
+					minimarket: 'minimarket',
+					fuel: 'pom atau bengkel',
+					mosque: 'masjid atau tempat ibadah',
+					camp: 'camp atau istirahat',
+					medical: 'medis',
+					other: 'checkpoint'
+				};
+				return labels[type] || labels.other;
+			}
+
+			function normalizeCheckpointList(list) {
+				if (!Array.isArray(list)) return [];
+
+				return list.map(function(checkpoint) {
+					const lat = Number(checkpoint.lat);
+					const lng = Number(checkpoint.lng !== undefined ? checkpoint.lng : checkpoint.lon);
+					const reminderM = Number(checkpoint.reminder_m || checkpoint.reminderM || 1000);
+
+					if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+					return {
+						lat: lat,
+						lng: lng,
+						name: String(checkpoint.name || 'Checkpoint').slice(0, 80),
+						type: checkpoint.type || 'other',
+						reminder_m: Number.isFinite(reminderM) ? Math.max(0, reminderM) : 1000
+					};
+				}).filter(Boolean);
+			}
+
+			function drawCheckpointMarkers() {
+				checkpointMarkers.forEach(function(marker) {
+					map.removeLayer(marker);
+				});
+				checkpointMarkers = [];
+
+				plannedRouteCheckpoints.forEach(function(checkpoint) {
+					const marker = L.circleMarker([checkpoint.lat, checkpoint.lng], {
+						radius: 7,
+						color: '#fff',
+						weight: 2,
+						fillColor: '#f1c40f',
+						fillOpacity: 1
+					}).addTo(map).bindTooltip(checkpoint.name || 'Checkpoint', {
+						permanent: false,
+						direction: 'top'
+					});
+					checkpointMarkers.push(marker);
+				});
+			}
+
+			function updateCheckpointReminders(lat, lng) {
+				if (!rec || !plannedRouteCheckpoints.length) return;
+
+				plannedRouteCheckpoints.forEach(function(checkpoint, index) {
+					const reminderM = Number(checkpoint.reminder_m || 0);
+					if (reminderM <= 0 || checkpointReminderMarks[index]) return;
+
+					const distanceM = map.distance([lat, lng], [checkpoint.lat, checkpoint.lng]);
+					if (distanceM > reminderM) return;
+
+					checkpointReminderMarks[index] = true;
+					speakRoute(
+						'Dalam ' + roundDistanceMeters(distanceM) + ', ada ' +
+							(checkpoint.name || checkpointTypeLabel(checkpoint.type)) + '.',
+						false
+					);
+				});
+			}
+
 			function distanceToPlannedRouteMeters(lat, lng) {
 				if (!plannedRouteCoords || plannedRouteCoords.length < 2) return null;
 
@@ -613,6 +1618,101 @@ function clearDB() {
 				}
 
 				return Number.isFinite(minDistance) ? minDistance : null;
+			}
+
+			function plannedRouteDestination() {
+				if (
+					plannedRouteData &&
+					Array.isArray(plannedRouteData.waypoints) &&
+					plannedRouteData.waypoints.length > 0
+				) {
+					const lastWaypoint = plannedRouteData.waypoints[plannedRouteData.waypoints.length - 1];
+					if (lastWaypoint) {
+						return {
+							lat: Number(lastWaypoint.lat !== undefined ? lastWaypoint.lat : lastWaypoint[0]),
+							lng: Number(lastWaypoint.lng !== undefined ? lastWaypoint.lng : lastWaypoint[1])
+						};
+					}
+				}
+
+				if (plannedRouteCoords && plannedRouteCoords.length > 0) {
+					const lastCoord = plannedRouteCoords[plannedRouteCoords.length - 1];
+					return { lat: Number(lastCoord[0]), lng: Number(lastCoord[1]) };
+				}
+
+				return null;
+			}
+
+			function distanceToDestinationMeters(lat, lng) {
+				const destination = plannedRouteDestination();
+				if (!destination || isNaN(destination.lat) || isNaN(destination.lng)) return null;
+				return map.distance([lat, lng], [destination.lat, destination.lng]);
+			}
+
+			function offRouteDiscoveryDetail(lat, lng, distanceM, speedKmh) {
+				const now = Date.now();
+				const destinationM = distanceToDestinationMeters(lat, lng);
+
+				if (!offRouteState.firstOffAt) offRouteState.firstOffAt = now;
+				offRouteState.peakDistanceM = Math.max(offRouteState.peakDistanceM || 0, distanceM);
+
+				const offSeconds = (now - offRouteState.firstOffAt) / 1000;
+				const previousDestinationM = offRouteState.lastDestinationM;
+				const destinationImproving =
+					previousDestinationM === null ||
+					destinationM === null ||
+					destinationM <= previousDestinationM + 30;
+				const movingEnough = Number(speedKmh || 0) >= activityAutoPauseSpeedKmh();
+				const looksIntentional =
+					movingEnough &&
+					offSeconds >= OFF_ROUTE_DISCOVERY_SECONDS &&
+					distanceM >= OFF_ROUTE_DISCOVERY_M &&
+					destinationImproving;
+
+				offRouteState.lastDestinationM = destinationM;
+
+				return {
+					looksIntentional,
+					offSeconds,
+					destinationM,
+					destinationImproving,
+					text:
+						destinationM !== null
+							? 'Tujuan masih ' + roundDistanceMeters(destinationM) + '.'
+							: 'Tujuan tetap sama.'
+				};
+			}
+
+			function autoRerouteAllowedByMode() {
+				return isStealthMode && (trackingMode === 'hemat' || trackingMode === 'expedition');
+			}
+
+			function maybeControlledAutoReroute(lat, lng, accuracy, speedKmh, distanceM, discovery) {
+				if (!isCap || !autoRerouteAllowedByMode() || rerouteInProgress) return false;
+				if (!discovery || !discovery.looksIntentional) return false;
+				if (autoRerouteCount >= AUTO_REROUTE_MAX_PER_ACTIVITY) return false;
+
+				const now = Date.now();
+				if (lastAutoRerouteAt > 0 && now - lastAutoRerouteAt < AUTO_REROUTE_COOLDOWN_MS) return false;
+
+				const config = currentTrackingConfig();
+				const maxAccuracy = Math.min(config.accuracyLimit, AUTO_REROUTE_MAX_ACCURACY_M);
+				if (Number(accuracy || 999) > maxAccuracy) return false;
+				if (Number(speedKmh || 0) < activityAutoPauseSpeedKmh()) return false;
+				if (Number(distanceM || 0) < AUTO_REROUTE_M) return false;
+				if (Number(discovery.offSeconds || 0) < AUTO_REROUTE_SECONDS) return false;
+				if (discovery.destinationM === null || !discovery.destinationImproving) return false;
+
+				if (!offRouteState.autoCandidateAt) offRouteState.autoCandidateAt = now;
+
+				autoRerouteCount += 1;
+				lastAutoRerouteAt = now;
+				offRouteState.autoCandidateAt = 0;
+				rerouteToDestination({
+					automatic: true,
+					reason: 'stealth-alternative-route'
+				});
+				return true;
 			}
 
 			function setRerouteButtonVisible(visible) {
@@ -631,7 +1731,7 @@ function clearDB() {
 				});
 			}
 
-			function updateOffRouteStatus(lat, lng, accuracy) {
+			function updateOffRouteStatus(lat, lng, accuracy, speedKmh = 0) {
 				if (!rec || !plannedRouteCoords || plannedRouteCoords.length < 2) return;
 
 				const distanceM = distanceToPlannedRouteMeters(lat, lng);
@@ -644,10 +1744,47 @@ function clearDB() {
 				offRouteState.lastDistance = distanceM;
 
 				if (distanceM >= offThreshold) {
+					const discovery = offRouteDiscoveryDetail(lat, lng, distanceM, speedKmh);
 					offRouteState.active = true;
 					offRouteState.warned = true;
 					setPlannedRouteAlertStyle(true);
 					setRerouteButtonVisible(true);
+
+					if (discovery.looksIntentional) {
+						const autoTriggered = maybeControlledAutoReroute(lat, lng, accuracy, speedKmh, distanceM, discovery);
+						if (autoTriggered) {
+							setRouteStatus(
+								'↻ AUTO REROUTE TERKENDALI',
+								'Stealth aktif dan jalur alternatif konsisten. Membuat rute baru ke tujuan yang sama.',
+								true
+							);
+							return;
+						}
+
+						setRouteStatus(
+							'↻ JALUR ALTERNATIF TERDETEKSI',
+							'Kamu sudah keluar sekitar ' + roundDistanceMeters(distanceM) + ' dari rute. ' +
+								discovery.text + ' ' +
+								(isCap
+									? (autoRerouteAllowedByMode()
+										? 'Auto reroute aktif jika kondisi tetap konsisten.'
+										: 'Tekan REROUTE untuk adaptasi rute ke posisi sekarang.')
+									: 'Ikuti jalur aman menuju tujuan.'),
+							true
+						);
+
+						if (isCap && now - offRouteState.lastDiscoverySpeech > 90000) {
+							speakRoute(
+								'Sepertinya kamu mengambil jalur lain. Jika jalur ini memang dipilih, tekan reroute untuk membuat rute baru ke tujuan yang sama.',
+								true
+							);
+							offRouteState.lastDiscoverySpeech = now;
+							offRouteState.lastWarn = now;
+						}
+
+						return;
+					}
+
 					setRouteStatus(
 						'⚠️ KELUAR RUTE',
 						'Jarak dari jalur sekitar ' + roundDistanceMeters(distanceM) + '. ' +
@@ -669,6 +1806,8 @@ function clearDB() {
 				}
 
 				if (distanceM >= warnThreshold) {
+					if (!offRouteState.firstOffAt) offRouteState.firstOffAt = now;
+					offRouteState.peakDistanceM = Math.max(offRouteState.peakDistanceM || 0, distanceM);
 					setPlannedRouteAlertStyle(false);
 					setRerouteButtonVisible(false);
 					setRouteStatus('⚠️ MENJAUH DARI RUTE', 'Jarak dari jalur sekitar ' + roundDistanceMeters(distanceM) + '.', true);
@@ -689,6 +1828,10 @@ function clearDB() {
 
 				offRouteState.active = false;
 				offRouteState.warned = false;
+				offRouteState.firstOffAt = 0;
+				offRouteState.lastDestinationM = null;
+				offRouteState.peakDistanceM = 0;
+				offRouteState.autoCandidateAt = 0;
 				setPlannedRouteAlertStyle(false);
 				setRerouteButtonVisible(false);
 			}
@@ -851,7 +1994,11 @@ function clearDB() {
 					return;
 				}
 
-				speakRoute('Ulangi instruksi. ' + lastInstructionSpeechText + '.', true);
+				speakRoute(
+					'Ulangi instruksi. ' + lastInstructionSpeechText + '. ' +
+						(lastRouteEtaSpeechText ? lastRouteEtaSpeechText + '.' : ''),
+					true
+				);
 			}
 
 			function getInstructionPoint(instruction) {
@@ -869,8 +2016,20 @@ function clearDB() {
 				return null;
 			}
 
-			function updateRouteNavigator(lat, lng) {
-				if (!plannedRouteInstructions.length || !rec) return;
+			function updateRouteNavigator(lat, lng, speedKmh = 0) {
+				if (!rec || !plannedRouteCoords || plannedRouteCoords.length < 2) return;
+
+				if (!plannedRouteInstructions.length) {
+					const etaOnly = routeEtaSummary(lat, lng, speedKmh, 0);
+					lastInstructionSpeechText = etaOnly.speech || 'Ikuti rute menuju tujuan';
+					lastRouteEtaSpeechText = etaOnly.speech || '';
+					updateNavVoiceControls();
+					setRouteStatus(
+						'🧭 SISA ' + (etaOnly.remainingM !== null ? roundDistanceMeters(etaOnly.remainingM) : 'RUTE'),
+						etaOnly.detail || 'Ikuti garis biru menuju tujuan.'
+					);
+					return;
+				}
 
 				while (routeNextInstructionIndex < plannedRouteInstructions.length) {
 					const instruction = plannedRouteInstructions[routeNextInstructionIndex];
@@ -886,9 +2045,11 @@ function clearDB() {
 					if (!routeInstructionMarks[key]) routeInstructionMarks[key] = {};
 
 					const phrase = cleanInstructionText(instruction.text);
+					const eta = routeEtaSummary(lat, lng, speedKmh, distM);
 					lastInstructionSpeechText = phrase;
+					lastRouteEtaSpeechText = eta.speech || '';
 					updateNavVoiceControls();
-					setRouteStatus('🧭 NEXT ' + roundDistanceMeters(distM), phrase);
+					setRouteStatus('🧭 NEXT ' + roundDistanceMeters(distM), phrase + (eta.detail ? ' • ' + eta.detail : ''));
 
 					if (distM <= 25) {
 						if (!routeInstructionMarks[key].now) {
@@ -911,22 +2072,33 @@ function clearDB() {
 				}
 
 				if (routeNextInstructionIndex >= plannedRouteInstructions.length && plannedRouteInstructions.length > 0) {
-					setRouteStatus('🧭 RUTE SELESAI', 'Semua arahan route plan sudah dilewati.');
+					const eta = routeEtaSummary(lat, lng, speedKmh, 0);
+					lastRouteEtaSpeechText = eta.speech || '';
+					setRouteStatus('🧭 RUTE SELESAI', eta.detail || 'Semua arahan route plan sudah dilewati.');
 				}
 			}
 
 			function applyPlannedRoute(route) {
 				plannedRouteData = route.data;
 				plannedRouteInstructions = Array.isArray(plannedRouteData.instructions) ? plannedRouteData.instructions : [];
+				plannedRouteCheckpoints = normalizeCheckpointList(plannedRouteData.checkpoints);
+				checkpointReminderMarks = {};
 				const coords = normalizeRouteCoords(plannedRouteData.coordinates);
 				plannedRouteCoords = coords;
+				plannedRouteCumulativeM = buildRouteCumulativeMeters(coords);
 				routeNextInstructionIndex = 0;
 				routeInstructionMarks = {};
+				lastRouteEtaSpeechText = '';
 				offRouteState = {
 					active: false,
 					warned: false,
 					lastWarn: 0,
-					lastDistance: null
+					lastDistance: null,
+					firstOffAt: 0,
+					lastDiscoverySpeech: 0,
+					lastDestinationM: null,
+					peakDistanceM: 0,
+					autoCandidateAt: 0
 				};
 				setRerouteButtonVisible(false);
 
@@ -945,12 +2117,16 @@ function clearDB() {
 				}).addTo(map);
 
 				plannedRouteLine.bringToBack();
+				drawCheckpointMarkers();
 				line.bringToFront();
 				marker.bringToFront();
 
 				const routeName = route.name || plannedRouteData.name || 'Route Plan';
 				const routeDistance = Number(route.distance || plannedRouteData.distance_km || 0).toFixed(1);
-				setRouteStatus('🧭 ' + routeName, routeDistance + ' KM • ' + plannedRouteInstructions.length + ' arahan siap');
+				setRouteStatus(
+					'🧭 ' + routeName,
+					routeDistance + ' KM • ' + plannedRouteInstructions.length + ' arahan • ' + plannedRouteCheckpoints.length + ' checkpoint'
+				);
 			}
 
 			async function loadPlannedRoute() {
@@ -967,26 +2143,102 @@ function clearDB() {
 					}
 
 					applyPlannedRoute(payload.route);
+					saveOfflineRoutePack(payload.route);
+					await publishPeletonRoute(activePlannedRouteId);
 
 					setTimeout(() => {
 						map.fitBounds(plannedRouteLine.getBounds(), { padding: [35, 35] });
 					}, 200);
 				} catch (err) {
 					console.warn('Gagal memuat route plan:', err);
+					const offlineRoute = loadOfflineRoutePack(activePlannedRouteId);
+					if (offlineRoute) {
+						applyPlannedRoute(offlineRoute);
+						setRouteStatus('🧭 OFFLINE ROUTE PACK', 'Rute dimuat dari perangkat. Peta dasar mungkin terbatas.');
+						return;
+					}
+					if (roomID !== "SINGLE_MODE") {
+						await loadPeletonRoute(true);
+						return;
+					}
 					setRouteStatus('🧭 RUTE PLAN GAGAL DIMUAT', 'Tracking tetap bisa berjalan normal.', true);
 				}
 			}
 
-			async function rerouteToDestination() {
+			async function publishPeletonRoute(routeId) {
+				if (!isCap || roomID === "SINGLE_MODE" || !routeId) return;
+
+				try {
+					const res = await fetch('/api/peleton_route', {
+						method: 'POST',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({
+							room: roomID,
+							route_id: Number(routeId)
+						})
+					});
+					const payload = await res.json().catch(() => ({}));
+
+					if (res.ok && payload.success && payload.peleton_route) {
+						peletonRouteVersion = Number(payload.peleton_route.version || peletonRouteVersion || 1);
+					}
+				} catch (err) {
+					console.warn('Gagal publish rute peleton:', err);
+				}
+			}
+
+			async function loadPeletonRoute(silent = false) {
+				if (roomID === "SINGLE_MODE") return;
+
+				try {
+					const res = await fetch('/api/peleton_route/' + encodeURIComponent(roomID), {
+						cache: 'no-store'
+					});
+					const payload = await res.json();
+
+					if (!res.ok || !payload.success) throw new Error(payload.message || 'Rute peleton gagal dimuat.');
+
+					if (!payload.route || !payload.peleton_route) {
+						if (!silent && !activePlannedRouteId) {
+							setRouteStatus('🧭 RUTE PELETON BELUM ADA', 'Menunggu kapten publish route plan.');
+						}
+						return;
+					}
+
+					const nextVersion = Number(payload.peleton_route.version || 0);
+					const nextRouteId = String(payload.peleton_route.route_id || payload.route.id || '');
+					const changed = nextVersion !== peletonRouteVersion || nextRouteId !== String(activePlannedRouteId || '');
+
+					if (!changed) return;
+
+					activePlannedRouteId = nextRouteId;
+					peletonRouteVersion = nextVersion;
+					applyPlannedRoute(payload.route);
+					saveOfflineRoutePack(payload.route);
+
+					if (!silent && !isCap) {
+						speakRoute('Rute peleton diperbarui oleh kapten.', true);
+					}
+				} catch (err) {
+					const offlineRoute = loadOfflineRoutePack(activePlannedRouteId);
+					if (offlineRoute) {
+						applyPlannedRoute(offlineRoute);
+						if (!silent) setRouteStatus('🧭 OFFLINE ROUTE PACK', 'Memakai pack rute terakhir di perangkat.');
+						return;
+					}
+					if (!silent) {
+						console.warn('Gagal memuat rute peleton:', err);
+						setRouteStatus('🧭 RUTE PELETON GAGAL', 'Tracking tetap bisa berjalan normal.', true);
+					}
+				}
+			}
+
+			async function rerouteToDestination(options = {}) {
 				if (rerouteInProgress) return;
 
+				const automatic = Boolean(options && options.automatic);
 				const btn = document.getElementById('btn-reroute');
-				const destination =
-					plannedRouteData &&
-					Array.isArray(plannedRouteData.waypoints) &&
-					plannedRouteData.waypoints.length > 0
-						? plannedRouteData.waypoints[plannedRouteData.waypoints.length - 1]
-						: plannedRouteCoords[plannedRouteCoords.length - 1];
+				const destination = plannedRouteDestination();
 
 				if (!latestPosition || !destination) {
 					setRouteStatus('↻ REROUTE BELUM SIAP', 'GPS atau tujuan rute belum tersedia.', true);
@@ -996,21 +2248,29 @@ function clearDB() {
 				rerouteInProgress = true;
 				if (btn) {
 					btn.disabled = true;
-					btn.innerText = '...';
+					btn.innerText = automatic ? 'AUTO...' : '...';
 				}
-				setRouteStatus('↻ MEMBUAT RUTE BARU', 'Tujuan tetap sama, start memakai posisi GPS sekarang.');
-				speakRoute('Membuat rute baru ke tujuan yang sama.', true);
+				setRouteStatus(
+					automatic ? '↻ AUTO REROUTE' : '↻ MEMBUAT RUTE BARU',
+					'Tujuan tetap sama, start memakai posisi GPS sekarang.'
+				);
+				speakRoute(
+					automatic
+						? 'Kamu konsisten mengambil jalur lain. Gaspool membuat rute baru ke tujuan yang sama.'
+						: 'Membuat rute baru ke tujuan yang sama.',
+					true
+				);
 
 				try {
 					const res = await fetch('/api/route_plan', {
 						method: 'POST',
 						headers: { 'Content-Type': 'application/json' },
 						body: JSON.stringify({
-							name: 'Reroute - ' + (plannedRouteData.name || 'Route Plan'),
+							name: (automatic ? 'Auto Reroute - ' : 'Reroute - ') + (plannedRouteData.name || 'Route Plan'),
 							profile: plannedRouteData.profile || 'cycling-regular',
 							waypoints: [
 								{ lat: latestPosition.lat, lng: latestPosition.lng },
-								{ lat: Number(destination.lat !== undefined ? destination.lat : destination[0]), lng: Number(destination.lng !== undefined ? destination.lng : destination[1]) }
+								{ lat: Number(destination.lat), lng: Number(destination.lng) }
 							]
 						})
 					});
@@ -1022,8 +2282,13 @@ function clearDB() {
 
 					activePlannedRouteId = String(payload.route.id || activePlannedRouteId || '');
 					applyPlannedRoute(payload.route);
-					setRouteStatus('↻ REROUTE SIAP', 'Route ID #' + activePlannedRouteId + ' menggantikan rute lama.');
-					speakRoute('Rute baru siap. Lanjutkan perjalanan.', true);
+					saveOfflineRoutePack(payload.route);
+					await publishPeletonRoute(activePlannedRouteId);
+					setRouteStatus(
+						automatic ? '↻ AUTO REROUTE SIAP' : '↻ REROUTE SIAP',
+						'Route ID #' + activePlannedRouteId + ' menggantikan rute lama.'
+					);
+					speakRoute(automatic ? 'Auto reroute siap. Lanjutkan perjalanan.' : 'Rute baru siap. Lanjutkan perjalanan.', true);
 				} catch (err) {
 					console.warn('Reroute gagal:', err);
 					setRouteStatus('↻ REROUTE GAGAL', err.message || 'Coba lagi beberapa saat.', true);
@@ -1037,9 +2302,30 @@ function clearDB() {
 				}
 			}
 
-			loadPlannedRoute();
+			async function bootRouteSharing() {
+				if (activePlannedRouteId) {
+					await loadPlannedRoute();
+				} else if (roomID !== "SINGLE_MODE") {
+					await loadPeletonRoute(false);
+				}
+
+				if (roomID !== "SINGLE_MODE" && !isCap) {
+					peletonRoutePollInt = setInterval(() => {
+						const now = Date.now();
+						if (now - lastPeletonRouteCheck < 40000) return;
+						lastPeletonRouteCheck = now;
+						loadPeletonRoute(true);
+					}, 45000);
+				}
+			}
+
+			bootRouteSharing();
 			updateNavVoiceControls();
 			updatePrivacyButton();
+			updateTrackingModeUI();
+			updateStageUI();
+			updateNutritionUI();
+			updateSignalUI();
 			if ('speechSynthesis' in window) {
 				window.speechSynthesis.onvoiceschanged = updateNavVoiceControls;
 			}
@@ -1056,7 +2342,7 @@ function clearDB() {
 					map.setView(curLoc, 16);
 					marker.setLatLng(curLoc);
 					lastVisualUpdate = Date.now();
-				}, () => console.log("Menunggu akurasi GPS..."), { enableHighAccuracy: true });
+				}, () => console.log("Menunggu akurasi GPS..."), geolocationOptions());
 			}
 
 			function startAsGuest() {
@@ -1162,15 +2448,29 @@ document.getElementById(
 					const d = JSON.parse(rawData);
 					
 					dist = d.dist || 0; 
+					startT = d.startT || 0;
+					startTimezoneOffsetMin = normalizeTimezoneOffset(d.startTimezoneOffsetMin);
+					startTimezoneName = normalizeTimezoneName(d.startTimezoneName);
 					movingTime = d.movingTime || 0;
 					skippedClockGapSeconds = d.skippedClockGapSeconds || 0;
+					autoRerouteCount = Number(d.autoRerouteCount || 0);
+					lastAutoRerouteAt = Number(d.lastAutoRerouteAt || 0);
+					trackingMode = sanitizeTrackingMode(d.trackingMode || trackingMode);
+					localStorage.setItem(trackingModeKey, trackingMode);
+					updateTrackingModeUI();
 					lastAnnouncedKm = d.lastAnnouncedKm || 0;
 					tempReadings = d.tempReadings || [];
 					lastTempCheck = d.lastTempCheck || 0;
 					totalElevation = d.totalElevation || 0;
 					lastAlt = d.lastAlt || null;
+					tripStages = normalizeTripStages(d.tripStages);
+					nutritionReminderState = normalizeNutritionState(d.nutritionReminderState);
+					nutritionReminderEvents = normalizeNutritionEvents(d.nutritionReminderEvents);
+					signalLogs = normalizeSignalLogs(d.signalLogs);
 					rideIsPublic = Boolean(d.isPublic);
 					updatePrivacyButton();
+					updateNutritionUI();
+					updateSignalUI();
 					if (d.plannedRouteId) {
 						activePlannedRouteId = String(d.plannedRouteId);
 						await loadPlannedRoute();
@@ -1210,9 +2510,13 @@ document.getElementById(
 						
 						path = allPoints || [];
 						line.setLatLngs(path.map(p => [p.lat, p.lng]));
+						lastPointSavedAt = Date.now();
 					} else {
 						console.warn("IndexedDB gagal dimuat, rute visual mungkin tidak terlihat tapi pencatatan jalan terus.");
 					}
+
+					ensureCurrentStage('resume');
+					maybeStartResumeStage(d.savedAt);
 					
 					mulai(true); // Lanjut gowes
 
@@ -1249,7 +2553,13 @@ function gpsQuality(acc) {
 
 }
 
-			function discardSession() { localStorage.removeItem(key); clearDB(); window.location.reload(); }
+			function discardSession() {
+				restartGpsWatch = null;
+				if (peletonRoutePollInt) clearInterval(peletonRoutePollInt);
+				localStorage.removeItem(key);
+				clearDB();
+				window.location.reload();
+			}
 
 			let wakeLock = null;
 			async function requestWakeLock() {
@@ -1270,15 +2580,45 @@ function gpsQuality(acc) {
 				if (rec && document.visibilityState === 'visible') await requestWakeLock();
 			});
 
+			window.addEventListener('offline', function() {
+				startSignalEvent('network_offline', 'Koneksi internet hilang. Tracking lokal tetap berjalan.');
+			});
+
+			window.addEventListener('online', function() {
+				closeSignalEvent('network_offline', 'Koneksi internet kembali online.');
+			});
+
 			function mulai(isResume = false) {
 				rec = true;
 				requestWakeLock();				
 				if(!isResume) { 
 					startT = Date.now(); path = []; dist = 0; movingTime = 0; lastAnnouncedKm = 0; 
+					captureStartTimezone();
 					skippedClockGapSeconds = 0;
+					autoRerouteCount = 0;
+					lastAutoRerouteAt = 0;
+					lastPointSavedAt = 0;
+					tripStages = [];
+					nutritionReminderState = defaultNutritionState();
+					nutritionReminderEvents = [];
+					signalLogs = [];
+					signalState = {
+						gpsErrorStartedAt: 0,
+						poorAccuracyStartedAt: 0,
+						networkOfflineStartedAt: navigator.onLine ? 0 : Date.now(),
+						lastGpsOkAt: 0,
+						lastSignalSpeechAt: 0
+					};
 					tempReadings = []; lastTempCheck = 0; totalElevation = 0; lastAlt = null; clearDB();
 				}
 				lastTick = Date.now();
+				ensureCurrentStage(isResume ? 'resume' : 'start');
+				nutritionReminderState = normalizeNutritionState(nutritionReminderState);
+				if (!navigator.onLine) {
+					startSignalEvent('network_offline', 'Koneksi internet belum tersedia saat tracking dimulai.');
+				}
+				updateNutritionUI();
+				updateSignalUI();
 				
 				document.getElementById('btn-start').style.display = 'none';
 				document.getElementById('btn-stop').style.display = 'block';
@@ -1296,9 +2636,16 @@ function gpsQuality(acc) {
 					if (!Number.isFinite(delta) || delta < 0) delta = 0;
 					if (delta > REST_CLOCK_GAP_SECONDS) {
 						skippedClockGapSeconds += delta;
+						pushSignalLog(
+							'system_gap',
+							now - (delta * 1000),
+							now,
+							'Browser atau sistem sempat berhenti mengirim tick.'
+						);
 						delta = 0;
 					} else {
-						const maxDelta = isStealthMode ? STEALTH_MAX_CLOCK_DELTA_SECONDS : NORMAL_MAX_CLOCK_DELTA_SECONDS;
+						const config = currentTrackingConfig();
+						const maxDelta = isStealthMode ? config.stealthMaxClockDelta : config.maxClockDelta;
 						delta = Math.min(delta, maxDelta);
 					}
 					
@@ -1306,6 +2653,8 @@ function gpsQuality(acc) {
 					
 					let s = Math.floor(movingTime);
 					document.getElementById('val-time').innerText = new Date(s * 1000).toISOString().substr(11, 8);
+					updateStageUI();
+					updateNutritionReminders();
 					
 					if (s > 0 && s % 900 === 0 && (s - lastTempCheck > 10)) {
 						lastTempCheck = s;
@@ -1316,9 +2665,20 @@ function gpsQuality(acc) {
 					}
 				}, 1000);
 
-				watchId = navigator.geolocation.watchPosition(p => {
+				function handleGpsPosition(p) {
 					const { latitude:lat, longitude:lng, speed, accuracy, altitude } = p.coords;
-					if(accuracy > 80) return;
+					const config = currentTrackingConfig();
+					if(accuracy > config.accuracyLimit) {
+						startSignalEvent(
+							'poor_accuracy',
+							'Akurasi GPS sedang buruk, titik sementara diabaikan.'
+						);
+						updateSignalUI();
+						return;
+					}
+					signalState.lastGpsOkAt = Date.now();
+					closeSignalEvent('gps_error', 'GPS kembali menerima posisi.');
+					closeSignalEvent('poor_accuracy', 'Akurasi GPS kembali masuk batas.');
 					
 					let speedKmh = (speed || 0) * 3.6;
 					const gpsStatus =
@@ -1328,7 +2688,7 @@ function gpsQuality(acc) {
 
 if (!gpsStatus) return;
 
-					if (speedKmh < 2.0) {
+					if (speedKmh < activityAutoPauseSpeedKmh()) {
 
   isPaused = true;
 
@@ -1366,7 +2726,7 @@ if (!gpsStatus) return;
 						const last = path[path.length-1];
 						const d = map.distance([last.lat, last.lng], cur) / 1000;
 						
-						if(d > 0.003 && d < 1.5) { 
+						if(d > 0.003 && d < 1.5 && shouldStoreTrackPoint(d, speedKmh)) { 
     // Jarak normal, catat semuanya
     dist += d; 
     
@@ -1380,6 +2740,7 @@ if (!gpsStatus) return;
     let pt = { lat, lng, speed: speedKmh, ele: altitude || 0, time: new Date().toISOString() };
     path.push(pt); 
     savePointDB(pt); 
+    lastPointSavedAt = Date.now();
     addTrackPointToMap(cur); 
     
 } else if (d >= 1.5) {
@@ -1389,6 +2750,7 @@ if (!gpsStatus) return;
     let pt = { lat, lng, speed: speedKmh, ele: altitude || 0, time: new Date().toISOString() };
     path.push(pt); 
     savePointDB(pt); 
+    lastPointSavedAt = Date.now();
     addTrackPointToMap(cur); 
     lastAlt = altitude; // Reset acuan elevasi juga
 }
@@ -1396,6 +2758,7 @@ if (!gpsStatus) return;
 						let pt = { lat, lng, speed: speedKmh, ele: altitude || 0, time: new Date().toISOString() };
 						path.push(pt); 
 						savePointDB(pt);
+						lastPointSavedAt = Date.now();
 						addTrackPointToMap(cur);
 						lastAlt = altitude;
 						if (tempReadings.length === 0) recordTemperature(lat, lng);
@@ -1416,8 +2779,9 @@ if (!gpsStatus) return;
 }
 					}
 					
-					updateRouteNavigator(lat, lng);
-					updateOffRouteStatus(lat, lng, accuracy);
+					updateRouteNavigator(lat, lng, speedKmh);
+					updateOffRouteStatus(lat, lng, accuracy, speedKmh);
+					updateCheckpointReminders(lat, lng);
 
 					let currentKm = Math.floor(dist);
 					if (currentKm > lastAnnouncedKm && currentKm >= 1 && plannedRouteInstructions.length === 0) {
@@ -1431,6 +2795,14 @@ if (!gpsStatus) return;
 					if (nowTime - lastSave > 10000) { 
 						localStorage.setItem(key, JSON.stringify({dist,
   startT,
+  startTimezoneOffsetMin:
+    normalizeTimezoneOffset(
+      startTimezoneOffsetMin
+    ),
+  startTimezoneName:
+    normalizeTimezoneName(
+      startTimezoneName
+    ),
   movingTime,
   lastAnnouncedKm,
   tempReadings,
@@ -1438,6 +2810,22 @@ if (!gpsStatus) return;
   totalElevation,
   lastAlt,
   skippedClockGapSeconds,
+  trackingMode,
+  tripStages:
+    serializeTripStages(
+      false
+    ),
+  nutritionReminderState,
+  nutritionReminderEvents:
+    normalizeNutritionEvents(
+      nutritionReminderEvents
+    ),
+  signalLogs:
+    serializeSignalLogs(
+      true
+    ),
+  autoRerouteCount,
+  lastAutoRerouteAt,
 
   roomID,
   plannedRouteId: activePlannedRouteId,
@@ -1465,13 +2853,17 @@ if (!gpsStatus) return;
     Date.now()}));
 						lastSave = nowTime;
 					}
-				},
+				}
 
-(err) => {
+				function handleGpsError(err) {
 
   console.warn(
     'GPS ERROR',
     err
+  );
+  startSignalEvent(
+    'gps_error',
+    'Sinyal GPS hilang. Gaspool menunggu posisi kembali.'
   );
 
   const gpsStatus =
@@ -1491,16 +2883,25 @@ if (!gpsStatus) return;
 
   }
 
-},
+}
 
-{
-  enableHighAccuracy: true
-});
+				function startGpsWatch() {
+					watchId = navigator.geolocation.watchPosition(
+						handleGpsPosition,
+						handleGpsError,
+						geolocationOptions()
+					);
+				}
+
+				restartGpsWatch = startGpsWatch;
+				startGpsWatch();
+
 
 				// --- THROTTLE RADAR SYNC ---
 				radarInt = setInterval(() => {
 					radarTick += 4;
-					let threshold = isStealthMode ? 16 : 4; // Sync tiap 16 detik di Stealth, 4 detik saat normal
+					const config = currentTrackingConfig();
+					let threshold = isStealthMode ? config.stealthRadarSeconds : config.radarSeconds;
 					
 					if(radarTick >= threshold && roomID !== "SINGLE_MODE" && path.length > 0) {
 						radarTick = 0;
@@ -1510,6 +2911,9 @@ if (!gpsStatus) return;
 							body: JSON.stringify({ room: roomID, user: userName, lat: lastP.lat, lng: lastP.lng, speed: lastP.speed || 0 })
 						}).then(r => r.json()).then(res => { 
 							if(res.participants) syncRadar(res.participants, res.radios); 
+							if(!isCap && res.peleton_route && Number(res.peleton_route.version || 0) !== peletonRouteVersion) {
+								loadPeletonRoute(true);
+							}
 						}).catch(e => {});
 					}
 				}, 4000);
@@ -1548,8 +2952,18 @@ if (!gpsStatus) return;
 			async function selesai() {
 				if (isStealthMode) disableStealth();
 				rec = false; releaseWakeLock(); navigator.geolocation.clearWatch(watchId); clearInterval(radarInt); clearInterval(clockInt);
+				if (peletonRoutePollInt) clearInterval(peletonRoutePollInt);
+				restartGpsWatch = null;
 				
 				const dur = Math.floor(movingTime);
+				closeCurrentStage('finish');
+				const finalTripStages = serializeTripStages(true);
+				closeSignalEvent('network_offline', 'Aktivitas selesai saat jaringan kembali tersedia atau upload dimulai.');
+				closeSignalEvent('gps_error', 'Aktivitas selesai.');
+				closeSignalEvent('poor_accuracy', 'Aktivitas selesai.');
+				const finalSignalLogs = serializeSignalLogs(true);
+				const finalNutritionSummary = serializeNutritionSummary();
+				const finalTimeContext = activityTimeContext(Date.now());
 				
 				if (path.length > 0) await recordTemperature(path[path.length-1].lat, path[path.length-1].lng);
 				let finalAvgTemp = 0;
@@ -1578,15 +2992,25 @@ if (!gpsStatus) return;
 							chunk_index: i,
 							total_chunks: totalChunks,
 							points: allPoints.slice(i * CHUNK_SIZE, (i * CHUNK_SIZE) + CHUNK_SIZE),
-							name: '${type.toUpperCase()} ' + new Date().toLocaleDateString('id-ID'),
+							name: '${type.toUpperCase()} ' + formatDateWithTimezoneOffset(startT, finalTimeContext.start_timezone_offset_min),
 							distance: dist,
 							duration: dur,
 							activity_type: '${type}',
+							start_date: finalTimeContext.start_date,
+							finish_date: finalTimeContext.finish_date,
+							start_timezone_offset_min: finalTimeContext.start_timezone_offset_min,
+							finish_timezone_offset_min: finalTimeContext.finish_timezone_offset_min,
+							start_timezone_name: finalTimeContext.start_timezone_name,
+							finish_timezone_name: finalTimeContext.finish_timezone_name,
 							room: roomID,
 							planned_route_id: activePlannedRouteId ? Number(activePlannedRouteId) : null,
 							is_public: rideIsPublic ? 1 : 0,
 							avg_temp: finalAvgTemp,
-							total_elevation: Math.round(totalElevation)
+							total_elevation: Math.round(totalElevation),
+							skipped_clock_gap_seconds: Math.floor(skippedClockGapSeconds || 0),
+							stages: finalTripStages,
+							nutrition_summary: finalNutritionSummary,
+							signal_logs: finalSignalLogs
 						});
 					}
 
@@ -1653,6 +3077,12 @@ if (!gpsStatus) return;
 			async function cancelRec() {
 				if(confirm('Batalkan dan hapus rute?')) {
 					await cleanupPeletonAudio();
+					rec = false;
+					restartGpsWatch = null;
+					if (watchId) navigator.geolocation.clearWatch(watchId);
+					if (radarInt) clearInterval(radarInt);
+					if (clockInt) clearInterval(clockInt);
+					if (peletonRoutePollInt) clearInterval(peletonRoutePollInt);
 					localStorage.removeItem(key);
 					clearDB();
 					window.location.href='/';

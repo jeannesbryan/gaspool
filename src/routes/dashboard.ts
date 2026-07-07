@@ -133,6 +133,20 @@ dashboard.get("/", async (c) => {
           .modal { display: none; position: fixed; z-index: 2000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); backdrop-filter: blur(10px); justify-content: center; align-items: center; padding: 20px; }
           .modal-content { background: #16161d; border-radius: 30px; width: 100%; max-width: 500px; border: 1px solid rgba(255,255,255,0.1); padding: 25px; box-shadow: 0 25px 50px rgba(0,0,0,0.5); }
           #map-modal { height: 350px; width: 100%; border-radius: 20px; margin: 15px 0; background: #e5e7eb; border: 1px solid rgba(255,255,255,0.1); }
+          .stage-list { display:none; gap:8px; margin:10px 0 0; }
+          .stage-item { display:grid; grid-template-columns:1fr auto; gap:10px; align-items:center; padding:9px 10px; border-radius:12px; border:1px solid rgba(255,255,255,0.08); background:rgba(255,255,255,0.045); }
+          .stage-name { color:#fff; font-size:0.7rem; font-weight:950; text-transform:uppercase; letter-spacing:0.7px; }
+          .stage-meta { color:#94a3b8; font-size:0.62rem; font-weight:850; margin-top:3px; }
+          .stage-distance { color:var(--primary); font-weight:950; font-style:italic; font-size:0.84rem; white-space:nowrap; }
+          .signal-list { display:none; gap:7px; margin:10px 0 0; }
+          .signal-item { display:grid; grid-template-columns:1fr auto; gap:10px; align-items:center; padding:8px 10px; border-radius:12px; border:1px solid rgba(241,196,15,0.18); background:rgba(241,196,15,0.055); }
+          .signal-name { color:#fff; font-size:0.68rem; font-weight:950; text-transform:uppercase; letter-spacing:0.7px; }
+          .signal-meta { color:#94a3b8; font-size:0.6rem; font-weight:850; margin-top:3px; }
+          .signal-duration { color:#f1c40f; font-weight:950; font-style:italic; font-size:0.78rem; white-space:nowrap; }
+          .nutrition-list { display:none; grid-template-columns: repeat(2, 1fr); gap:8px; margin:10px 0 0; }
+          .nutrition-item { padding:9px 10px; border-radius:12px; border:1px solid rgba(46,204,113,0.18); background:rgba(46,204,113,0.055); }
+          .nutrition-name { color:#94a3b8; font-size:0.58rem; font-weight:950; text-transform:uppercase; letter-spacing:0.7px; }
+          .nutrition-value { color:#2ecc71; font-size:1rem; font-weight:950; font-style:italic; margin-top:2px; }
           
           #btnLoadMore { display: none; width: 100%; background: transparent; color: var(--primary); border: 2px solid var(--primary); padding: 18px; border-radius: 15px; font-weight: 900; font-style: italic; cursor: pointer; margin-top: 20px; text-transform: uppercase; transition: 0.3s; }
           #btnLoadMore:hover { background: var(--primary); color: #fff; }
@@ -289,6 +303,9 @@ dashboard.get("/", async (c) => {
                 </div>
                 <p id="mDist" style="color:#aaa; font-size:0.9rem; margin:5px 0; font-weight:900;"></p>
                 <p id="mNotes" style="display:none; color:#cbd5e1; font-size:0.78rem; line-height:1.5; margin:8px 0 0; font-weight:700; white-space:pre-wrap;"></p>
+                <div id="mStages" class="stage-list"></div>
+                <div id="mNutrition" class="nutrition-list"></div>
+                <div id="mSignals" class="signal-list"></div>
                 
                 <div id="map-modal"></div>
                 
@@ -503,11 +520,157 @@ function escapeHTML(str) {
               if (value.type === 'LineString' && Array.isArray(value.coordinates)) return value.coordinates;
               if (value.type === 'MultiLineString' && Array.isArray(value.coordinates)) return value.coordinates.flat();
               if (value.geometry) return extractCoordinateList(value.geometry);
+              if (value.points) return extractCoordinateList(value.points);
               if (value.path) return extractCoordinateList(value.path);
               if (value.data) return extractCoordinateList(value.data);
               if (value.polyline) return extractCoordinateList(value.polyline);
               if (value.coordinates) return extractCoordinateList(value.coordinates);
               return [];
+          }
+
+          function extractStageList(value) {
+              if (!value || typeof value !== 'object' || !Array.isArray(value.stages)) return [];
+              return value.stages.map(function(stage, index) {
+                  const startDistance = Number(stage.start_distance_km || 0);
+                  const endDistance = Number(stage.end_distance_km === null || stage.end_distance_km === undefined ? startDistance : stage.end_distance_km);
+                  const startMoving = Number(stage.start_moving_time || 0);
+                  const endMoving = Number(stage.end_moving_time === null || stage.end_moving_time === undefined ? startMoving : stage.end_moving_time);
+                  return {
+                      name: String(stage.name || ('Etape ' + (index + 1))),
+                      distance: Math.max(0, endDistance - startDistance),
+                      moving: Math.max(0, endMoving - startMoving),
+                      start: stage.start_time || ''
+                  };
+              }).filter(function(stage) {
+                  return stage.distance > 0 || stage.moving > 0;
+              });
+          }
+
+          function extractSignalLogList(value) {
+              if (!value || typeof value !== 'object' || !Array.isArray(value.signal_logs)) return [];
+              return value.signal_logs.map(function(log) {
+                  return {
+                      label: String(log.label || log.type || 'No signal'),
+                      type: String(log.type || 'unknown'),
+                      duration: Math.max(0, Number(log.duration_s || 0)),
+                      distance: Number(log.distance_km || 0),
+                      start: log.start || 0,
+                      detail: String(log.detail || '')
+                  };
+              }).filter(function(log) {
+                  return log.duration >= 5 || log.type === 'network_offline';
+              });
+          }
+
+          function extractNutritionSummary(value) {
+              if (!value || typeof value !== 'object' || !value.nutrition_summary) return null;
+              const summary = value.nutrition_summary;
+              return {
+                  enabled: summary.enabled !== false,
+                  water: Math.max(0, Number(summary.water_count || 0)),
+                  food: Math.max(0, Number(summary.food_count || 0))
+              };
+          }
+
+          function formatStageTime(seconds) {
+              const total = Math.max(0, Math.floor(Number(seconds || 0)));
+              const hours = Math.floor(total / 3600);
+              const minutes = Math.floor((total % 3600) / 60);
+              if (hours > 0 && minutes > 0) return hours + 'j ' + minutes + 'm';
+              if (hours > 0) return hours + 'j';
+              if (minutes > 0) return minutes + 'm';
+              return '<1m';
+          }
+
+          function renderActivityStages(stages) {
+              const wrap = document.getElementById('mStages');
+              if (!wrap) return;
+              wrap.innerHTML = '';
+
+              if (!Array.isArray(stages) || stages.length <= 1) {
+                  wrap.style.display = 'none';
+                  return;
+              }
+
+              stages.forEach(function(stage, index) {
+                  const item = document.createElement('div');
+                  const text = document.createElement('div');
+                  const name = document.createElement('div');
+                  const meta = document.createElement('div');
+                  const distance = document.createElement('div');
+
+                  item.className = 'stage-item';
+                  name.className = 'stage-name';
+                  meta.className = 'stage-meta';
+                  distance.className = 'stage-distance';
+                  name.innerText = stage.name || ('Etape ' + (index + 1));
+                  meta.innerText = formatStageTime(stage.moving) + ' moving' + (stage.start ? ' • ' + new Date(stage.start).toLocaleDateString('id-ID') : '');
+                  distance.innerText = stage.distance.toFixed(2) + ' KM';
+
+                  text.appendChild(name);
+                  text.appendChild(meta);
+                  item.appendChild(text);
+                  item.appendChild(distance);
+                  wrap.appendChild(item);
+              });
+
+              wrap.style.display = 'grid';
+          }
+
+          function renderSignalLogs(logs) {
+              const wrap = document.getElementById('mSignals');
+              if (!wrap) return;
+              wrap.innerHTML = '';
+
+              if (!Array.isArray(logs) || logs.length === 0) {
+                  wrap.style.display = 'none';
+                  return;
+              }
+
+              const totalSeconds = logs.reduce(function(sum, log) {
+                  return sum + Number(log.duration || 0);
+              }, 0);
+              const title = document.createElement('div');
+              title.className = 'signal-item';
+              title.innerHTML =
+                  '<div><div class="signal-name">No Signal Log</div>' +
+                  '<div class="signal-meta">' + logs.length + ' event tercatat</div></div>' +
+                  '<div class="signal-duration">' + formatStageTime(totalSeconds) + '</div>';
+              wrap.appendChild(title);
+
+              logs.slice(-5).forEach(function(log) {
+                  const item = document.createElement('div');
+                  const startLabel = log.start ? new Date(log.start).toLocaleString('id-ID', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '';
+                  item.className = 'signal-item';
+                  item.innerHTML =
+                      '<div><div class="signal-name">' + escapeHTML(log.label) + '</div>' +
+                      '<div class="signal-meta">' + escapeHTML(startLabel) + ' • ' + Number(log.distance || 0).toFixed(2) + ' KM</div></div>' +
+                      '<div class="signal-duration">' + formatStageTime(log.duration) + '</div>';
+                  wrap.appendChild(item);
+              });
+
+              wrap.style.display = 'grid';
+          }
+
+          function renderNutritionSummary(summary) {
+              const wrap = document.getElementById('mNutrition');
+              if (!wrap) return;
+              wrap.innerHTML = '';
+
+              if (!summary || (summary.water <= 0 && summary.food <= 0)) {
+                  wrap.style.display = 'none';
+                  return;
+              }
+
+              const water = document.createElement('div');
+              const food = document.createElement('div');
+              water.className = 'nutrition-item';
+              food.className = 'nutrition-item';
+              water.innerHTML = '<div class="nutrition-name">Reminder Minum</div><div class="nutrition-value">' + summary.water + 'x</div>';
+              food.innerHTML = '<div class="nutrition-name">Reminder Makan</div><div class="nutrition-value">' + summary.food + 'x</div>';
+              wrap.appendChild(water);
+              wrap.appendChild(food);
+              wrap.style.display = 'grid';
           }
 
           function normalizeRoutePoints(value) {
@@ -541,6 +704,9 @@ function escapeHTML(str) {
             const currentNotes = String(notes || '').trim();
             notesEl.style.display = currentNotes ? 'block' : 'none';
             notesEl.innerText = currentNotes ? currentNotes : '';
+            renderActivityStages([]);
+            renderNutritionSummary(null);
+            renderSignalLogs([]);
             document.getElementById('btn-detail-link').onclick = () => window.location.href = '/detail/' + id;
             setVisibilityButton(isPublic);
             document.getElementById('btn-visibility-link').onclick = async () => {
@@ -610,6 +776,7 @@ function escapeHTML(str) {
             
             try {
               let pts = [];
+              let routePayload = null;
               let urlStr = typeof url === 'string' ? url.trim() : '';
               
               // 1. Hapus kutip ganda jika tersangkut dari Database
@@ -617,14 +784,19 @@ function escapeHTML(str) {
               
               // 2. Deteksi format
               if (urlStr.startsWith('[') || urlStr.startsWith('{')) {
-                  pts = JSON.parse(urlStr);
+                  routePayload = JSON.parse(urlStr);
+                  pts = routePayload;
               } else if (urlStr.startsWith('http')) {
                   const res = await fetch(urlStr); 
-                  pts = await res.json();
+                  routePayload = await res.json();
+                  pts = routePayload;
               } else if (urlStr.length > 0) {
                   pts = decodePolyline(urlStr);
               }
               
+              renderActivityStages(extractStageList(routePayload));
+              renderNutritionSummary(extractNutritionSummary(routePayload));
+              renderSignalLogs(extractSignalLogList(routePayload));
               pts = normalizeRoutePoints(pts);
               
               if (pts.length > 0) {
@@ -883,6 +1055,13 @@ dashboard.get("/route_plan", async (c) => {
             .point-action { border: 1px solid var(--line); background: rgba(0,0,0,0.2); color: #fff; border-radius: 8px; min-width: 24px; height: 24px; font-size: 0.7rem; font-weight: 900; cursor: pointer; }
             .point-action:disabled { opacity: 0.32; cursor: not-allowed; }
             .planner-tools { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; }
+            .mode-toggle { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; }
+            .mode-toggle .active { background: var(--primary); }
+            .checkpoint-panel { border: 1px solid var(--line); border-radius: 14px; padding: 10px; margin: 8px 0 10px; background: rgba(255,255,255,0.035); }
+            .checkpoint-list { display: grid; gap: 6px; margin-top: 8px; }
+            .checkpoint-item { display: grid; grid-template-columns: 1fr 28px; gap: 8px; align-items: center; border: 1px solid var(--line); border-radius: 12px; padding: 8px; background: rgba(0,0,0,0.18); }
+            .checkpoint-title { font-size: 0.72rem; font-weight: 950; line-height: 1.25; }
+            .checkpoint-meta { color: var(--muted); font-size: 0.64rem; font-weight: 800; margin-top: 3px; line-height: 1.25; }
             .hint { color: var(--muted); font-size: 0.72rem; line-height: 1.35; font-weight: 700; margin: 7px 2px 10px; }
             .status { color: var(--muted); font-size: 0.75rem; font-weight: 800; min-height: 18px; margin: 2px 2px 9px; }
             .gps-control { position: fixed; right: 14px; top: 84px; z-index: 1000; border: 1px solid var(--line); border-radius: 14px; background: var(--panel); color: #fff; backdrop-filter: blur(14px); padding: 12px 14px; font-size: 0.72rem; font-weight: 900; cursor: pointer; pointer-events: auto; box-shadow: 0 12px 30px rgba(0,0,0,0.35); }
@@ -927,12 +1106,42 @@ dashboard.get("/route_plan", async (c) => {
                 <button class="btn" onclick="useCurrentLocation()">PAKAI LOKASI</button>
             </div>
 
-            <div class="hint">Ketuk peta untuk menambah titik. Titik pertama menjadi start, titik terakhir menjadi tujuan, titik di tengah menjadi waypoint.</div>
+            <div class="mode-toggle">
+                <button class="btn active" id="btnModeRoute" onclick="setPlannerMode('route')">TITIK RUTE</button>
+                <button class="btn" id="btnModeCheckpoint" onclick="setPlannerMode('checkpoint')">CHECKPOINT</button>
+            </div>
+            <div class="hint" id="plannerHint">Ketuk peta untuk menambah titik. Titik pertama menjadi start, titik terakhir menjadi tujuan, titik di tengah menjadi waypoint.</div>
             <div id="status" class="status">Belum ada titik rute.</div>
             <div id="points" class="points"></div>
             <div class="planner-tools">
                 <button class="btn" id="btnUndoPoint" onclick="undoPoint()" disabled>UNDO TITIK</button>
                 <button class="btn" id="btnFitMap" onclick="fitRouteView()" disabled>FIT MAP</button>
+            </div>
+            <div class="checkpoint-panel">
+                <div class="row" style="margin-bottom:8px;">
+                    <input id="checkpointName" class="input" placeholder="Nama checkpoint / resupply">
+                    <select id="checkpointType" class="select">
+                        <option value="food">Makan / Warung</option>
+                        <option value="water">Air</option>
+                        <option value="minimarket">Minimarket</option>
+                        <option value="fuel">Pom / Bengkel</option>
+                        <option value="mosque">Masjid / Ibadah</option>
+                        <option value="camp">Camp / Istirahat</option>
+                        <option value="medical">Medis</option>
+                        <option value="other">Lainnya</option>
+                    </select>
+                </div>
+                <div class="row" style="margin-bottom:0;">
+                    <select id="checkpointReminder" class="select">
+                        <option value="0">Tanpa reminder</option>
+                        <option value="500">Ingatkan 500 m</option>
+                        <option value="1000" selected>Ingatkan 1 km</option>
+                        <option value="2000">Ingatkan 2 km</option>
+                        <option value="5000">Ingatkan 5 km</option>
+                    </select>
+                    <button class="btn" onclick="addCheckpointFromUser()">CHECKPOINT GPS</button>
+                </div>
+                <div id="checkpoints" class="checkpoint-list"></div>
             </div>
 
             <div class="row-3">
@@ -965,6 +1174,9 @@ dashboard.get("/route_plan", async (c) => {
             let map;
             let points = [];
             let markers = [];
+            let checkpoints = [];
+            let checkpointMarkers = [];
+            let plannerMode = 'route';
             let guideLine = null;
             let routeLine = null;
             let savedRoute = null;
@@ -976,6 +1188,7 @@ dashboard.get("/route_plan", async (c) => {
             let followUser = false;
             let centeredOnUserOnce = false;
             const preloadRouteId = "${routeId}";
+            const offlineRoutePackKey = 'gaspool_offline_route_packs_v1';
 
             const primaryColor = '#FF5F00';
             const routeColor = '#3498db';
@@ -989,7 +1202,8 @@ dashboard.get("/route_plan", async (c) => {
                 }).addTo(map);
 
                 map.on('click', function(e) {
-                    addPoint(e.latlng.lat, e.latlng.lng);
+                    if (plannerMode === 'checkpoint') addCheckpoint(e.latlng.lat, e.latlng.lng);
+                    else addPoint(e.latlng.lat, e.latlng.lng);
                 });
 
                 map.on('dragstart', function() {
@@ -1017,6 +1231,88 @@ dashboard.get("/route_plan", async (c) => {
                 const el = document.getElementById('status');
                 el.innerText = text;
                 el.style.color = isError ? '#e74c3c' : '#94a3b8';
+            }
+
+            function readOfflineRoutePacks() {
+                try {
+                    const raw = localStorage.getItem(offlineRoutePackKey);
+                    const parsed = raw ? JSON.parse(raw) : null;
+                    return parsed && typeof parsed === 'object' && parsed.routes ? parsed : { version: 1, routes: {} };
+                } catch(e) {
+                    return { version: 1, routes: {} };
+                }
+            }
+
+            function writeOfflineRoutePacks(store) {
+                try {
+                    const routes = store && store.routes ? store.routes : {};
+                    const entries = Object.keys(routes)
+                        .map(function(id) { return [id, routes[id]]; })
+                        .sort(function(a, b) { return Number(b[1].saved_at || 0) - Number(a[1].saved_at || 0); })
+                        .slice(0, 30);
+                    const nextStore = { version: 1, routes: {} };
+
+                    entries.forEach(function(entry) {
+                        nextStore.routes[entry[0]] = entry[1];
+                    });
+
+                    localStorage.setItem(offlineRoutePackKey, JSON.stringify(nextStore));
+                    return true;
+                } catch(e) {
+                    console.warn('Offline route pack gagal disimpan:', e);
+                    return false;
+                }
+            }
+
+            function saveOfflineRoutePack(route) {
+                if (!route || !route.id || !route.data) return false;
+
+                const store = readOfflineRoutePacks();
+                const routeId = String(route.id);
+                store.routes[routeId] = {
+                    saved_at: Date.now(),
+                    route: {
+                        id: route.id,
+                        name: route.name || route.data.name || 'Route Plan',
+                        distance: Number(route.distance || route.data.distance_km || 0),
+                        duration: Number(route.duration || route.data.duration_s || 0),
+                        profile: route.profile || route.data.profile || 'cycling-regular',
+                        provider: route.provider || route.data.provider || 'offline-pack',
+                        created_at: route.created_at || new Date().toISOString(),
+                        data: route.data
+                    }
+                };
+
+                return writeOfflineRoutePacks(store);
+            }
+
+            function setPlannerMode(mode) {
+                plannerMode = mode === 'checkpoint' ? 'checkpoint' : 'route';
+                document.getElementById('btnModeRoute').classList.toggle('active', plannerMode === 'route');
+                document.getElementById('btnModeCheckpoint').classList.toggle('active', plannerMode === 'checkpoint');
+                document.getElementById('plannerHint').innerText = plannerMode === 'checkpoint'
+                    ? 'Mode checkpoint aktif. Ketuk peta atau pilih hasil pencarian untuk menambah titik makan, air, pom, masjid, camp, atau resupply.'
+                    : 'Ketuk peta untuk menambah titik. Titik pertama menjadi start, titik terakhir menjadi tujuan, titik di tengah menjadi waypoint.';
+                setStatus(plannerMode === 'checkpoint' ? 'Mode checkpoint aktif.' : 'Mode titik rute aktif.', false);
+            }
+
+            function checkpointTypeLabel(type) {
+                const labels = {
+                    food: 'Makan / Warung',
+                    water: 'Air',
+                    minimarket: 'Minimarket',
+                    fuel: 'Pom / Bengkel',
+                    mosque: 'Masjid / Ibadah',
+                    camp: 'Camp / Istirahat',
+                    medical: 'Medis',
+                    other: 'Lainnya'
+                };
+                return labels[type] || labels.other;
+            }
+
+            function nextCheckpointName(type) {
+                const base = checkpointTypeLabel(type || document.getElementById('checkpointType').value);
+                return base + ' #' + (checkpoints.length + 1);
             }
 
             function updateRecenterButton() {
@@ -1198,13 +1494,18 @@ dashboard.get("/route_plan", async (c) => {
                     return;
                 }
 
-                addPoint(lat, lng);
+                if (plannerMode === 'checkpoint') {
+                    document.getElementById('checkpointName').value = result.name || result.label || '';
+                    addCheckpoint(lat, lng, result.name || result.label || '');
+                } else {
+                    addPoint(lat, lng);
+                }
                 map.setView([lat, lng], 16);
                 document.getElementById('locationSearch').value = result.name || result.label || '';
                 clearSearchResults();
 
                 const routeName = document.getElementById('routeName');
-                if (!wasEmpty && routeName.value === 'Gowes Route Plan') {
+                if (plannerMode === 'route' && !wasEmpty && routeName.value === 'Gowes Route Plan') {
                     routeName.value = 'Route ke ' + (result.name || result.label || 'Tujuan');
                 }
             }
@@ -1232,6 +1533,100 @@ dashboard.get("/route_plan", async (c) => {
                 points.push({ lat: lat, lng: lng });
                 invalidateGeneratedRoute();
                 drawPoints();
+            }
+
+            function addCheckpoint(lat, lng, name) {
+                const type = document.getElementById('checkpointType').value || 'other';
+                const reminderM = Number(document.getElementById('checkpointReminder').value || 0);
+                const checkpointName =
+                    String(name || document.getElementById('checkpointName').value || '').trim() ||
+                    nextCheckpointName(type);
+
+                checkpoints.push({
+                    lat: lat,
+                    lng: lng,
+                    name: checkpointName,
+                    type: type,
+                    reminder_m: Number.isFinite(reminderM) ? reminderM : 1000
+                });
+                invalidateGeneratedRoute();
+                drawCheckpoints();
+                setStatus('Checkpoint "' + checkpointName + '" ditambahkan.', false);
+            }
+
+            function addCheckpointFromUser() {
+                if (!userPosition) {
+                    setStatus('Lokasi GPS belum tersedia.', true);
+                    return;
+                }
+
+                addCheckpoint(userPosition.lat, userPosition.lng);
+                map.setView([userPosition.lat, userPosition.lng], Math.max(map.getZoom(), 16), { animate: true });
+            }
+
+            function removeCheckpoint(index) {
+                if (index < 0 || index >= checkpoints.length) return;
+
+                checkpoints.splice(index, 1);
+                invalidateGeneratedRoute();
+                drawCheckpoints();
+                setStatus('Checkpoint dihapus.', false);
+            }
+
+            function focusCheckpoint(index) {
+                const checkpoint = checkpoints[index];
+                if (!checkpoint) return;
+                map.setView([checkpoint.lat, checkpoint.lng], Math.max(map.getZoom(), 16), { animate: true });
+            }
+
+            function drawCheckpoints() {
+                checkpointMarkers.forEach(function(marker) { map.removeLayer(marker); });
+                checkpointMarkers = [];
+
+                const list = document.getElementById('checkpoints');
+                list.innerHTML = '';
+
+                checkpoints.forEach(function(checkpoint, index) {
+                    const label = checkpoint.name || ('Checkpoint ' + (index + 1));
+                    const marker = L.circleMarker([checkpoint.lat, checkpoint.lng], {
+                        radius: 7,
+                        color: '#fff',
+                        weight: 2,
+                        fillColor: '#f1c40f',
+                        fillOpacity: 1
+                    }).addTo(map).bindTooltip(label, { permanent: false, direction: 'top' });
+                    marker.on('click', function() { focusCheckpoint(index); });
+                    checkpointMarkers.push(marker);
+
+                    const item = document.createElement('div');
+                    const text = document.createElement('div');
+                    const title = document.createElement('div');
+                    const meta = document.createElement('div');
+                    const remove = document.createElement('button');
+
+                    item.className = 'checkpoint-item';
+                    item.onclick = function() { focusCheckpoint(index); };
+                    title.className = 'checkpoint-title';
+                    meta.className = 'checkpoint-meta';
+                    title.innerText = label;
+                    meta.innerText =
+                        checkpointTypeLabel(checkpoint.type) +
+                        ' • reminder ' +
+                        (Number(checkpoint.reminder_m || 0) > 0 ? checkpoint.reminder_m + ' m' : 'mati');
+                    remove.type = 'button';
+                    remove.className = 'point-action';
+                    remove.innerText = '×';
+                    remove.onclick = function(e) {
+                        e.stopPropagation();
+                        removeCheckpoint(index);
+                    };
+
+                    text.appendChild(title);
+                    text.appendChild(meta);
+                    item.appendChild(text);
+                    item.appendChild(remove);
+                    list.appendChild(item);
+                });
             }
 
             function undoPoint() {
@@ -1303,6 +1698,7 @@ dashboard.get("/route_plan", async (c) => {
                     const route = data.route;
                     const routeData = route.data || {};
                     const waypoints = Array.isArray(routeData.waypoints) ? routeData.waypoints : [];
+                    const routeCheckpoints = Array.isArray(routeData.checkpoints) ? routeData.checkpoints : [];
 
                     points = waypoints.map(function(point) {
                         return {
@@ -1312,22 +1708,35 @@ dashboard.get("/route_plan", async (c) => {
                     }).filter(function(point) {
                         return Number.isFinite(point.lat) && Number.isFinite(point.lng);
                     });
+                    checkpoints = routeCheckpoints.map(function(checkpoint) {
+                        return {
+                            lat: Number(checkpoint.lat),
+                            lng: Number(checkpoint.lng !== undefined ? checkpoint.lng : checkpoint.lon),
+                            name: checkpoint.name || 'Checkpoint',
+                            type: checkpoint.type || 'other',
+                            reminder_m: Number(checkpoint.reminder_m || checkpoint.reminderM || 1000)
+                        };
+                    }).filter(function(checkpoint) {
+                        return Number.isFinite(checkpoint.lat) && Number.isFinite(checkpoint.lng);
+                    });
 
                     savedRoute = route;
+                    saveOfflineRoutePack(route);
                     document.getElementById('routeName').value = route.name || routeData.name || 'Gowes Route Plan';
                     if (route.profile || routeData.profile) {
                         document.getElementById('routeProfile').value = route.profile || routeData.profile;
                     }
 
                     drawPoints();
+                    drawCheckpoints();
                     drawRoute(routeData.coordinates || []);
                     document.getElementById('statDist').innerText = Number(route.distance || routeData.distance_km || 0).toFixed(1);
                     document.getElementById('statTime').innerText = Math.max(1, Math.round(Number(route.duration || routeData.duration_s || 0) / 60));
                     document.getElementById('statTurns').innerText = Array.isArray(routeData.instructions) ? routeData.instructions.length : 0;
-                    document.getElementById('routeInfo').innerText = 'Route ID #' + route.id + ' dimuat dari library.';
+                    document.getElementById('routeInfo').innerText = 'Route ID #' + route.id + ' dimuat dari library dan siap offline.';
                     document.getElementById('summary').style.display = 'block';
                     document.getElementById('btnStart').disabled = false;
-                    setStatus('Rute tersimpan berhasil dimuat.', false);
+                    setStatus('Rute tersimpan berhasil dimuat dan dipack offline.', false);
                 } catch (err) {
                     console.error(err);
                     setStatus(err.message || 'Gagal memuat rute tersimpan.', true);
@@ -1450,8 +1859,10 @@ dashboard.get("/route_plan", async (c) => {
 
             function resetPlan() {
                 points = [];
+                checkpoints = [];
                 invalidateGeneratedRoute();
                 drawPoints();
+                drawCheckpoints();
             }
 
             async function generateRoute() {
@@ -1472,7 +1883,8 @@ dashboard.get("/route_plan", async (c) => {
                         body: JSON.stringify({
                             name: document.getElementById('routeName').value,
                             profile: document.getElementById('routeProfile').value,
-                            waypoints: points
+                            waypoints: points,
+                            checkpoints: checkpoints
                         })
                     });
 
@@ -1483,15 +1895,16 @@ dashboard.get("/route_plan", async (c) => {
                     }
 
                     savedRoute = data.route;
+                    saveOfflineRoutePack(data.route);
                     drawRoute(data.route.data.coordinates || []);
 
                     document.getElementById('statDist').innerText = Number(data.route.distance || 0).toFixed(1);
                     document.getElementById('statTime').innerText = Math.max(1, Math.round((data.route.duration || 0) / 60));
                     document.getElementById('statTurns').innerText = data.route.instructions_count || 0;
-                    document.getElementById('routeInfo').innerText = 'Route ID #' + data.route.id + ' siap. Sprint berikutnya akan memuat rute ini di tracker.';
+                    document.getElementById('routeInfo').innerText = 'Route ID #' + data.route.id + ' siap dan sudah dipack offline.';
                     document.getElementById('summary').style.display = 'block';
                     document.getElementById('btnStart').disabled = false;
-                    setStatus('Rute berhasil dibuat dan disimpan.', false);
+                    setStatus('Rute berhasil dibuat, disimpan, dan dipack offline.', false);
                 } catch (err) {
                     console.error(err);
                     setStatus(err.message || 'Gagal generate rute.', true);
@@ -1584,7 +1997,7 @@ dashboard.get("/routes", async (c) => {
           .route-card.favorite { border-color: rgba(241,196,15,0.55); background: rgba(241,196,15,0.07); }
           .route-title { font-size: 1rem; font-weight: 900; line-height: 1.25; margin-bottom: 8px; }
           .route-meta { color: var(--muted); font-size: 0.72rem; font-weight: 800; line-height: 1.45; margin-bottom: 12px; }
-          .route-actions { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }
+          .route-actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(78px, 1fr)); gap: 8px; }
           .empty { border: 1px dashed var(--line); border-radius: 16px; padding: 26px 18px; text-align: center; color: var(--muted); font-weight: 800; }
           #btnMore { width: 100%; margin-top: 14px; display: none; }
           @media (max-width: 560px) {
@@ -1618,6 +2031,7 @@ dashboard.get("/routes", async (c) => {
         let offset = 0;
         const limit = 20;
         let loading = false;
+        const offlineRoutePackKey = 'gaspool_offline_route_packs_v1';
 
         function escapeHTML(str) {
           return String(str || '')
@@ -1647,6 +2061,59 @@ dashboard.get("/routes", async (c) => {
           return d.toLocaleDateString('id-ID') + ' ' + d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
         }
 
+        function readOfflineRoutePacks() {
+          try {
+            const raw = localStorage.getItem(offlineRoutePackKey);
+            const parsed = raw ? JSON.parse(raw) : null;
+            return parsed && typeof parsed === 'object' && parsed.routes ? parsed : { version: 1, routes: {} };
+          } catch(e) {
+            return { version: 1, routes: {} };
+          }
+        }
+
+        function writeOfflineRoutePacks(store) {
+          try {
+            const routes = store && store.routes ? store.routes : {};
+            const entries = Object.keys(routes)
+              .map(function(id) { return [id, routes[id]]; })
+              .sort(function(a, b) { return Number(b[1].saved_at || 0) - Number(a[1].saved_at || 0); })
+              .slice(0, 30);
+            const nextStore = { version: 1, routes: {} };
+
+            entries.forEach(function(entry) {
+              nextStore.routes[entry[0]] = entry[1];
+            });
+
+            localStorage.setItem(offlineRoutePackKey, JSON.stringify(nextStore));
+            return true;
+          } catch(e) {
+            console.warn('Offline route pack gagal disimpan:', e);
+            return false;
+          }
+        }
+
+        function saveOfflineRoutePack(route) {
+          if (!route || !route.id || !route.data) return false;
+
+          const store = readOfflineRoutePacks();
+          const routeId = String(route.id);
+          store.routes[routeId] = {
+            saved_at: Date.now(),
+            route: {
+              id: route.id,
+              name: route.name || route.data.name || 'Route Plan',
+              distance: Number(route.distance || route.data.distance_km || 0),
+              duration: Number(route.duration || route.data.duration_s || 0),
+              profile: route.profile || route.data.profile || 'cycling-regular',
+              provider: route.provider || route.data.provider || 'offline-pack',
+              created_at: route.created_at || new Date().toISOString(),
+              data: route.data
+            }
+          };
+
+          return writeOfflineRoutePacks(store);
+        }
+
         function profileToActivityType(profile) {
           if (profile === 'foot-running') return 'run';
           if (profile === 'foot-hiking') return 'hike';
@@ -1661,6 +2128,7 @@ dashboard.get("/routes", async (c) => {
           const actions = document.createElement('div');
           const startBtn = document.createElement('button');
           const openBtn = document.createElement('button');
+          const packBtn = document.createElement('button');
           const exportBtn = document.createElement('button');
           const favoriteBtn = document.createElement('button');
           const renameBtn = document.createElement('button');
@@ -1699,6 +2167,12 @@ dashboard.get("/routes", async (c) => {
             window.location.href = '/route_plan?route=' + encodeURIComponent(route.id);
           };
 
+          packBtn.className = 'btn btn-outline';
+          packBtn.innerText = 'PACK';
+          packBtn.onclick = function() {
+            prepareOfflineRoutePack(route, packBtn);
+          };
+
           exportBtn.className = 'btn btn-outline';
           exportBtn.innerText = 'GPX';
           exportBtn.onclick = function() {
@@ -1723,6 +2197,7 @@ dashboard.get("/routes", async (c) => {
 
           actions.appendChild(startBtn);
           actions.appendChild(openBtn);
+          actions.appendChild(packBtn);
           actions.appendChild(exportBtn);
           actions.appendChild(favoriteBtn);
           actions.appendChild(renameBtn);
@@ -1732,6 +2207,40 @@ dashboard.get("/routes", async (c) => {
           card.appendChild(actions);
 
           return card;
+        }
+
+        async function prepareOfflineRoutePack(route, button) {
+          const originalText = button.innerText;
+          button.disabled = true;
+          button.innerText = 'PACK...';
+          setStatus('Menyiapkan offline route pack...', false);
+
+          try {
+            const res = await fetch('/api/route_plan/' + encodeURIComponent(route.id), {
+              cache: 'no-store'
+            });
+            const data = await res.json();
+
+            if (!res.ok || !data.success || !data.route || !data.route.data) {
+              throw new Error(data.message || 'Gagal memuat data rute.');
+            }
+
+            if (!saveOfflineRoutePack(data.route)) {
+              throw new Error('Storage perangkat penuh atau localStorage dibatasi browser.');
+            }
+
+            button.innerText = 'READY';
+            setStatus('Offline route pack siap untuk "' + (data.route.name || route.name || ('#' + route.id)) + '".', false);
+          } catch (err) {
+            console.error(err);
+            button.innerText = originalText;
+            setStatus(err.message || 'Gagal menyiapkan offline route pack.', true);
+          } finally {
+            setTimeout(function() {
+              button.disabled = false;
+              if (button.innerText === 'READY') button.innerText = 'PACK';
+            }, 1400);
+          }
         }
 
         async function loadRoutes() {
@@ -2623,6 +3132,7 @@ dashboard.get("/heatmap", async (c) => {
               if (value.type === 'LineString' && Array.isArray(value.coordinates)) return value.coordinates;
               if (value.type === 'MultiLineString' && Array.isArray(value.coordinates)) return value.coordinates.flat();
               if (value.geometry) return extractCoordinateList(value.geometry);
+              if (value.points) return extractCoordinateList(value.points);
               if (value.path) return extractCoordinateList(value.path);
               if (value.data) return extractCoordinateList(value.data);
               if (value.polyline) return extractCoordinateList(value.polyline);
@@ -3268,6 +3778,7 @@ dashboard.get("/:username", async (c, next) => {
               if (value.type === 'LineString' && Array.isArray(value.coordinates)) return value.coordinates;
               if (value.type === 'MultiLineString' && Array.isArray(value.coordinates)) return value.coordinates.flat();
               if (value.geometry) return extractCoordinateList(value.geometry);
+              if (value.points) return extractCoordinateList(value.points);
               if (value.path) return extractCoordinateList(value.path);
               if (value.data) return extractCoordinateList(value.data);
               if (value.polyline) return extractCoordinateList(value.polyline);
