@@ -87,6 +87,8 @@ tracker.get("/record", async (c) => {
             .stage-title { color:#fff; font-size:10px; font-weight:950; letter-spacing:1px; text-transform:uppercase; margin-bottom:3px; }
             .stage-meta { color:#94a3b8; font-size:9px; line-height:1.35; font-weight:900; }
             .btn-stage { background:rgba(255,95,0,0.18); border:1px solid var(--primary); color:var(--primary); padding:10px; font-size:9px; }
+            .stage-actions { display:grid; grid-template-columns:1fr; gap:7px; }
+            .btn-overnight { background:rgba(52,152,219,0.13); border:1px solid rgba(52,152,219,0.5); color:#3498db; padding:10px; font-size:9px; }
             .signal-panel { display:grid; grid-template-columns:1fr auto; gap:10px; align-items:center; margin-bottom:10px; padding:9px 10px; border-radius:14px; background:rgba(241,196,15,0.08); border:1px solid rgba(241,196,15,0.18); pointer-events:none; }
             .signal-title { color:#fff; font-size:9px; font-weight:950; letter-spacing:1px; text-transform:uppercase; margin-bottom:3px; }
             .signal-meta { color:#94a3b8; font-size:9px; line-height:1.35; font-weight:900; }
@@ -277,7 +279,10 @@ tracker.get("/record", async (c) => {
                     <div class="stage-title" id="stage-title">ETAPE 1</div>
                     <div class="stage-meta" id="stage-meta">Siap untuk perjalanan multi-day.</div>
                 </div>
-                <button id="btn-stage" class="btn btn-stage" onclick="startManualStage()" disabled>ETAPE BARU</button>
+                <div class="stage-actions">
+                    <button id="btn-stage" class="btn btn-stage" onclick="startManualStage()" disabled>ETAPE BARU</button>
+                    <button id="btn-overnight" class="btn btn-overnight" onclick="pauseOvernight()" disabled>LANJUT BESOK</button>
+                </div>
             </div>
             ` : ""}
             <div class="privacy-row">
@@ -311,6 +316,9 @@ tracker.get("/record", async (c) => {
 			let startTimezoneOffsetMin = null;
 			let startTimezoneName = '';
 			let tripStages = [];
+			let restBlocks = [];
+			let overnightPause = null;
+			let autoPauseStartedAt = 0;
 			let nutritionReminderState = {
 				enabled: true,
 				waterCount: 0,
@@ -332,6 +340,7 @@ tracker.get("/record", async (c) => {
 			const NORMAL_MAX_CLOCK_DELTA_SECONDS = 10;
 			const STEALTH_MAX_CLOCK_DELTA_SECONDS = 30;
 			const REST_CLOCK_GAP_SECONDS = 120;
+			const REST_BLOCK_MIN_SECONDS = 20 * 60;
 			const MULTI_DAY_STAGE_GAP_MS = 4 * 60 * 60 * 1000;
 
 			const isCap = ${isCaptain};
@@ -841,6 +850,67 @@ function clearDB() {
 				return '<1m';
 			}
 
+			function restBlockLabel(type) {
+				const labels = {
+					overnight_pause: 'Pause overnight',
+					resume_gap: 'Jeda resume panjang',
+					system_gap: 'Jeda sistem panjang',
+					auto_pause: 'Auto-pause panjang'
+				};
+
+				return labels[type] || 'Rest block';
+			}
+
+			function normalizeRestBlocks(list) {
+				if (!Array.isArray(list)) return [];
+
+				return list.map(function(block) {
+					const start = Number(block.start || 0);
+					const end = Number(block.end || 0);
+					const duration = Number(block.duration_s || ((end && start) ? (end - start) / 1000 : 0));
+					const type = String(block.type || 'rest').slice(0, 40);
+
+					return {
+						type: type,
+						label: String(block.label || restBlockLabel(type)).slice(0, 80),
+						start: Number.isFinite(start) && start > 0 ? start : Date.now(),
+						end: Number.isFinite(end) && end > 0 ? end : null,
+						duration_s: Math.max(0, Math.floor(Number.isFinite(duration) ? duration : 0)),
+						distance_km: Number(Number(block.distance_km || dist || 0).toFixed(3)),
+						moving_time: Math.max(0, Math.floor(Number(block.moving_time || movingTime || 0))),
+						note: String(block.note || '').slice(0, 160)
+					};
+				}).filter(function(block) {
+					return block.duration_s >= REST_BLOCK_MIN_SECONDS;
+				}).slice(-80);
+			}
+
+			function recordRestBlock(start, end, type, note) {
+				const safeStart = Number(start || 0);
+				const safeEnd = Number(end || Date.now());
+				if (!Number.isFinite(safeStart) || !Number.isFinite(safeEnd) || safeEnd <= safeStart) return false;
+
+				const duration = Math.floor((safeEnd - safeStart) / 1000);
+				if (duration < REST_BLOCK_MIN_SECONDS) return false;
+
+				restBlocks = normalizeRestBlocks(restBlocks.concat([{
+					type: type || 'rest',
+					label: restBlockLabel(type || 'rest'),
+					start: safeStart,
+					end: safeEnd,
+					duration_s: duration,
+					distance_km: Number((dist || 0).toFixed(3)),
+					moving_time: Math.floor(movingTime || 0),
+					note: note || ''
+				}]));
+
+				return true;
+			}
+
+			function serializeRestBlocks() {
+				return normalizeRestBlocks(restBlocks);
+			}
+
 			function signalReasonLabel(type) {
 				const labels = {
 					network_offline: 'Jaringan offline',
@@ -1232,6 +1302,7 @@ function clearDB() {
 				const title = document.getElementById('stage-title');
 				const meta = document.getElementById('stage-meta');
 				const btn = document.getElementById('btn-stage');
+				const overnightBtn = document.getElementById('btn-overnight');
 				if (!title || !meta) return;
 
 				const stages = normalizeTripStages(tripStages);
@@ -1243,6 +1314,7 @@ function clearDB() {
 				title.innerText = 'ETAPE ' + stageNumber;
 				meta.innerText = stageDistance.toFixed(2) + ' km etape ini • ' + formatStageDuration(stageMoving) + ' moving';
 				if (btn) btn.disabled = !rec || stageDistance < 0.2;
+				if (overnightBtn) overnightBtn.disabled = !rec;
 			}
 
 			function ensureCurrentStage(reason) {
@@ -1302,14 +1374,118 @@ function clearDB() {
 				speakRoute('Etape baru dimulai.', false);
 			}
 
+			function stopLiveEngines() {
+				rec = false;
+				try {
+					if (watchId) navigator.geolocation.clearWatch(watchId);
+				} catch(e) {}
+				if (radarInt) clearInterval(radarInt);
+				if (clockInt) clearInterval(clockInt);
+				if (peletonRoutePollInt) clearInterval(peletonRoutePollInt);
+				restartGpsWatch = null;
+				releaseWakeLock();
+				updateStageUI();
+			}
+
+			function pauseOvernight() {
+				if (!rec) return;
+				if (!confirm('Simpan sesi untuk dilanjutkan nanti? Aktivitas belum akan diupload.')) return;
+
+				const pausedAt = Date.now();
+				overnightPause = {
+					active: true,
+					paused_at: pausedAt,
+					distance_km: Number((dist || 0).toFixed(3)),
+					moving_time: Math.floor(movingTime || 0)
+				};
+				closeCurrentStage('overnight_pause');
+				persistBlackboxSnapshot(pausedAt);
+				stopLiveEngines();
+
+				document.getElementById('btn-start').style.display = 'none';
+				document.getElementById('btn-stop').style.display = 'none';
+				renderResumeSummary(buildBlackboxSnapshot(pausedAt));
+				document.getElementById('resume-copy').innerHTML = 'Sesi disimpan untuk dilanjutkan nanti.<br>Buka lagi saat siap berangkat.';
+				document.getElementById('safeMode').style.display = 'flex';
+				speakRoute('Sesi disimpan. Lanjutkan besok dari resume mission.', true);
+			}
+
 			function maybeStartResumeStage(savedAt) {
 				const gap = Date.now() - Number(savedAt || 0);
 				if (!Number.isFinite(gap) || gap < MULTI_DAY_STAGE_GAP_MS) return false;
 				if (dist < 0.2 && path.length < 2) return false;
 
+				recordRestBlock(Number(savedAt || 0), Date.now(), 'resume_gap', 'Sesi dilanjutkan setelah jeda panjang.');
 				beginNextStage('resume_gap');
 				speakRoute('Jeda panjang terdeteksi. Gaspool memulai etape baru.', true);
 				return true;
+			}
+
+			function buildBlackboxSnapshot(savedAt) {
+				return {
+					dist,
+					startT,
+					startTimezoneOffsetMin:
+						normalizeTimezoneOffset(
+							startTimezoneOffsetMin
+						),
+					startTimezoneName:
+						normalizeTimezoneName(
+							startTimezoneName
+						),
+					movingTime,
+					lastAnnouncedKm,
+					tempReadings,
+					lastTempCheck,
+					totalElevation,
+					lastAlt,
+					skippedClockGapSeconds,
+					trackingMode,
+					tripStages:
+						serializeTripStages(
+							false
+						),
+					restBlocks:
+						serializeRestBlocks(),
+					overnightPause,
+					nutritionReminderState,
+					nutritionReminderEvents:
+						normalizeNutritionEvents(
+							nutritionReminderEvents
+						),
+					signalLogs:
+						serializeSignalLogs(
+							true
+						),
+					autoRerouteCount,
+					lastAutoRerouteAt,
+					roomID,
+					plannedRouteId: activePlannedRouteId,
+					plannedRouteName:
+						plannedRouteData && plannedRouteData.name
+							? plannedRouteData.name
+							: '',
+					isPublic: rideIsPublic,
+					userName,
+					trackPointCount:
+						path.length,
+					lastPosition:
+						latestPosition
+							? {
+								lat: latestPosition.lat,
+								lng: latestPosition.lng,
+								accuracy: latestPosition.accuracy || 0
+							}
+							: null,
+					activityType:
+						'${type}',
+					savedAt:
+						Number(savedAt || Date.now())
+				};
+			}
+
+			function persistBlackboxSnapshot(savedAt) {
+				localStorage.setItem(key, JSON.stringify(buildBlackboxSnapshot(savedAt || Date.now())));
 			}
 
 			function renderResumeSummary(data, isCorrupt = false) {
@@ -2464,6 +2640,8 @@ document.getElementById(
 					totalElevation = d.totalElevation || 0;
 					lastAlt = d.lastAlt || null;
 					tripStages = normalizeTripStages(d.tripStages);
+					restBlocks = normalizeRestBlocks(d.restBlocks);
+					overnightPause = d.overnightPause && d.overnightPause.active ? d.overnightPause : null;
 					nutritionReminderState = normalizeNutritionState(d.nutritionReminderState);
 					nutritionReminderEvents = normalizeNutritionEvents(d.nutritionReminderEvents);
 					signalLogs = normalizeSignalLogs(d.signalLogs);
@@ -2516,7 +2694,17 @@ document.getElementById(
 					}
 
 					ensureCurrentStage('resume');
-					maybeStartResumeStage(d.savedAt);
+					const overnightPauseStart = overnightPause && overnightPause.paused_at ? Number(overnightPause.paused_at) : 0;
+					const overnightRecorded = overnightPauseStart > 0
+						? recordRestBlock(overnightPauseStart, Date.now(), 'overnight_pause', 'Sesi dilanjutkan dari Pause Overnight.')
+						: false;
+					overnightPause = null;
+					if (overnightRecorded && dist >= 0.2 && path.length >= 2) {
+						beginNextStage('overnight_resume');
+						speakRoute('Pause overnight selesai. Etape baru dimulai.', true);
+					} else {
+						maybeStartResumeStage(d.savedAt);
+					}
 					
 					mulai(true); // Lanjut gowes
 
@@ -2599,6 +2787,9 @@ function gpsQuality(acc) {
 					lastAutoRerouteAt = 0;
 					lastPointSavedAt = 0;
 					tripStages = [];
+					restBlocks = [];
+					overnightPause = null;
+					autoPauseStartedAt = 0;
 					nutritionReminderState = defaultNutritionState();
 					nutritionReminderEvents = [];
 					signalLogs = [];
@@ -2636,6 +2827,14 @@ function gpsQuality(acc) {
 					if (!Number.isFinite(delta) || delta < 0) delta = 0;
 					if (delta > REST_CLOCK_GAP_SECONDS) {
 						skippedClockGapSeconds += delta;
+						if (delta >= REST_BLOCK_MIN_SECONDS) {
+							recordRestBlock(
+								now - (delta * 1000),
+								now,
+								'system_gap',
+								'Browser atau sistem berhenti lama. Moving time tidak ditambahkan.'
+							);
+						}
 						pushSignalLog(
 							'system_gap',
 							now - (delta * 1000),
@@ -2690,6 +2889,12 @@ if (!gpsStatus) return;
 
 					if (speedKmh < activityAutoPauseSpeedKmh()) {
 
+  if (!isPaused && !autoPauseStartedAt) {
+
+    autoPauseStartedAt = Date.now();
+
+  }
+
   isPaused = true;
 
   gpsStatus.innerHTML =
@@ -2700,6 +2905,18 @@ if (!gpsStatus) return;
     '#f1c40f';
 
 } else {
+
+  if (autoPauseStartedAt) {
+
+    recordRestBlock(
+      autoPauseStartedAt,
+      Date.now(),
+      'auto_pause',
+      'Auto-pause panjang terdeteksi.'
+    );
+    autoPauseStartedAt = 0;
+
+  }
 
   isPaused = false;
 
@@ -2793,64 +3010,7 @@ if (!gpsStatus) return;
 					// Simpan Blackbox (Metadata saja, path di-skip karena sudah masuk IndexedDB)
 					let nowTime = Date.now();
 					if (nowTime - lastSave > 10000) { 
-						localStorage.setItem(key, JSON.stringify({dist,
-  startT,
-  startTimezoneOffsetMin:
-    normalizeTimezoneOffset(
-      startTimezoneOffsetMin
-    ),
-  startTimezoneName:
-    normalizeTimezoneName(
-      startTimezoneName
-    ),
-  movingTime,
-  lastAnnouncedKm,
-  tempReadings,
-  lastTempCheck,
-  totalElevation,
-  lastAlt,
-  skippedClockGapSeconds,
-  trackingMode,
-  tripStages:
-    serializeTripStages(
-      false
-    ),
-  nutritionReminderState,
-  nutritionReminderEvents:
-    normalizeNutritionEvents(
-      nutritionReminderEvents
-    ),
-  signalLogs:
-    serializeSignalLogs(
-      true
-    ),
-  autoRerouteCount,
-  lastAutoRerouteAt,
-
-  roomID,
-  plannedRouteId: activePlannedRouteId,
-  plannedRouteName:
-    plannedRouteData && plannedRouteData.name
-      ? plannedRouteData.name
-      : '',
-  isPublic: rideIsPublic,
-  userName,
-  trackPointCount:
-    path.length,
-  lastPosition:
-    latestPosition
-      ? {
-        lat: latestPosition.lat,
-        lng: latestPosition.lng,
-        accuracy: latestPosition.accuracy || 0
-      }
-      : null,
-
-  activityType:
-    '${type}',
-
-  savedAt:
-    Date.now()}));
+						persistBlackboxSnapshot(nowTime);
 						lastSave = nowTime;
 					}
 				}
@@ -2956,8 +3116,13 @@ if (!gpsStatus) return;
 				restartGpsWatch = null;
 				
 				const dur = Math.floor(movingTime);
+				if (autoPauseStartedAt) {
+					recordRestBlock(autoPauseStartedAt, Date.now(), 'auto_pause', 'Auto-pause masih aktif saat finish.');
+					autoPauseStartedAt = 0;
+				}
 				closeCurrentStage('finish');
 				const finalTripStages = serializeTripStages(true);
+				const finalRestBlocks = serializeRestBlocks();
 				closeSignalEvent('network_offline', 'Aktivitas selesai saat jaringan kembali tersedia atau upload dimulai.');
 				closeSignalEvent('gps_error', 'Aktivitas selesai.');
 				closeSignalEvent('poor_accuracy', 'Aktivitas selesai.');
@@ -3009,6 +3174,7 @@ if (!gpsStatus) return;
 							total_elevation: Math.round(totalElevation),
 							skipped_clock_gap_seconds: Math.floor(skippedClockGapSeconds || 0),
 							stages: finalTripStages,
+							rest_blocks: finalRestBlocks,
 							nutrition_summary: finalNutritionSummary,
 							signal_logs: finalSignalLogs
 						});

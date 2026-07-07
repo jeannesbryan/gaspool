@@ -111,6 +111,19 @@ dashboard.get("/", async (c) => {
           .period-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
           .period-value { color: var(--primary); font-size: 1rem; font-weight: 950; font-style: italic; line-height: 1.1; }
           .period-label { color: #94a3b8; font-size: 0.54rem; font-weight: 900; letter-spacing: 0.8px; text-transform: uppercase; margin-top: 3px; }
+          .calendar-card { background: rgba(255,255,255,0.045); border: 1px solid rgba(255,255,255,0.08); border-radius: 22px; padding: 14px; margin: -8px 0 25px; }
+          .calendar-head { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:12px; }
+          .calendar-title { color:#fff; font-size:0.82rem; font-weight:950; letter-spacing:1px; text-transform:uppercase; }
+          .calendar-nav { display:flex; gap:8px; }
+          .calendar-nav button { width:34px; height:34px; border-radius:12px; border:1px solid rgba(255,255,255,0.12); background:rgba(0,0,0,0.22); color:#fff; font-weight:950; cursor:pointer; }
+          .calendar-week, .calendar-grid { display:grid; grid-template-columns:repeat(7, 1fr); gap:6px; }
+          .calendar-week { margin-bottom:6px; color:#64748b; font-size:0.52rem; font-weight:950; text-align:center; letter-spacing:0.8px; }
+          .calendar-day { min-height:58px; border-radius:12px; border:1px solid rgba(255,255,255,0.07); background:rgba(0,0,0,0.18); padding:7px 6px; cursor:pointer; overflow:hidden; }
+          .calendar-day.empty { cursor:default; background:transparent; border-color:transparent; }
+          .calendar-day.has-activity { border-color:rgba(255,95,0,0.36); background:rgba(255,95,0,0.08); }
+          .calendar-num { color:#fff; font-size:0.7rem; font-weight:950; }
+          .calendar-mini { color:var(--primary); font-size:0.56rem; font-weight:950; margin-top:5px; line-height:1.25; }
+          .calendar-detail { margin-top:10px; color:#94a3b8; font-size:0.68rem; font-weight:850; line-height:1.45; }
 
           .filter-search-row { margin-bottom: 20px; }
           .filter-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
@@ -143,6 +156,11 @@ dashboard.get("/", async (c) => {
           .signal-name { color:#fff; font-size:0.68rem; font-weight:950; text-transform:uppercase; letter-spacing:0.7px; }
           .signal-meta { color:#94a3b8; font-size:0.6rem; font-weight:850; margin-top:3px; }
           .signal-duration { color:#f1c40f; font-weight:950; font-style:italic; font-size:0.78rem; white-space:nowrap; }
+          .rest-list { display:none; gap:7px; margin:10px 0 0; }
+          .rest-item { display:grid; grid-template-columns:1fr auto; gap:10px; align-items:center; padding:8px 10px; border-radius:12px; border:1px solid rgba(52,152,219,0.18); background:rgba(52,152,219,0.055); }
+          .rest-name { color:#fff; font-size:0.68rem; font-weight:950; text-transform:uppercase; letter-spacing:0.7px; }
+          .rest-meta { color:#94a3b8; font-size:0.6rem; font-weight:850; margin-top:3px; }
+          .rest-duration { color:#3498db; font-weight:950; font-style:italic; font-size:0.78rem; white-space:nowrap; }
           .nutrition-list { display:none; grid-template-columns: repeat(2, 1fr); gap:8px; margin:10px 0 0; }
           .nutrition-item { padding:9px 10px; border-radius:12px; border:1px solid rgba(46,204,113,0.18); background:rgba(46,204,113,0.055); }
           .nutrition-name { color:#94a3b8; font-size:0.58rem; font-weight:950; text-transform:uppercase; letter-spacing:0.7px; }
@@ -219,6 +237,24 @@ dashboard.get("/", async (c) => {
               </div>
             </div>
           </div>
+
+          <section class="calendar-card">
+            <div class="calendar-head">
+              <div>
+                <div class="section-title" style="margin:0;">📅 KALENDER AKTIVITAS</div>
+                <div id="calendar-title" class="calendar-title">BULAN INI</div>
+              </div>
+              <div class="calendar-nav">
+                <button type="button" onclick="changeCalendarMonth(-1)">‹</button>
+                <button type="button" onclick="changeCalendarMonth(1)">›</button>
+              </div>
+            </div>
+            <div class="calendar-week">
+              <div>MIN</div><div>SEN</div><div>SEL</div><div>RAB</div><div>KAM</div><div>JUM</div><div>SAB</div>
+            </div>
+            <div id="calendar-grid" class="calendar-grid"></div>
+            <div id="calendar-detail" class="calendar-detail">Pilih tanggal untuk melihat ringkasan aktivitas.</div>
+          </section>
 
           <section class="best-section">
             <h2 class="section-title">🏆 REKOR PRIBADI <span>PERSONAL BEST</span></h2>
@@ -304,6 +340,7 @@ dashboard.get("/", async (c) => {
                 <p id="mDist" style="color:#aaa; font-size:0.9rem; margin:5px 0; font-weight:900;"></p>
                 <p id="mNotes" style="display:none; color:#cbd5e1; font-size:0.78rem; line-height:1.5; margin:8px 0 0; font-weight:700; white-space:pre-wrap;"></p>
                 <div id="mStages" class="stage-list"></div>
+                <div id="mRest" class="rest-list"></div>
                 <div id="mNutrition" class="nutrition-list"></div>
                 <div id="mSignals" class="signal-list"></div>
                 
@@ -328,6 +365,8 @@ dashboard.get("/", async (c) => {
           let curPeriod = 'all';
           let curSort = 'latest';
           let curSearch = '';
+          let calendarMonth = localMonthKey(new Date());
+          let calendarRows = [];
           let searchTimer = null;
           const primaryColor = '#FF5F00';
 
@@ -377,7 +416,8 @@ dashboard.get("/", async (c) => {
                page: String(curP),
                visibility: curVisibility,
                period: curPeriod,
-               sort: curSort
+               sort: curSort,
+               calendar_month: calendarMonth
              });
              if (curSearch) params.set('q', curSearch);
              const res = await fetch('/api/rides?' + params.toString()); 
@@ -393,6 +433,7 @@ dashboard.get("/", async (c) => {
              document.getElementById('stat-time').innerText = Math.floor((stats.total_time || 0) / 3600);
              document.getElementById('stat-elev').innerText = Math.round(stats.total_elev || 0);
              renderPeriodStats(data.period_stats);
+             renderCalendar(data.calendar || [], data.calendar_month || calendarMonth);
 
              const tb = document.getElementById('rides-tbody'); 
              if(!append) tb.innerHTML = '';
@@ -455,6 +496,96 @@ dashboard.get("/", async (c) => {
               console.error(err);
               grid.innerHTML = '<div class="best-empty" style="grid-column:1 / -1;">Rekor pribadi belum bisa dimuat.</div>';
             }
+          }
+
+          function calendarDateKey(value) {
+            const date = new Date(value);
+            if (Number.isNaN(date.getTime())) return '';
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            return year + '-' + month + '-' + day;
+          }
+
+          function localMonthKey(date) {
+            const d = date instanceof Date ? date : new Date(date);
+            if (Number.isNaN(d.getTime())) return new Date().getFullYear() + '-' + String(new Date().getMonth() + 1).padStart(2, '0');
+            return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+          }
+
+          function renderCalendar(rows, monthKey) {
+            calendarRows = Array.isArray(rows) ? rows : [];
+            calendarMonth = String(monthKey || calendarMonth);
+
+            const grid = document.getElementById('calendar-grid');
+            const title = document.getElementById('calendar-title');
+            if (!grid || !title) return;
+
+            const base = new Date(calendarMonth + '-01T00:00:00');
+            if (Number.isNaN(base.getTime())) return;
+
+            title.innerText = base.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' }).toUpperCase();
+
+            const firstDay = base.getDay();
+            const daysInMonth = new Date(base.getFullYear(), base.getMonth() + 1, 0).getDate();
+            const grouped = {};
+
+            calendarRows.forEach(function(ride) {
+              const key = calendarDateKey(ride.start_date);
+              if (!key) return;
+              if (!grouped[key]) grouped[key] = { count: 0, km: 0, rides: [] };
+              grouped[key].count += 1;
+              grouped[key].km += Number(ride.distance || 0);
+              grouped[key].rides.push(ride);
+            });
+
+            grid.innerHTML = '';
+            for (let i = 0; i < firstDay; i++) {
+              const empty = document.createElement('div');
+              empty.className = 'calendar-day empty';
+              grid.appendChild(empty);
+            }
+
+            for (let day = 1; day <= daysInMonth; day++) {
+              const key = calendarMonth + '-' + String(day).padStart(2, '0');
+              const item = grouped[key];
+              const node = document.createElement('div');
+              node.className = 'calendar-day' + (item ? ' has-activity' : '');
+              node.innerHTML =
+                '<div class="calendar-num">' + day + '</div>' +
+                (item ? '<div class="calendar-mini">' + item.count + ' sesi<br>' + item.km.toFixed(1) + ' km</div>' : '');
+              if (item) node.onclick = function() { openCalendarDay(key); };
+              grid.appendChild(node);
+            }
+          }
+
+          function openCalendarDay(key) {
+            const detail = document.getElementById('calendar-detail');
+            if (!detail) return;
+            const items = calendarRows.filter(function(ride) {
+              return calendarDateKey(ride.start_date) === key;
+            });
+
+            if (items.length === 0) {
+              detail.innerText = 'Tidak ada aktivitas di tanggal ini.';
+              return;
+            }
+
+            detail.innerHTML = items.map(function(ride) {
+              const icon = ride.activity_type === 'run' ? '🏃' : (ride.activity_type === 'walk' ? '🚶' : (ride.activity_type === 'hike' ? '⛰️' : '🚴'));
+              return '<div>' + icon + ' <strong style="color:#fff;">' + escapeHTML(ride.name || 'Aktivitas') + '</strong> • ' + Number(ride.distance || 0).toFixed(2) + ' KM</div>';
+            }).join('');
+          }
+
+          function changeCalendarMonth(delta) {
+            const base = new Date(calendarMonth + '-01T00:00:00');
+            if (Number.isNaN(base.getTime())) return;
+            base.setMonth(base.getMonth() + Number(delta || 0));
+            calendarMonth = localMonthKey(base);
+            fetchRides(false).catch(function(err) {
+              console.error(err);
+              alert(err.message || 'Gagal memuat kalender.');
+            });
           }
 
 function escapeHTML(str) {
@@ -562,6 +693,22 @@ function escapeHTML(str) {
               });
           }
 
+          function extractRestBlockList(value) {
+              if (!value || typeof value !== 'object' || !Array.isArray(value.rest_blocks)) return [];
+              return value.rest_blocks.map(function(block) {
+                  return {
+                      label: String(block.label || block.type || 'Rest block'),
+                      type: String(block.type || 'rest'),
+                      duration: Math.max(0, Number(block.duration_s || 0)),
+                      distance: Number(block.distance_km || 0),
+                      start: block.start || 0,
+                      note: String(block.note || '')
+                  };
+              }).filter(function(block) {
+                  return block.duration >= 20 * 60;
+              });
+          }
+
           function extractNutritionSummary(value) {
               if (!value || typeof value !== 'object' || !value.nutrition_summary) return null;
               const summary = value.nutrition_summary;
@@ -652,6 +799,41 @@ function escapeHTML(str) {
               wrap.style.display = 'grid';
           }
 
+          function renderRestBlocks(blocks) {
+              const wrap = document.getElementById('mRest');
+              if (!wrap) return;
+              wrap.innerHTML = '';
+
+              if (!Array.isArray(blocks) || blocks.length === 0) {
+                  wrap.style.display = 'none';
+                  return;
+              }
+
+              const totalSeconds = blocks.reduce(function(sum, block) {
+                  return sum + Number(block.duration || 0);
+              }, 0);
+              const title = document.createElement('div');
+              title.className = 'rest-item';
+              title.innerHTML =
+                  '<div><div class="rest-name">Rest Block</div>' +
+                  '<div class="rest-meta">' + blocks.length + ' jeda panjang tercatat</div></div>' +
+                  '<div class="rest-duration">' + formatStageTime(totalSeconds) + '</div>';
+              wrap.appendChild(title);
+
+              blocks.slice(-5).forEach(function(block) {
+                  const item = document.createElement('div');
+                  const startLabel = block.start ? new Date(block.start).toLocaleString('id-ID', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '';
+                  item.className = 'rest-item';
+                  item.innerHTML =
+                      '<div><div class="rest-name">' + escapeHTML(block.label) + '</div>' +
+                      '<div class="rest-meta">' + escapeHTML(startLabel) + ' • ' + Number(block.distance || 0).toFixed(2) + ' KM</div></div>' +
+                      '<div class="rest-duration">' + formatStageTime(block.duration) + '</div>';
+                  wrap.appendChild(item);
+              });
+
+              wrap.style.display = 'grid';
+          }
+
           function renderNutritionSummary(summary) {
               const wrap = document.getElementById('mNutrition');
               if (!wrap) return;
@@ -705,6 +887,7 @@ function escapeHTML(str) {
             notesEl.style.display = currentNotes ? 'block' : 'none';
             notesEl.innerText = currentNotes ? currentNotes : '';
             renderActivityStages([]);
+            renderRestBlocks([]);
             renderNutritionSummary(null);
             renderSignalLogs([]);
             document.getElementById('btn-detail-link').onclick = () => window.location.href = '/detail/' + id;
@@ -795,6 +978,7 @@ function escapeHTML(str) {
               }
               
               renderActivityStages(extractStageList(routePayload));
+              renderRestBlocks(extractRestBlockList(routePayload));
               renderNutritionSummary(extractNutritionSummary(routePayload));
               renderSignalLogs(extractSignalLogList(routePayload));
               pts = normalizeRoutePoints(pts);

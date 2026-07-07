@@ -504,6 +504,44 @@ const summarizeSignalLogs = (logs: ReturnType<typeof normalizeSignalLogs>) => {
   };
 };
 
+const normalizeRestBlocks = (value: any) => {
+  const blocks = Array.isArray(value) ? value : [];
+
+  return blocks
+    .map((block: any) => {
+      const start = Number(block?.start || 0);
+      const end =
+        block?.end === undefined || block?.end === null ? null : Number(block.end);
+      const duration = Number(
+        block?.duration_s || (end && start ? (end - start) / 1000 : 0),
+      );
+
+      return {
+        type: String(block?.type || "rest").trim().slice(0, 40) || "rest",
+        label: String(block?.label || "Rest block").trim().slice(0, 80) || "Rest block",
+        start: Number.isFinite(start) && start > 0 ? start : Date.now(),
+        end: Number.isFinite(end) && end && end > 0 ? end : null,
+        duration_s: Math.max(
+          0,
+          Math.min(14 * 24 * 3600, Math.floor(Number.isFinite(duration) ? duration : 0)),
+        ),
+        distance_km: Number(Number(block?.distance_km || 0).toFixed(3)),
+        moving_time: Math.max(0, Math.floor(Number(block?.moving_time || 0))),
+        note: String(block?.note || "").trim().slice(0, 160),
+      };
+    })
+    .filter((block) => block.duration_s >= 20 * 60)
+    .slice(-80);
+};
+
+const summarizeRestBlocks = (blocks: ReturnType<typeof normalizeRestBlocks>) => ({
+  count: blocks.length,
+  total_seconds: blocks.reduce(
+    (sum, block) => sum + Number(block.duration_s || 0),
+    0,
+  ),
+});
+
 const normalizeNutritionSummary = (value: any) => {
   const rawEvents = Array.isArray(value?.events) ? value.events : [];
   const events = rawEvents
@@ -1189,12 +1227,23 @@ api.get("/rides", protectAPI, async (c) => {
   const sort = String(c.req.query("sort") || "latest").toLowerCase();
   const period = String(c.req.query("period") || "all").toLowerCase();
   const search = String(c.req.query("q") || "").trim().slice(0, 80);
+  const calendarMonthRaw = String(c.req.query("calendar_month") || "").trim();
   const p = Math.max(1, parseInt(c.req.query("page") || "1", 10) || 1);
   const lim = 10;
   const off = (p - 1) * lim;
   const now = new Date();
   const yearStart = `${now.getFullYear()}-01-01 00:00:00`;
   const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01 00:00:00`;
+  const safeCalendarMonth = /^\d{4}-\d{2}$/.test(calendarMonthRaw)
+    ? calendarMonthRaw
+    : `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const [calendarYear, calendarMonth] = safeCalendarMonth
+    .split("-")
+    .map((item) => parseInt(item, 10));
+  const calendarStartDate = new Date(Date.UTC(calendarYear, calendarMonth - 1, 1));
+  const calendarEndDate = new Date(Date.UTC(calendarYear, calendarMonth, 1));
+  const calendarStart = calendarStartDate.toISOString();
+  const calendarEnd = calendarEndDate.toISOString();
   const allowedTypes = new Set(["ride", "run", "walk", "hike"]);
   const sortMap: Record<string, string> = {
     latest: "start_date DESC",
@@ -1251,12 +1300,19 @@ api.get("/rides", protectAPI, async (c) => {
     monthWhere.params.push(monthStart);
     const yearWhere = buildWhere(["start_date >= ?"], false);
     yearWhere.params.push(yearStart);
+    const calendarWhere = buildWhere(["start_date >= ?", "start_date < ?"], false);
+    calendarWhere.params.push(calendarStart, calendarEnd);
 
     const qStats = statsSelect + mainWhere.sql;
     const qData =
       "SELECT * FROM rides" +
       mainWhere.sql +
       ` ORDER BY ${orderBy} LIMIT ? OFFSET ?`;
+    const qCalendar =
+      `SELECT id, name, activity_type, distance, moving_time, start_date, is_public
+       FROM rides` +
+      calendarWhere.sql +
+      ` ORDER BY start_date ASC LIMIT 220`;
     const first = (sql: string, params: any[]) =>
       params.length
         ? c.env.DB.prepare(sql)
@@ -1264,12 +1320,15 @@ api.get("/rides", protectAPI, async (c) => {
             .first()
         : c.env.DB.prepare(sql).first();
 
-    const [stats, monthStats, yearStats, rides] = await Promise.all([
+    const [stats, monthStats, yearStats, rides, calendar] = await Promise.all([
       first(qStats, mainWhere.params),
       first(statsSelect + monthWhere.sql, monthWhere.params),
       first(statsSelect + yearWhere.sql, yearWhere.params),
       c.env.DB.prepare(qData)
         .bind(...mainWhere.params, lim, off)
+        .all(),
+      c.env.DB.prepare(qCalendar)
+        .bind(...calendarWhere.params)
         .all(),
     ]);
 
@@ -1280,6 +1339,8 @@ api.get("/rides", protectAPI, async (c) => {
         month: monthStats,
         year: yearStats,
       },
+      calendar_month: safeCalendarMonth,
+      calendar: calendar.results || [],
       rides: rides.results || [],
     });
   } catch (e) {
@@ -2098,6 +2159,8 @@ api.post("/save_ride", protectAPI, async (c) => {
       total_elevation,
     } = b;
     const stages = normalizeActivityStages(b.stages);
+    const restBlocks = normalizeRestBlocks(b.rest_blocks);
+    const restSummary = summarizeRestBlocks(restBlocks);
     const nutritionSummary = normalizeNutritionSummary(b.nutrition_summary);
     const signalLogs = normalizeSignalLogs(b.signal_logs);
     const signalSummary = summarizeSignalLogs(signalLogs);
@@ -2200,6 +2263,7 @@ api.post("/save_ride", protectAPI, async (c) => {
       const routePayload = {
         points: fullPolyline,
         stages,
+        rest_blocks: restBlocks,
         nutrition_summary: nutritionSummary,
         signal_logs: signalLogs,
         metadata: {
@@ -2207,6 +2271,7 @@ api.post("/save_ride", protectAPI, async (c) => {
           distance_km: distance || 0,
           moving_time: duration || 0,
           time_context: timeContext,
+          rest_summary: restSummary,
           skipped_clock_gap_seconds: skippedClockGapSeconds,
           nutrition_summary: {
             enabled: nutritionSummary.enabled,

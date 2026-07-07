@@ -31,6 +31,8 @@ Gaspool is designed to run serverlessly on Cloudflare using **Workers**, **D1**,
 - Voice navigation using the browser Web Speech API
 - Basic spoken turn prompts around 300m, 80m, and near the turn point
 - Water and food voice reminders for long activities
+- Rest block detection for long pauses, sleep, system gaps, and overnight breaks
+- Pause Overnight / Finish Later mode for continuing an activity later
 
 ### Peleton Mode
 
@@ -814,6 +816,27 @@ The activity JSON stores a `metadata.time_context` block:
 The D1 `rides.start_date` column uses the start timestamp, so multi-day uploads should still be sorted and grouped by when the activity began.
 
 Timezone names and offsets come from the browser/device. If the phone does not automatically update timezone while crossing regions, Gaspool still keeps UTC timestamps correctly, but the timezone label follows the device setting.
+
+### Rest Blocks And Finish Later
+
+Gaspool can separate long stops from moving time by recording `rest_blocks` in the activity JSON.
+
+Rest blocks can come from:
+
+- long auto-pause periods,
+- long browser/system gaps,
+- resume after a long blackbox gap,
+- manual Pause Overnight / Finish Later mode.
+
+Pause Overnight saves the current blackbox session without uploading the activity. When the user resumes later, Gaspool records the rest block and starts a new etape when appropriate.
+
+No D1 migration is required. Rest blocks are stored inside the R2 activity JSON and shown in the dashboard activity modal.
+
+### Dashboard Calendar View
+
+The dashboard includes a monthly calendar view for scanning activity consistency.
+
+The calendar uses the existing `rides.start_date` data and follows the current dashboard filters where possible.
 
 ---
 
