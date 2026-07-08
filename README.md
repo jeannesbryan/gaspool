@@ -17,6 +17,7 @@ Gaspool is designed to run serverlessly on Cloudflare using **Workers**, **D1**,
 - Planned route tracking with route overlay
 - Distance, moving time, speed, pace, elevation, and temperature display
 - Activity detail page with map and statistics
+- Activity Doctor scanner, Finish Review, and safe auto-repair UI for route JSON, GPS points, long gaps, metadata, and D1 stats
 - Offline-friendly PWA shell
 
 ### Route Plan & Navigator
@@ -837,6 +838,32 @@ No D1 migration is required. Rest blocks are stored inside the R2 activity JSON 
 The dashboard includes a monthly calendar view for scanning activity consistency.
 
 The calendar uses the existing `rides.start_date` data and follows the current dashboard filters where possible.
+
+### Activity Doctor
+
+Activity Doctor can scan and auto-repair saved activities without manual point editing.
+
+```text
+GET /api/activity_doctor/:id
+POST /api/activity_doctor/:id/apply
+```
+
+The `GET` endpoint is a dry-run scanner. It reads the saved route JSON, detects old route formats, invalid or duplicate GPS points, obvious lng/lat coordinate order, extreme GPS jumps, long timestamp gaps, missing metadata, and mismatch between D1 stats and route-derived estimates.
+
+The `POST` apply endpoint only runs when the scan result has safe automatic fixes. It requires an explicit confirmation payload from the UI, optionally checks that the expected repair action list still matches the latest scan, creates an R2 backup under `gaspool/repair-backups/`, writes the repaired activity JSON, then updates D1 stats last. The repaired JSON includes normalized points, rest blocks, metadata summaries, acknowledged repair actions, and `repair_history`.
+
+Activity Doctor hardening rules:
+
+- GET is dry-run only. It never writes R2 or D1.
+- POST apply refuses broken scans, missing confirmation, stale repair plans, and routes with too many raw GPS points.
+- Route payload loading uses the bound R2 object whenever possible. External arbitrary fetch is blocked; only the configured public R2 host and `gaspool/` object path are accepted as a fallback.
+- Repair writes backup first, repaired JSON second, and D1 stats last.
+
+The activity detail Studio page includes a **CEK & PERBAIKI AKTIVITAS INI** button for logged-in users. The modal shows Doctor status, source shape, point counts, preview of D1 vs recalculated stats, issues, planned changes, guardrails, and safe auto-repair actions. Applying repair reloads the page after the backup and update complete so the refreshed D1 stats are visible.
+
+The tracker also includes a **Finish Review** screen before a new activity is uploaded. When the captain taps **TERMINATE & SAVE**, Gaspool pauses the live engines, scans the local GPS points, shows distance, moving time, GPS point count, stages, rest blocks, no-signal logs, privacy, and warning rows, then offers **SAVE FINAL** or **AUTO REPAIR & SAVE** when the issue is safe to fix automatically. Finish Review metadata is stored in the R2 activity JSON under `metadata.finish_review`.
+
+Manual trim, split, merge, and point-by-point editing are not part of Activity Doctor v1.
 
 ---
 

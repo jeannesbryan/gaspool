@@ -106,6 +106,33 @@ tracker.get("/record", async (c) => {
             .resume-label { color: #94a3b8; font-size: 8px; font-weight: 900; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 4px; }
             .resume-value { color: #fff; font-size: 12px; font-weight: 900; line-height: 1.3; word-break: break-word; }
             .resume-warning { display:none; margin-top: 10px; color: #f1c40f; font-size: 10px; font-weight: 900; line-height: 1.35; }
+            .finish-review-overlay { display:none; position: fixed; inset: 0; z-index: 9800; background: rgba(0,0,0,0.94); padding: 18px; overflow-y: auto; pointer-events: auto; }
+            .finish-review-card { width:100%; max-width: 430px; margin: 18px auto; padding: 18px; border-radius: 22px; background: #0a0a12; border: 1px solid rgba(255,95,0,0.28); box-shadow: 0 20px 70px rgba(0,0,0,0.58); }
+            .finish-kicker { color: var(--primary); font-size: 10px; font-weight: 950; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 6px; }
+            .finish-review-card h2 { margin: 0 0 6px; font-size: 26px; font-weight: 950; font-style: italic; color: #fff; letter-spacing: -1px; }
+            .finish-copy { color:#94a3b8; font-size: 12px; font-weight: 800; line-height: 1.45; margin-bottom: 14px; }
+            .finish-grid { display:grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-bottom: 12px; }
+            .finish-stat { background: rgba(255,255,255,0.055); border:1px solid rgba(255,255,255,0.1); border-radius: 14px; padding: 11px; }
+            .finish-label { color:#94a3b8; font-size:8px; font-weight:950; letter-spacing:1px; text-transform:uppercase; margin-bottom: 5px; }
+            .finish-value { color:#fff; font-size:14px; font-weight:950; line-height:1.25; word-break: break-word; }
+            .finish-section { margin-top: 12px; padding: 12px; border-radius: 16px; background: rgba(255,255,255,0.045); border:1px solid rgba(255,255,255,0.08); }
+            .finish-section-title { display:flex; justify-content:space-between; align-items:center; gap: 10px; color:#fff; font-size: 10px; font-weight: 950; letter-spacing:1px; text-transform:uppercase; margin-bottom: 9px; }
+            .doctor-pill { display:inline-block; border-radius:999px; padding:5px 8px; font-size:8px; font-weight:950; letter-spacing:0.8px; text-transform:uppercase; background:rgba(46,204,113,0.14); color:#2ecc71; border:1px solid rgba(46,204,113,0.32); white-space:nowrap; }
+            .doctor-pill.warn { background:rgba(241,196,15,0.12); color:#f1c40f; border-color:rgba(241,196,15,0.32); }
+            .doctor-pill.danger { background:rgba(231,76,60,0.14); color:#e74c3c; border-color:rgba(231,76,60,0.32); }
+            .finish-list { display:grid; gap:8px; }
+            .finish-row { padding:9px; border-radius: 12px; background: rgba(0,0,0,0.26); color:#dce3ee; font-size: 10px; font-weight: 850; line-height: 1.35; border-left: 3px solid rgba(255,255,255,0.16); }
+            .finish-row.warning { border-left-color:#f1c40f; }
+            .finish-row.danger { border-left-color:#e74c3c; }
+            .finish-row.info { border-left-color:#3498db; }
+            .finish-actions { display:grid; gap:10px; margin-top: 14px; }
+            .finish-actions .btn { font-size: 11px; padding: 15px; }
+            .finish-small-actions { display:grid; grid-template-columns: 1fr 1fr; gap:10px; }
+            .btn-finish-save { background:#2ecc71; color:#001b0b; }
+            .btn-finish-repair { background:var(--primary); color:#fff; }
+            .btn-finish-muted { background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.14); color:#fff; }
+            .btn-finish-danger { background:rgba(231,76,60,0.18); border:1px solid rgba(231,76,60,0.42); color:#e74c3c; }
+            .btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
             
             .join-overlay { position: fixed; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.9); z-index:9000; display: ${isCaptain ? "none" : "flex"}; flex-direction: column; justify-content: center; align-items: center; padding: 20px;}
             .join-input { width: 100%; padding: 15px; margin: 15px 0; background: #000; border: 1px solid #333; color: white; border-radius: 12px; font-size: 16px; text-align: center; outline: none; max-width: 300px;}
@@ -138,6 +165,40 @@ tracker.get("/record", async (c) => {
             </div>
             <button class="btn" style="background:#2ecc71; color:#000; margin-bottom:12px;" onclick="resumeSession()">▶️ RESUME MISSION</button>
             <button class="btn" style="background:#e74c3c; color:#fff;" onclick="discardSession()">🗑️ ABORT & DELETE</button>
+        </div>
+
+        <div id="finishReview" class="finish-review-overlay">
+            <div class="finish-review-card">
+                <div class="finish-kicker">FINISH REVIEW</div>
+                <h2>Review Sebelum Save</h2>
+                <div class="finish-copy" id="finish-copy">Gaspool mengecek aktivitas sebelum data dikirim ke server.</div>
+                <div class="finish-grid">
+                    <div class="finish-stat"><div class="finish-label">Jarak</div><div class="finish-value" id="finish-distance">-</div></div>
+                    <div class="finish-stat"><div class="finish-label">Moving Time</div><div class="finish-value" id="finish-moving">-</div></div>
+                    <div class="finish-stat"><div class="finish-label">Avg</div><div class="finish-value" id="finish-avg">-</div></div>
+                    <div class="finish-stat"><div class="finish-label">Titik GPS</div><div class="finish-value" id="finish-points">-</div></div>
+                    <div class="finish-stat"><div class="finish-label">Etape</div><div class="finish-value" id="finish-stages">-</div></div>
+                    <div class="finish-stat"><div class="finish-label">Rest Block</div><div class="finish-value" id="finish-rest">-</div></div>
+                    <div class="finish-stat"><div class="finish-label">No Signal</div><div class="finish-value" id="finish-signal">-</div></div>
+                    <div class="finish-stat"><div class="finish-label">Privacy</div><div class="finish-value" id="finish-privacy">-</div></div>
+                </div>
+                <div class="finish-section">
+                    <div class="finish-section-title"><span>Data Check</span><span id="finish-status" class="doctor-pill">CHECKING</span></div>
+                    <div id="finish-issues" class="finish-list"></div>
+                </div>
+                <div class="finish-section">
+                    <div class="finish-section-title"><span>Auto Repair Plan</span><span id="finish-repair-status" class="doctor-pill warn">OPTIONAL</span></div>
+                    <div id="finish-changes" class="finish-list"></div>
+                </div>
+                <div class="finish-actions">
+                    <button id="finish-save-btn" class="btn btn-finish-save" onclick="saveFinishReview(false)">SAVE FINAL</button>
+                    <button id="finish-repair-btn" class="btn btn-finish-repair" onclick="saveFinishReview(true)">AUTO REPAIR & SAVE</button>
+                    <div class="finish-small-actions">
+                        <button id="finish-continue-btn" class="btn btn-finish-muted" onclick="resumeFromFinishReview()">LANJUTKAN</button>
+                        <button id="finish-discard-btn" class="btn btn-finish-danger" onclick="discardFinishReview()">DISCARD</button>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <div id="guestFinish">
@@ -319,6 +380,8 @@ tracker.get("/record", async (c) => {
 			let restBlocks = [];
 			let overnightPause = null;
 			let autoPauseStartedAt = 0;
+			let finishReviewState = null;
+			let finishReviewBusy = false;
 			let nutritionReminderState = {
 				enabled: true,
 				waterCount: 0,
@@ -3109,119 +3172,585 @@ if (!gpsStatus) return;
 				}
 			}
 
-			async function selesai() {
-				if (isStealthMode) disableStealth();
-				rec = false; releaseWakeLock(); navigator.geolocation.clearWatch(watchId); clearInterval(radarInt); clearInterval(clockInt);
-				if (peletonRoutePollInt) clearInterval(peletonRoutePollInt);
-				restartGpsWatch = null;
-				
-				const dur = Math.floor(movingTime);
-				if (autoPauseStartedAt) {
-					recordRestBlock(autoPauseStartedAt, Date.now(), 'auto_pause', 'Auto-pause masih aktif saat finish.');
-					autoPauseStartedAt = 0;
-				}
-				closeCurrentStage('finish');
-				const finalTripStages = serializeTripStages(true);
-				const finalRestBlocks = serializeRestBlocks();
-				closeSignalEvent('network_offline', 'Aktivitas selesai saat jaringan kembali tersedia atau upload dimulai.');
-				closeSignalEvent('gps_error', 'Aktivitas selesai.');
-				closeSignalEvent('poor_accuracy', 'Aktivitas selesai.');
-				const finalSignalLogs = serializeSignalLogs(true);
-				const finalNutritionSummary = serializeNutritionSummary();
-				const finalTimeContext = activityTimeContext(Date.now());
-				
-				if (path.length > 0) await recordTemperature(path[path.length-1].lat, path[path.length-1].lng);
-				let finalAvgTemp = 0;
-				if (tempReadings.length > 0) {
-					const sum = tempReadings.reduce((a, b) => a + b, 0);
-					finalAvgTemp = sum / tempReadings.length;
-				}
-				
-				if(isCap) {
-					document.getElementById('btn-stop').innerText = "MEMPROSES...";
-					document.getElementById('btn-stop').disabled = true;
+			function escapeFinishHTML(value) {
+				return String(value || '')
+					.replace(/&/g, '&amp;')
+					.replace(/</g, '&lt;')
+					.replace(/>/g, '&gt;')
+					.replace(/"/g, '&quot;')
+					.replace(/'/g, '&#39;');
+			}
 
-					// AMBIL DATA DARI INDEXEDDB UNTUK DI CHUNK
-					const tx = db.transaction(STORE_NAME, "readonly");
-					const allPoints = await new Promise(resolve => tx.objectStore(STORE_NAME).getAll().onsuccess = (e) => resolve(e.target.result));
-					
-					const CHUNK_SIZE = 500;
-					const totalChunks = Math.ceil(allPoints.length / CHUNK_SIZE);
-					const rideUUID = Date.now() + "_" + Math.floor(Math.random() * 1000);
-					
-					// Siapkan semua paket (payloads)
-					const payloads = [];
-					for (let i = 0; i < totalChunks; i++) {
-						payloads.push({
-							uuid: rideUUID,
-							chunk_index: i,
-							total_chunks: totalChunks,
-							points: allPoints.slice(i * CHUNK_SIZE, (i * CHUNK_SIZE) + CHUNK_SIZE),
-							name: '${type.toUpperCase()} ' + formatDateWithTimezoneOffset(startT, finalTimeContext.start_timezone_offset_min),
-							distance: dist,
-							duration: dur,
-							activity_type: '${type}',
-							start_date: finalTimeContext.start_date,
-							finish_date: finalTimeContext.finish_date,
-							start_timezone_offset_min: finalTimeContext.start_timezone_offset_min,
-							finish_timezone_offset_min: finalTimeContext.finish_timezone_offset_min,
-							start_timezone_name: finalTimeContext.start_timezone_name,
-							finish_timezone_name: finalTimeContext.finish_timezone_name,
-							room: roomID,
-							planned_route_id: activePlannedRouteId ? Number(activePlannedRouteId) : null,
-							is_public: rideIsPublic ? 1 : 0,
-							avg_temp: finalAvgTemp,
-							total_elevation: Math.round(totalElevation),
-							skipped_clock_gap_seconds: Math.floor(skippedClockGapSeconds || 0),
-							stages: finalTripStages,
-							rest_blocks: finalRestBlocks,
-							nutrition_summary: finalNutritionSummary,
-							signal_logs: finalSignalLogs
+			async function readStoredTrackPoints() {
+				try {
+					await waitDB();
+					if (db && db.objectStoreNames.contains(STORE_NAME)) {
+						const tx = db.transaction(STORE_NAME, 'readonly');
+						return await new Promise(function(resolve, reject) {
+							const req = tx.objectStore(STORE_NAME).getAll();
+							req.onsuccess = function(e) { resolve(e.target.result || []); };
+							req.onerror = function() { reject(new Error('Gagal membaca titik GPS lokal.')); };
 						});
 					}
+				} catch(e) {
+					console.warn('Gagal membaca IndexedDB, memakai path memori:', e);
+				}
 
-					let uploadSuccess = true;
+				return path.slice();
+			}
 
-					// Coba upload langsung HANYA JIKA indikator browser sedang Online
-					if (navigator.onLine) {
-						for (let i = 0; i < payloads.length; i++) {
-							try {
-								const res = await fetch('/api/save_ride', {
-									method: 'POST',
-									headers: { 'Content-Type': 'application/json' },
-									body: JSON.stringify(payloads[i])
-								});
-								if(!res.ok) uploadSuccess = false;
-							} catch(err) {
-								uploadSuccess = false;
-							}
-						}
-					} else {
-						uploadSuccess = false;
+			function finishDistanceKm(a, b) {
+				try {
+					if (map && typeof map.distance === 'function') {
+						return map.distance([a.lat, a.lng], [b.lat, b.lng]) / 1000;
+					}
+				} catch(e) {}
+
+				const rad = Math.PI / 180;
+				const lat1 = Number(a.lat) * rad;
+				const lat2 = Number(b.lat) * rad;
+				const dLat = (Number(b.lat) - Number(a.lat)) * rad;
+				const dLng = (Number(b.lng) - Number(a.lng)) * rad;
+				const h = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+					Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+				return 6371 * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
+			}
+
+			function finishSpeedLimitKmh() {
+				const activity = '${type}';
+				if (activity === 'walk' || activity === 'hike') return 22;
+				if (activity === 'run') return 45;
+				return 140;
+			}
+
+			function finishPointTimeMs(point) {
+				const parsed = Date.parse(String(point && point.time ? point.time : ''));
+				return Number.isFinite(parsed) ? parsed : 0;
+			}
+
+			function normalizeFinishPoint(raw) {
+				const source = raw || {};
+				let lat = Number(source.lat !== undefined ? source.lat : source.latitude);
+				let lng = Number(source.lng !== undefined ? source.lng : (source.lon !== undefined ? source.lon : source.longitude));
+				let swapped = false;
+
+				if ((!Number.isFinite(lat) || Math.abs(lat) > 90) && Number.isFinite(lng) && Math.abs(lng) <= 90 && Number.isFinite(lat) && Math.abs(lat) <= 180) {
+					const tmp = lat;
+					lat = lng;
+					lng = tmp;
+					swapped = true;
+				}
+
+				if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+				if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return null;
+
+				const point = Object.assign({}, source, {
+					lat: lat,
+					lng: lng,
+					speed: Number.isFinite(Number(source.speed)) ? Number(source.speed) : 0,
+					ele: Number.isFinite(Number(source.ele !== undefined ? source.ele : source.altitude)) ? Number(source.ele !== undefined ? source.ele : source.altitude) : 0,
+					time: source.time ? String(source.time) : new Date().toISOString()
+				});
+
+				return { point: point, swapped: swapped };
+			}
+
+			function restBlockExists(list, start, end) {
+				const safeStart = Number(start || 0);
+				const safeEnd = Number(end || 0);
+				return normalizeRestBlocks(list).some(function(block) {
+					const blockStart = Number(block.start || 0);
+					const blockEnd = Number(block.end || 0);
+					return Math.abs(blockStart - safeStart) < 60000 ||
+						(blockStart <= safeEnd && blockEnd >= safeStart && Math.min(blockEnd, safeEnd) - Math.max(blockStart, safeStart) > 60000);
+				});
+			}
+
+			function analyzeFinishActivity(rawPoints, existingRestBlocks, currentDuration, currentDistance) {
+				const raw = Array.isArray(rawPoints) ? rawPoints : [];
+				const issues = [];
+				const changes = [];
+				const cleaned = [];
+				const suggestedRestBlocks = [];
+				const speedLimit = finishSpeedLimitKmh();
+				let invalid = 0;
+				let duplicate = 0;
+				let swapped = 0;
+				let gpsJumps = 0;
+				let suspiciousSpeed = 0;
+				let longGaps = 0;
+				let repairedDistance = 0;
+				let maxSpeed = 0;
+				let previous = null;
+
+				raw.forEach(function(item) {
+					const normalized = normalizeFinishPoint(item);
+					if (!normalized) {
+						invalid++;
+						return;
 					}
 
-					await cleanupPeletonAudio();
-					
-					if (uploadSuccess) { 
-						// Sukses langsung mendarat di awan
-						localStorage.removeItem(key); clearDB(); window.location.href = '/'; 
-					} else { 
-						// --- BUNKER MODE AKTIF (OFFLINE / SINYAL JELEK) ---
-						const txBunker = db.transaction(BUNKER_STORE, "readwrite");
-						txBunker.objectStore(BUNKER_STORE).put({ id: rideUUID, payloads: payloads, time: Date.now() });
-						
-						alert("Sinyal terputus! Data diamankan di Brankas Bunker dan akan diunggah otomatis saat internet kembali.");
-						
-						localStorage.removeItem(key); 
-						clearDB(); // Hanya clear titik koordinat tracker, Bunker tetap aman
-						window.location.href = '/'; 
+					const point = normalized.point;
+					if (normalized.swapped) swapped++;
+
+					if (previous && finishDistanceKm(previous, point) < 0.0005) {
+						duplicate++;
+						return;
+					}
+
+					if (previous) {
+						const segmentKm = finishDistanceKm(previous, point);
+						const prevTime = finishPointTimeMs(previous);
+						const thisTime = finishPointTimeMs(point);
+						const deltaSeconds = prevTime && thisTime && thisTime > prevTime ? (thisTime - prevTime) / 1000 : 0;
+						const segmentSpeed = deltaSeconds > 0 ? segmentKm / (deltaSeconds / 3600) : Number(point.speed || 0);
+
+						if (deltaSeconds >= REST_BLOCK_MIN_SECONDS && !restBlockExists(existingRestBlocks.concat(suggestedRestBlocks), prevTime, thisTime)) {
+							longGaps++;
+							suggestedRestBlocks.push({
+								type: 'finish_review_gap',
+								label: 'Jeda panjang terdeteksi saat finish review',
+								start: prevTime,
+								end: thisTime,
+								duration_s: Math.floor(deltaSeconds),
+								distance_km: Number((currentDistance || dist || 0).toFixed(3)),
+								moving_time: Math.floor(currentDuration || movingTime || 0),
+								note: 'Ditambahkan otomatis dari gap timestamp GPS.'
+							});
+						}
+
+						if (segmentKm >= 1.5) {
+							gpsJumps++;
+						} else if (segmentSpeed > speedLimit) {
+							suspiciousSpeed++;
+						} else if (segmentKm > 0.001) {
+							repairedDistance += segmentKm;
+						}
+					}
+
+					maxSpeed = Math.max(maxSpeed, Number(point.speed || 0));
+					cleaned.push(point);
+					previous = point;
+				});
+
+				if (raw.length === 0 || cleaned.length === 0) {
+					issues.push({ severity: 'danger', code: 'empty_route', message: 'Titik GPS kosong. Aktivitas belum bisa disimpan aman.', autoFix: false });
+				}
+				if (invalid > 0) {
+					issues.push({ severity: 'warning', code: 'invalid_points', message: invalid + ' titik GPS invalid akan dibuang.', autoFix: true });
+					changes.push('Buang ' + invalid + ' titik GPS invalid.');
+				}
+				if (duplicate > 0) {
+					issues.push({ severity: 'warning', code: 'duplicate_points', message: duplicate + ' titik GPS duplikat berurutan terdeteksi.', autoFix: true });
+					changes.push('Bersihkan ' + duplicate + ' titik duplikat berurutan.');
+				}
+				if (swapped > 0) {
+					issues.push({ severity: 'warning', code: 'swapped_coordinates', message: swapped + ' titik terlihat memakai urutan lng/lat.', autoFix: true });
+					changes.push('Normalisasi koordinat lng/lat menjadi lat/lng.');
+				}
+				if (gpsJumps > 0) {
+					issues.push({ severity: 'warning', code: 'gps_jump', message: gpsJumps + ' lonjakan GPS ekstrem terdeteksi.', autoFix: true });
+					changes.push('Hitung ulang jarak dengan lonjakan GPS diabaikan dari statistik.');
+				}
+				if (suspiciousSpeed > 0) {
+					issues.push({ severity: 'warning', code: 'suspicious_speed', message: suspiciousSpeed + ' segmen melebihi batas speed wajar.', autoFix: true });
+					changes.push('Hitung ulang jarak dengan segmen speed tidak wajar diabaikan.');
+				}
+				if (longGaps > 0) {
+					issues.push({ severity: 'warning', code: 'long_gap', message: longGaps + ' gap panjang terdeteksi dan bisa jadi rest block.', autoFix: true });
+					changes.push('Tambahkan rest block dari gap timestamp panjang.');
+				}
+				if (skippedClockGapSeconds > 0) {
+					issues.push({ severity: 'info', code: 'clock_gap', message: 'Ada ' + formatStageDuration(skippedClockGapSeconds) + ' system gap yang sudah diabaikan dari moving time.', autoFix: false });
+				}
+				if (cleaned.length > 0 && currentDistance > 0 && repairedDistance > 0) {
+					const delta = Math.abs(repairedDistance - Number(currentDistance || 0));
+					if (delta > Math.max(0.25, Number(currentDistance || 0) * 0.08)) {
+						issues.push({ severity: 'warning', code: 'distance_mismatch', message: 'Jarak live berbeda dari hasil hitung ulang sekitar ' + delta.toFixed(2) + ' km.', autoFix: true });
+						changes.push('Pakai jarak hasil hitung ulang: ' + repairedDistance.toFixed(2) + ' km.');
+					}
+				}
+
+				const hasDanger = issues.some(function(issue) { return issue.severity === 'danger'; });
+				const canAutoRepair = !hasDanger && issues.some(function(issue) { return issue.autoFix; });
+				const currentAvg = currentDuration > 0 && currentDistance > 0 ? currentDistance / (currentDuration / 3600) : 0;
+				const repairedAvg = currentDuration > 0 && repairedDistance > 0 ? repairedDistance / (currentDuration / 3600) : currentAvg;
+
+				return {
+					healthy: issues.filter(function(issue) { return issue.severity !== 'info'; }).length === 0,
+					hasDanger: hasDanger,
+					canAutoRepair: canAutoRepair,
+					issues: issues,
+					changes: changes,
+					cleanedPoints: cleaned,
+					suggestedRestBlocks: normalizeRestBlocks(suggestedRestBlocks),
+					counts: {
+						raw: raw.length,
+						valid: cleaned.length,
+						invalid: invalid,
+						duplicate: duplicate,
+						swapped: swapped,
+						gps_jumps: gpsJumps,
+						suspicious_speed: suspiciousSpeed,
+						long_gaps: longGaps
+					},
+					currentStats: {
+						distance_km: Number(Number(currentDistance || 0).toFixed(3)),
+						moving_time: Math.floor(currentDuration || 0),
+						avg_speed: Number(currentAvg.toFixed(2)),
+						max_speed: Number(maxSpeed.toFixed(2))
+					},
+					repairedStats: {
+						distance_km: Number(Math.max(0, repairedDistance).toFixed(3)),
+						moving_time: Math.floor(currentDuration || 0),
+						avg_speed: Number(repairedAvg.toFixed(2)),
+						max_speed: Number(maxSpeed.toFixed(2))
+					}
+				};
+			}
+
+			function mergeFinishRestBlocks(base, additions) {
+				let merged = normalizeRestBlocks(base);
+				normalizeRestBlocks(additions).forEach(function(block) {
+					if (!restBlockExists(merged, block.start, block.end || block.start + block.duration_s * 1000)) {
+						merged.push(block);
+					}
+				});
+				return normalizeRestBlocks(merged);
+			}
+
+			function renderFinishRows(id, rows, emptyText) {
+				const box = document.getElementById(id);
+				if (!box) return;
+				const list = Array.isArray(rows) ? rows : [];
+				if (list.length === 0) {
+					box.innerHTML = '<div class="finish-row info">' + escapeFinishHTML(emptyText || 'Tidak ada catatan.') + '</div>';
+					return;
+				}
+				box.innerHTML = list.map(function(row) {
+					const severity = row.severity || 'info';
+					const text = row.message || row;
+					return '<div class="finish-row ' + escapeFinishHTML(severity) + '">' + escapeFinishHTML(text) + '</div>';
+				}).join('');
+			}
+
+			function renderFinishReview(state) {
+				const doctor = state.doctor;
+				const finalRest = state.base.rest_blocks || [];
+				const finalSignals = state.base.signal_logs || [];
+				const avg = state.base.duration > 0 && state.base.distance > 0 ? state.base.distance / (state.base.duration / 3600) : 0;
+				const status = document.getElementById('finish-status');
+				const repairStatus = document.getElementById('finish-repair-status');
+				const copy = document.getElementById('finish-copy');
+
+				setText('finish-distance', Number(state.base.distance || 0).toFixed(2) + ' km');
+				setText('finish-moving', formatResumeDuration(state.base.duration || 0));
+				setText('finish-avg', avg.toFixed(1) + ' km/h');
+				setText('finish-points', doctor.counts.valid + ' / ' + doctor.counts.raw + ' titik');
+				setText('finish-stages', (state.base.stages || []).length + ' etape');
+				setText('finish-rest', finalRest.length + ' rest');
+				setText('finish-signal', finalSignals.length + ' log');
+				setText('finish-privacy', state.base.is_public ? 'PUBLIC' : 'PRIVATE');
+
+				if (doctor.hasDanger) {
+					status.className = 'doctor-pill danger';
+					status.innerText = 'NEEDS ATTENTION';
+					copy.innerText = 'Ada masalah yang tidak aman untuk auto-save. Cek catatan di bawah sebelum melanjutkan.';
+				} else if (doctor.canAutoRepair) {
+					status.className = 'doctor-pill warn';
+					status.innerText = 'REPAIRABLE';
+					copy.innerText = 'Gaspool menemukan hal kecil yang bisa diperbaiki otomatis sebelum data dikirim.';
+				} else {
+					status.className = 'doctor-pill';
+					status.innerText = 'HEALTHY';
+					copy.innerText = 'Data terlihat sehat. Aktivitas siap disimpan final.';
+				}
+
+				if (repairStatus) {
+					repairStatus.className = doctor.canAutoRepair ? 'doctor-pill warn' : 'doctor-pill';
+					repairStatus.innerText = doctor.canAutoRepair ? 'READY' : 'NONE';
+				}
+
+				renderFinishRows('finish-issues', doctor.issues, 'Tidak ada masalah besar.');
+				renderFinishRows('finish-changes', doctor.changes.map(function(change) { return { severity: 'info', message: change }; }), 'Tidak perlu auto repair.');
+				setFinishReviewButtons(false);
+			}
+
+			function setFinishReviewButtons(busy) {
+				finishReviewBusy = busy;
+				const doctor = finishReviewState ? finishReviewState.doctor : null;
+				const saveBtn = document.getElementById('finish-save-btn');
+				const repairBtn = document.getElementById('finish-repair-btn');
+				const continueBtn = document.getElementById('finish-continue-btn');
+				const discardBtn = document.getElementById('finish-discard-btn');
+				const noPoints = doctor ? doctor.counts.valid === 0 : true;
+
+				if (saveBtn) {
+					saveBtn.disabled = busy || noPoints;
+					saveBtn.innerText = busy ? 'MENYIMPAN...' : 'SAVE FINAL';
+				}
+				if (repairBtn) {
+					repairBtn.disabled = busy || !doctor || !doctor.canAutoRepair || noPoints;
+					repairBtn.innerText = busy ? 'MENYIMPAN...' : 'AUTO REPAIR & SAVE';
+				}
+				if (continueBtn) continueBtn.disabled = busy;
+				if (discardBtn) discardBtn.disabled = busy;
+			}
+
+			async function prepareFinishReviewState() {
+				const finishedAt = Date.now();
+				const dur = Math.floor(movingTime);
+
+				if (autoPauseStartedAt) {
+					recordRestBlock(autoPauseStartedAt, finishedAt, 'auto_pause', 'Auto-pause masih aktif saat finish.');
+					autoPauseStartedAt = 0;
+				}
+
+				closeCurrentStage('finish_review');
+				const finalTripStages = serializeTripStages(true);
+				const finalRestBlocks = serializeRestBlocks();
+				closeSignalEvent('network_offline', 'Aktivitas masuk Finish Review.');
+				closeSignalEvent('gps_error', 'Aktivitas masuk Finish Review.');
+				closeSignalEvent('poor_accuracy', 'Aktivitas masuk Finish Review.');
+				const finalSignalLogs = serializeSignalLogs(true);
+				const finalNutritionSummary = serializeNutritionSummary();
+				const finalTimeContext = activityTimeContext(finishedAt);
+
+				if (path.length > 0) await recordTemperature(path[path.length - 1].lat, path[path.length - 1].lng);
+				let finalAvgTemp = 0;
+				if (tempReadings.length > 0) {
+					const sum = tempReadings.reduce(function(a, b) { return a + b; }, 0);
+					finalAvgTemp = sum / tempReadings.length;
+				}
+
+				const storedPoints = await readStoredTrackPoints();
+				const rawPoints = Array.isArray(storedPoints) && storedPoints.length > 0 ? storedPoints : path.slice();
+				const doctor = analyzeFinishActivity(rawPoints, finalRestBlocks, dur, dist);
+				const rideUUID = Date.now() + '_' + Math.floor(Math.random() * 1000);
+
+				return {
+					prepared_at: new Date(finishedAt).toISOString(),
+					rideUUID: rideUUID,
+					rawPoints: rawPoints,
+					doctor: doctor,
+					base: {
+						name: '${type.toUpperCase()} ' + formatDateWithTimezoneOffset(startT, finalTimeContext.start_timezone_offset_min),
+						distance: Number(dist || 0),
+						duration: dur,
+						activity_type: '${type}',
+						start_date: finalTimeContext.start_date,
+						finish_date: finalTimeContext.finish_date,
+						start_timezone_offset_min: finalTimeContext.start_timezone_offset_min,
+						finish_timezone_offset_min: finalTimeContext.finish_timezone_offset_min,
+						start_timezone_name: finalTimeContext.start_timezone_name,
+						finish_timezone_name: finalTimeContext.finish_timezone_name,
+						room: roomID,
+						planned_route_id: activePlannedRouteId ? Number(activePlannedRouteId) : null,
+						is_public: rideIsPublic ? 1 : 0,
+						avg_temp: finalAvgTemp,
+						total_elevation: Math.round(totalElevation),
+						skipped_clock_gap_seconds: Math.floor(skippedClockGapSeconds || 0),
+						stages: finalTripStages,
+						rest_blocks: finalRestBlocks,
+						nutrition_summary: finalNutritionSummary,
+						signal_logs: finalSignalLogs
+					}
+				};
+			}
+
+			function buildFinishPayloads(useAutoRepair) {
+				const state = finishReviewState;
+				if (!state) throw new Error('Finish Review belum siap.');
+
+				const doctor = state.doctor;
+				const repaired = Boolean(useAutoRepair && doctor.canAutoRepair);
+				const points = repaired ? doctor.cleanedPoints : state.rawPoints;
+				const distanceValue = repaired && doctor.repairedStats.distance_km > 0
+					? doctor.repairedStats.distance_km
+					: state.base.distance;
+				const restBlocksValue = repaired
+					? mergeFinishRestBlocks(state.base.rest_blocks, doctor.suggestedRestBlocks)
+					: normalizeRestBlocks(state.base.rest_blocks);
+				const finishReviewMeta = {
+					status: doctor.hasDanger ? 'needs_attention' : (doctor.canAutoRepair ? 'repairable' : 'healthy'),
+					auto_repair_applied: repaired,
+					generated_at: state.prepared_at,
+					counts: doctor.counts,
+					issues: doctor.issues.slice(0, 30).map(function(issue) {
+						return {
+							severity: issue.severity,
+							code: issue.code,
+							message: issue.message,
+							auto_fix: Boolean(issue.autoFix)
+						};
+					}),
+					changes: doctor.changes.slice(0, 30),
+					stats_before: doctor.currentStats,
+					stats_after: repaired ? doctor.repairedStats : doctor.currentStats
+				};
+
+				const CHUNK_SIZE = 500;
+				const totalChunks = Math.max(1, Math.ceil(points.length / CHUNK_SIZE));
+				const payloads = [];
+
+				for (let i = 0; i < totalChunks; i++) {
+					const payload = Object.assign({}, state.base, {
+						uuid: state.rideUUID,
+						chunk_index: i,
+						total_chunks: totalChunks,
+						points: points.slice(i * CHUNK_SIZE, (i * CHUNK_SIZE) + CHUNK_SIZE),
+						distance: distanceValue,
+						rest_blocks: restBlocksValue,
+						finish_review: finishReviewMeta,
+						source: repaired ? 'GASPOOL_FINISH_REVIEW_REPAIRED' : 'GASPOOL_FINISH_REVIEW'
+					});
+					payloads.push(payload);
+				}
+
+				return payloads;
+			}
+
+			async function uploadFinishPayloads(payloads) {
+				let uploadSuccess = true;
+
+				if (navigator.onLine) {
+					for (let i = 0; i < payloads.length; i++) {
+						try {
+							const res = await fetch('/api/save_ride', {
+								method: 'POST',
+								headers: { 'Content-Type': 'application/json' },
+								body: JSON.stringify(payloads[i])
+							});
+							if (!res.ok) uploadSuccess = false;
+						} catch(err) {
+							uploadSuccess = false;
+						}
 					}
 				} else {
+					uploadSuccess = false;
+				}
+
+				await cleanupPeletonAudio();
+
+				if (uploadSuccess) {
+					localStorage.removeItem(key);
+					clearDB();
+					window.location.href = '/';
+					return;
+				}
+
+				try {
+					await waitDB();
+					if (!db || !db.objectStoreNames.contains(BUNKER_STORE)) throw new Error('Bunker store tidak tersedia.');
+					const txBunker = db.transaction(BUNKER_STORE, 'readwrite');
+					txBunker.objectStore(BUNKER_STORE).put({ id: payloads[0].uuid, payloads: payloads, time: Date.now() });
+					alert('Sinyal terputus! Data diamankan di Brankas Bunker dan akan diunggah otomatis saat internet kembali.');
+					localStorage.removeItem(key);
+					clearDB();
+					window.location.href = '/';
+				} catch(e) {
+					setFinishReviewButtons(false);
+					alert('Upload gagal dan Bunker tidak tersedia. Jangan tutup aplikasi. Coba SAVE FINAL lagi saat sinyal kembali.');
+					throw e;
+				}
+			}
+
+			async function saveFinishReview(useAutoRepair) {
+				if (finishReviewBusy || !finishReviewState) return;
+				const doctor = finishReviewState.doctor;
+
+				if (doctor.counts.valid === 0) {
+					alert('Titik GPS kosong. Aktivitas tidak bisa disimpan.');
+					return;
+				}
+				if (useAutoRepair && !doctor.canAutoRepair) {
+					alert('Tidak ada auto repair aman untuk diterapkan.');
+					return;
+				}
+				if (!useAutoRepair && doctor.hasDanger && !confirm('Data punya warning berat. Simpan apa adanya?')) {
+					return;
+				}
+
+				setFinishReviewButtons(true);
+				try {
+					await uploadFinishPayloads(buildFinishPayloads(useAutoRepair));
+				} catch(e) {
+					console.warn('Finish save gagal:', e);
+				}
+			}
+
+			function reopenStageAfterFinishReview() {
+				tripStages = normalizeTripStages(tripStages);
+				const last = tripStages[tripStages.length - 1];
+				if (last && last.reason === 'finish_review') {
+					last.reason = 'resume_after_review';
+					last.end_time = '';
+					last.end_distance_km = null;
+					last.end_moving_time = null;
+					last.end_point_index = null;
+				}
+			}
+
+			function resumeFromFinishReview() {
+				if (finishReviewBusy) return;
+				document.getElementById('finishReview').style.display = 'none';
+				finishReviewState = null;
+				finishReviewBusy = false;
+				reopenStageAfterFinishReview();
+				isPaused = false;
+				const stopBtn = document.getElementById('btn-stop');
+				if (stopBtn) {
+					stopBtn.innerText = '⬜ TERMINATE & SAVE';
+					stopBtn.disabled = false;
+				}
+				mulai(true);
+			}
+
+			async function discardFinishReview() {
+				if (finishReviewBusy) return;
+				if (!confirm('Buang aktivitas ini dan hapus data lokal?')) return;
+				finishReviewBusy = true;
+				await cleanupPeletonAudio();
+				localStorage.removeItem(key);
+				clearDB();
+				window.location.href = '/';
+			}
+
+			async function selesai() {
+				if (isStealthMode) disableStealth();
+				stopLiveEngines();
+
+				const dur = Math.floor(movingTime);
+
+				if (!isCap) {
+					if (autoPauseStartedAt) {
+						recordRestBlock(autoPauseStartedAt, Date.now(), 'auto_pause', 'Auto-pause masih aktif saat finish.');
+						autoPauseStartedAt = 0;
+					}
+					closeCurrentStage('finish');
 					document.getElementById('fin-dist').innerText = dist.toFixed(2);
 					document.getElementById('fin-time').innerText = document.getElementById('val-time').innerText;
-					document.getElementById('fin-spd').innerText = (dist / (dur/3600) || 0).toFixed(1);
+					document.getElementById('fin-spd').innerText = (dist / (dur / 3600) || 0).toFixed(1);
 					document.getElementById('guestFinish').style.display = 'flex';
-					localStorage.removeItem(key); clearDB();
+					localStorage.removeItem(key);
+					clearDB();
+					return;
+				}
+
+				const stopBtn = document.getElementById('btn-stop');
+				if (stopBtn) {
+					stopBtn.innerText = 'MENGECEK DATA...';
+					stopBtn.disabled = true;
+				}
+
+				try {
+					finishReviewState = await prepareFinishReviewState();
+					renderFinishReview(finishReviewState);
+					document.getElementById('finishReview').style.display = 'block';
+				} catch(e) {
+					console.error('Finish Review gagal:', e);
+					alert('Finish Review gagal disiapkan. Tracking akan dilanjutkan agar data tidak hilang.');
+					resumeFromFinishReview();
 				}
 			}
 

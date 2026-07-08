@@ -580,6 +580,56 @@ const normalizeNutritionSummary = (value: any) => {
   };
 };
 
+
+const normalizeFinishReview = (value: any) => {
+  const rawIssues = Array.isArray(value?.issues) ? value.issues : [];
+  const rawChanges = Array.isArray(value?.changes) ? value.changes : [];
+
+  return {
+    status: String(value?.status || "unknown").trim().slice(0, 40),
+    auto_repair_applied:
+      value?.auto_repair_applied === true || value?.auto_repair_applied === 1,
+    generated_at: normalizeIsoDate(value?.generated_at, new Date().toISOString()),
+    counts:
+      value?.counts && typeof value.counts === "object"
+        ? {
+            raw: Math.max(0, Math.floor(Number(value.counts.raw || 0))),
+            valid: Math.max(0, Math.floor(Number(value.counts.valid || 0))),
+            invalid: Math.max(0, Math.floor(Number(value.counts.invalid || 0))),
+            duplicate: Math.max(0, Math.floor(Number(value.counts.duplicate || 0))),
+            swapped: Math.max(0, Math.floor(Number(value.counts.swapped || 0))),
+            gps_jumps: Math.max(0, Math.floor(Number(value.counts.gps_jumps || 0))),
+            suspicious_speed: Math.max(
+              0,
+              Math.floor(Number(value.counts.suspicious_speed || 0)),
+            ),
+            long_gaps: Math.max(0, Math.floor(Number(value.counts.long_gaps || 0))),
+          }
+        : {},
+    issues: rawIssues
+      .map((issue: any) => ({
+        severity: String(issue?.severity || "info").trim().slice(0, 20),
+        code: String(issue?.code || "unknown").trim().slice(0, 60),
+        message: String(issue?.message || "").trim().slice(0, 180),
+        auto_fix: issue?.auto_fix === true || issue?.autoFix === true,
+      }))
+      .filter((issue) => issue.message)
+      .slice(0, 30),
+    changes: rawChanges
+      .map((change: any) => String(change || "").trim().slice(0, 180))
+      .filter(Boolean)
+      .slice(0, 30),
+    stats_before:
+      value?.stats_before && typeof value.stats_before === "object"
+        ? value.stats_before
+        : {},
+    stats_after:
+      value?.stats_after && typeof value.stats_after === "object"
+        ? value.stats_after
+        : {},
+  };
+};
+
 const normalizeCoordinateList = (value: any): RoutePoint[] => {
   const raw = extractCoordinateList(value);
 
@@ -623,6 +673,1006 @@ const loadRideCoordinates = async (polyline: string): Promise<RoutePoint[]> => {
   } catch {
     return [];
   }
+};
+
+
+type ActivityDoctorSeverity = "info" | "warning" | "danger";
+
+type ActivityDoctorIssue = {
+  code: string;
+  severity: ActivityDoctorSeverity;
+  title: string;
+  detail: string;
+  fixable: boolean;
+  action?: string;
+  count?: number;
+};
+
+type ActivityDoctorChange = {
+  field: string;
+  before: any;
+  after: any;
+  reason: string;
+};
+
+type ActivityDoctorPoint = RoutePoint & {
+  speed?: number;
+  _source_index?: number;
+  _swapped?: boolean;
+};
+
+type ActivityDoctorPayloadInfo = {
+  source: "r2" | "fetch" | "inline_json" | "encoded_polyline" | "missing";
+  object_key: string;
+  raw_payload: any;
+  error?: string;
+};
+
+const DOCTOR_LONG_GAP_SECONDS = 20 * 60;
+const DOCTOR_MOVING_GAP_SECONDS = 5 * 60;
+const DOCTOR_EXTREME_JUMP_METERS = 1500;
+const DOCTOR_MAX_RAW_POINTS = 100000;
+const DOCTOR_SCAN_VERSION = 2;
+
+const getR2PublicHostname = () => {
+  try {
+    return new URL(R2_PUBLIC_BASE_URL).hostname;
+  } catch {
+    return "";
+  }
+};
+
+const normalizeActivityDoctorR2Key = (value: any) =>
+  decodeURIComponent(String(value || "").trim())
+    .replace(/^\/+/, "")
+    .split(/[?#]/)[0]
+    .replace(/\\+/g, "/")
+    .slice(0, 300);
+
+const isActivityDoctorR2ObjectKeyAllowed = (value: any) => {
+  const key = normalizeActivityDoctorR2Key(value);
+
+  if (!key || key.length > 300) return false;
+  if (!key.endsWith(".json")) return false;
+  if (key.includes("..") || key.includes("//")) return false;
+  if (key.includes("repair-backups/")) return false;
+
+  if (key.startsWith("gaspool/")) return true;
+
+  // Legacy Gaspool activity JSON used to be stored in the R2 bucket root.
+  // Example: gaspool_ride_1783092976455_572.json
+  return /^gaspool_ride_[a-zA-Z0-9_-]+\.json$/.test(key);
+};
+
+const isActivityDoctorFetchUrlAllowed = (raw: string, objectKey = "") => {
+  try {
+    const url = new URL(raw);
+    const allowedHost = getR2PublicHostname();
+    const pathKey = normalizeActivityDoctorR2Key(url.pathname || "");
+    const key = objectKey || pathKey;
+
+    return (
+      url.protocol === "https:" &&
+      Boolean(allowedHost) &&
+      url.hostname === allowedHost &&
+      isActivityDoctorR2ObjectKeyAllowed(key)
+    );
+  } catch {
+    return false;
+  }
+};
+
+const normalizeDoctorActionList = (value: any) => {
+  const list = Array.isArray(value) ? value : [];
+
+  return Array.from(
+    new Set(
+      list
+        .map((action: any) =>
+          String(action || "")
+            .trim()
+            .replace(/[^a-z0-9_:-]/gi, "")
+            .slice(0, 80),
+        )
+        .filter(Boolean),
+    ),
+  ).sort();
+};
+
+const sameDoctorActionList = (left: string[], right: string[]) =>
+  JSON.stringify(normalizeDoctorActionList(left)) ===
+  JSON.stringify(normalizeDoctorActionList(right));
+
+const getRideObjectKeyFromPolyline = (value: any) => {
+  const raw = String(value || "").trim();
+
+  if (!raw) return "";
+
+  const directKey = normalizeActivityDoctorR2Key(raw);
+  if (isActivityDoctorR2ObjectKeyAllowed(directKey)) return directKey;
+
+  try {
+    const url = new URL(raw);
+    const allowedHost = getR2PublicHostname();
+
+    if (url.protocol !== "https:" || !allowedHost || url.hostname !== allowedHost) {
+      return "";
+    }
+
+    const pathKey = normalizeActivityDoctorR2Key(url.pathname || "");
+    if (isActivityDoctorR2ObjectKeyAllowed(pathKey)) return pathKey;
+  } catch {}
+
+  return "";
+};
+
+const loadActivityDoctorPayload = async (
+  env: Bindings,
+  polyline: any,
+): Promise<ActivityDoctorPayloadInfo> => {
+  const raw = String(polyline || "").trim();
+
+  if (!raw) {
+    return {
+      source: "missing",
+      object_key: "",
+      raw_payload: null,
+      error: "Polyline kosong.",
+    };
+  }
+
+  const objectKey = getRideObjectKeyFromPolyline(raw);
+
+  if (objectKey) {
+    try {
+      const object = await env.R2_BUCKET.get(objectKey);
+
+      if (object) {
+        return {
+          source: "r2",
+          object_key: objectKey,
+          raw_payload: JSON.parse(await object.text()),
+        };
+      }
+    } catch (e: any) {
+      return {
+        source: "r2",
+        object_key: objectKey,
+        raw_payload: null,
+        error: e?.message || "Gagal membaca JSON R2.",
+      };
+    }
+
+    if (!raw.startsWith("http")) {
+      return {
+        source: "r2",
+        object_key: objectKey,
+        raw_payload: null,
+        error: "Object route tidak ditemukan di R2.",
+      };
+    }
+  }
+
+  if (raw.startsWith("http")) {
+    if (!isActivityDoctorFetchUrlAllowed(raw, objectKey)) {
+      return {
+        source: "fetch",
+        object_key: objectKey,
+        raw_payload: null,
+        error: "Activity Doctor menolak fetch URL eksternal. Scan hanya memakai object R2 bucket atau URL publik R2 yang valid.",
+      };
+    }
+
+    try {
+      const response = await fetch(raw, {
+        headers: {
+          accept: "application/json",
+        },
+      });
+
+      if (!response.ok) {
+        return {
+          source: "fetch",
+          object_key: objectKey,
+          raw_payload: null,
+          error: `Fetch route gagal (${response.status}).`,
+        };
+      }
+
+      return {
+        source: "fetch",
+        object_key: objectKey,
+        raw_payload: await response.json(),
+      };
+    } catch (e: any) {
+      return {
+        source: "fetch",
+        object_key: objectKey,
+        raw_payload: null,
+        error: e?.message || "Gagal fetch route JSON.",
+      };
+    }
+  }
+
+  if (raw.startsWith("[") || raw.startsWith("{")) {
+    try {
+      return {
+        source: "inline_json",
+        object_key: "",
+        raw_payload: JSON.parse(raw),
+      };
+    } catch (e: any) {
+      return {
+        source: "inline_json",
+        object_key: "",
+        raw_payload: null,
+        error: e?.message || "Polyline JSON tidak valid.",
+      };
+    }
+  }
+
+  return {
+    source: "encoded_polyline",
+    object_key: "",
+    raw_payload: raw,
+  };
+};
+
+const normalizeDoctorPointTime = (value: any) => {
+  if (value === undefined || value === null || value === "") return "";
+
+  if (typeof value === "number" && Number.isFinite(value)) {
+    const ms = value > 1e12 ? value : value > 1e9 ? value * 1000 : 0;
+
+    if (ms > 0) return new Date(ms).toISOString();
+  }
+
+  const parsed = Date.parse(String(value));
+
+  if (Number.isFinite(parsed)) return new Date(parsed).toISOString();
+
+  return "";
+};
+
+const normalizeDoctorPoint = (
+  point: any,
+  sourceIndex: number,
+): ActivityDoctorPoint | null => {
+  let lat = NaN;
+  let lng = NaN;
+  let ele = NaN;
+  let speed = NaN;
+  let time = "";
+  let swapped = false;
+
+  if (Array.isArray(point)) {
+    const first = Number(point[0]);
+    const second = Number(point[1]);
+
+    if (Math.abs(first) > 90 && Math.abs(second) <= 90) {
+      lat = second;
+      lng = first;
+      swapped = true;
+    } else {
+      lat = first;
+      lng = second;
+    }
+
+    ele = Number(point[2]);
+    time = normalizeDoctorPointTime(point[3]);
+  } else {
+    lat = Number(point?.lat ?? point?.latitude);
+    lng = Number(point?.lng ?? point?.lon ?? point?.longitude);
+
+    if (Math.abs(lat) > 90 && Math.abs(lng) <= 90) {
+      const originalLat = lat;
+      lat = lng;
+      lng = originalLat;
+      swapped = true;
+    }
+
+    ele = Number(point?.ele ?? point?.elevation ?? point?.altitude);
+    speed = Number(point?.speed ?? point?.speed_kmh ?? point?.speedKmh);
+    time = normalizeDoctorPointTime(
+      point?.time ?? point?.timestamp ?? point?.created_at ?? point?.t ?? point?.ts,
+    );
+  }
+
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return null;
+
+  const normalized: ActivityDoctorPoint = {
+    lat,
+    lng,
+    _source_index: sourceIndex,
+  };
+
+  if (Number.isFinite(ele)) normalized.ele = ele;
+  if (Number.isFinite(speed)) normalized.speed = speed;
+  if (time) normalized.time = time;
+  if (swapped) normalized._swapped = true;
+
+  return normalized;
+};
+
+const extractActivityDoctorRawPoints = (payload: any) => {
+  if (typeof payload === "string") {
+    const raw = payload.trim();
+
+    if (!raw) return [];
+    if (raw.startsWith("[") || raw.startsWith("{")) {
+      try {
+        return extractCoordinateList(JSON.parse(raw));
+      } catch {
+        return [];
+      }
+    }
+
+    return decodePolyline(raw);
+  }
+
+  return extractCoordinateList(payload);
+};
+
+const dedupeDoctorPoints = (points: ActivityDoctorPoint[]) => {
+  const clean: ActivityDoctorPoint[] = [];
+  let removed = 0;
+
+  for (const point of points) {
+    const last = clean[clean.length - 1];
+
+    if (last && getDistanceMeters(last, point) < 1) {
+      const lastTime = last.time ? Date.parse(last.time) : 0;
+      const pointTime = point.time ? Date.parse(point.time) : 0;
+
+      if (!lastTime || !pointTime || Math.abs(pointTime - lastTime) <= 2000) {
+        removed += 1;
+        continue;
+      }
+    }
+
+    clean.push(point);
+  }
+
+  return { points: clean, removed };
+};
+
+const detectDoctorRestBlocks = (points: ActivityDoctorPoint[]) => {
+  const blocks: ReturnType<typeof normalizeRestBlocks> = [];
+  let progressKm = 0;
+  let movingTime = 0;
+
+  for (let i = 1; i < points.length; i++) {
+    const prev = points[i - 1];
+    const point = points[i];
+    const distanceKm = getDistanceMeters(prev, point) / 1000;
+    const prevMs = prev.time ? Date.parse(prev.time) : 0;
+    const pointMs = point.time ? Date.parse(point.time) : 0;
+    const gapSec = prevMs && pointMs ? Math.floor((pointMs - prevMs) / 1000) : 0;
+
+    if (distanceKm > 0 && distanceKm < DOCTOR_EXTREME_JUMP_METERS / 1000) {
+      progressKm += distanceKm;
+    }
+
+    if (gapSec > 0 && gapSec <= DOCTOR_MOVING_GAP_SECONDS) {
+      movingTime += gapSec;
+    }
+
+    if (gapSec >= DOCTOR_LONG_GAP_SECONDS) {
+      blocks.push({
+        type: "detected_gap",
+        label: "Rest gap terdeteksi",
+        start: prevMs,
+        end: pointMs,
+        duration_s: gapSec,
+        distance_km: Number(progressKm.toFixed(3)),
+        moving_time: movingTime,
+        note: "Ditemukan dari jeda timestamp antar titik GPS.",
+      });
+    }
+  }
+
+  return normalizeRestBlocks(blocks);
+};
+
+const recalculateDoctorStats = (
+  points: ActivityDoctorPoint[],
+  activityType: string,
+) => {
+  let distanceKm = 0;
+  let movingTime = 0;
+  let maxSpeed = 0;
+  let elevationGain = 0;
+  let skippedJumpCount = 0;
+  let longGapCount = 0;
+  let suspiciousSpeedCount = 0;
+  let lastEle: number | null = null;
+  const type = String(activityType || "ride").toLowerCase();
+  const plausibleMaxSpeed = type === "ride" ? 120 : type === "run" ? 45 : 25;
+
+  for (let i = 1; i < points.length; i++) {
+    const prev = points[i - 1];
+    const point = points[i];
+    const distanceM = getDistanceMeters(prev, point);
+    const distanceSegmentKm = distanceM / 1000;
+    const prevMs = prev.time ? Date.parse(prev.time) : 0;
+    const pointMs = point.time ? Date.parse(point.time) : 0;
+    const gapSec = prevMs && pointMs ? Math.floor((pointMs - prevMs) / 1000) : 0;
+    const segmentSpeed = gapSec > 0 ? distanceSegmentKm / (gapSec / 3600) : 0;
+
+    if (distanceM >= DOCTOR_EXTREME_JUMP_METERS && (!gapSec || gapSec < DOCTOR_LONG_GAP_SECONDS)) {
+      skippedJumpCount += 1;
+      continue;
+    }
+
+    if (gapSec >= DOCTOR_LONG_GAP_SECONDS) {
+      longGapCount += 1;
+    }
+
+    if (segmentSpeed > plausibleMaxSpeed && gapSec > 0) {
+      suspiciousSpeedCount += 1;
+    }
+
+    if (distanceM >= 1 && distanceM < DOCTOR_EXTREME_JUMP_METERS) {
+      distanceKm += distanceSegmentKm;
+    }
+
+    if (gapSec > 0 && gapSec <= DOCTOR_MOVING_GAP_SECONDS && segmentSpeed <= plausibleMaxSpeed) {
+      movingTime += gapSec;
+    }
+
+    if (Number.isFinite(point.speed || NaN)) {
+      maxSpeed = Math.max(maxSpeed, Number(point.speed || 0));
+    } else if (segmentSpeed > 0 && segmentSpeed <= plausibleMaxSpeed) {
+      maxSpeed = Math.max(maxSpeed, segmentSpeed);
+    }
+
+    const ele = Number(point.ele);
+
+    if (Number.isFinite(ele)) {
+      if (lastEle !== null) {
+        const diff = ele - lastEle;
+        if (diff > 3 && diff < 50) elevationGain += diff;
+      }
+
+      lastEle = ele;
+    }
+  }
+
+  const averageSpeed = movingTime > 0 ? distanceKm / (movingTime / 3600) : 0;
+
+  return {
+    distance_km: Number(distanceKm.toFixed(3)),
+    moving_time: Math.max(0, Math.floor(movingTime)),
+    average_speed: Number(averageSpeed.toFixed(2)),
+    max_speed: Number(maxSpeed.toFixed(2)),
+    total_elevation_gain: Number(elevationGain.toFixed(1)),
+    skipped_jump_count: skippedJumpCount,
+    long_gap_count: longGapCount,
+    suspicious_speed_count: suspiciousSpeedCount,
+  };
+};
+
+const pushDoctorIssue = (
+  issues: ActivityDoctorIssue[],
+  issue: ActivityDoctorIssue,
+) => {
+  if (!issues.some((existing) => existing.code === issue.code)) {
+    issues.push(issue);
+  }
+};
+
+const pushDoctorChange = (
+  changes: ActivityDoctorChange[],
+  field: string,
+  before: any,
+  after: any,
+  reason: string,
+) => {
+  const beforeString = JSON.stringify(before ?? null);
+  const afterString = JSON.stringify(after ?? null);
+
+  if (beforeString === afterString) return;
+
+  changes.push({ field, before, after, reason });
+};
+
+const getDoctorPayloadObject = (payload: any): any =>
+  payload && typeof payload === "object" && !Array.isArray(payload)
+    ? payload
+    : {};
+
+const getDoctorAcknowledgedActions = (metadata: any) => {
+  const actions = new Set<string>();
+
+  if (Array.isArray(metadata?.repair_acknowledged_actions)) {
+    metadata.repair_acknowledged_actions.forEach((action: any) => {
+      const normalized = String(action || "").trim();
+      if (normalized) actions.add(normalized);
+    });
+  }
+
+  if (Array.isArray(metadata?.repair_history)) {
+    metadata.repair_history.slice(-10).forEach((entry: any) => {
+      if (!Array.isArray(entry?.actions)) return;
+      entry.actions.forEach((action: any) => {
+        const normalized = String(action || "").trim();
+        if (normalized) actions.add(normalized);
+      });
+    });
+  }
+
+  return actions;
+};
+
+const cleanDoctorRepairPoint = (point: ActivityDoctorPoint) => {
+  const cleaned: any = {
+    lat: Number(Number(point.lat).toFixed(7)),
+    lng: Number(Number(point.lng).toFixed(7)),
+  };
+
+  if (Number.isFinite(Number(point.ele))) {
+    cleaned.ele = Number(Number(point.ele).toFixed(1));
+  }
+
+  if (Number.isFinite(Number(point.speed))) {
+    cleaned.speed = Number(Number(point.speed).toFixed(2));
+  }
+
+  if (point.time) cleaned.time = point.time;
+
+  return cleaned;
+};
+
+const mergeDoctorRestBlocks = (
+  existing: ReturnType<typeof normalizeRestBlocks>,
+  detected: ReturnType<typeof normalizeRestBlocks>,
+) => {
+  const merged: ReturnType<typeof normalizeRestBlocks> = [];
+  const seen = new Set<string>();
+
+  [...existing, ...detected].forEach((block) => {
+    const start = Math.floor(Number(block.start || 0) / 1000);
+    const end = Math.floor(Number(block.end || 0) / 1000);
+    const key = `${block.type}:${start}:${end}:${Math.floor(Number(block.duration_s || 0) / 60)}`;
+
+    if (seen.has(key)) return;
+    seen.add(key);
+    merged.push(block);
+  });
+
+  return merged
+    .sort((a, b) => Number(a.start || 0) - Number(b.start || 0))
+    .slice(-80);
+};
+
+const getDoctorRepairTargetKey = (rideId: number, payloadInfo: ActivityDoctorPayloadInfo) => {
+  const currentKey = String(payloadInfo.object_key || "").trim();
+
+  if (currentKey.startsWith("gaspool/") && !currentKey.includes("repair-backups/")) {
+    return currentKey;
+  }
+
+  return `gaspool/gaspool_ride_repaired_${rideId}_${Date.now()}_${Math.floor(
+    Math.random() * 1000,
+  )}.json`;
+};
+
+const buildDoctorBackupKey = (rideId: number) =>
+  `gaspool/repair-backups/ride_${rideId}_${new Date()
+    .toISOString()
+    .replace(/[:.]/g, "-")}.json`;
+
+const buildActivityDoctorRepair = (
+  ride: any,
+  payloadInfo: ActivityDoctorPayloadInfo,
+  scan: ReturnType<typeof buildActivityDoctorScan>,
+) => {
+  const payload = payloadInfo.raw_payload;
+  const payloadObject = getDoctorPayloadObject(payload);
+  const metadata = payloadObject.metadata || {};
+  const rawPoints = extractActivityDoctorRawPoints(payload);
+  const boundedRawPoints = rawPoints.slice(0, DOCTOR_MAX_RAW_POINTS);
+  const normalizedRecords = boundedRawPoints.map((point: any, index: number) =>
+    normalizeDoctorPoint(point, index),
+  );
+  const validPoints = normalizedRecords.filter(Boolean) as ActivityDoctorPoint[];
+  const points = dedupeDoctorPoints(validPoints).points;
+  const cleanPoints = points.map(cleanDoctorRepairPoint);
+  const activityType = String(
+    ride?.activity_type || metadata?.activity_type || "ride",
+  ).toLowerCase();
+  const recalculated = recalculateDoctorStats(points, activityType);
+  const existingRestBlocks = normalizeRestBlocks(payloadObject.rest_blocks);
+  const detectedRestBlocks = detectDoctorRestBlocks(points);
+  const restBlocks = mergeDoctorRestBlocks(existingRestBlocks, detectedRestBlocks);
+  const restSummary = summarizeRestBlocks(restBlocks);
+  const stages = normalizeActivityStages(payloadObject.stages);
+  const signalLogs = normalizeSignalLogs(payloadObject.signal_logs);
+  const signalSummary = summarizeSignalLogs(signalLogs);
+  const nutritionSummary = normalizeNutritionSummary(payloadObject.nutrition_summary);
+  const nowIso = new Date().toISOString();
+  const currentTimeContext = metadata?.time_context || {};
+  const firstPointTime = cleanPoints.find((point: any) => point.time)?.time || "";
+  const startDateIso = normalizeIsoDate(
+    currentTimeContext.start_date || firstPointTime || ride?.start_date,
+    nowIso,
+  );
+  const finishPointTime = [...cleanPoints].reverse().find((point: any) => point.time)?.time || "";
+  const finishDateIso = normalizeIsoDate(
+    currentTimeContext.finish_date || finishPointTime || nowIso,
+    nowIso,
+  );
+  const previousHistory = Array.isArray(metadata?.repair_history)
+    ? metadata.repair_history.slice(-30)
+    : [];
+  const previousAcknowledged = Array.from(getDoctorAcknowledgedActions(metadata));
+  const appliedActions = Array.from(
+    new Set([...previousAcknowledged, ...scan.repair_plan]),
+  ).slice(-80);
+  const repairEntry = {
+    at: nowIso,
+    version: 1,
+    mode: "auto",
+    actions: scan.repair_plan,
+    changes: scan.changes.map((change) => ({
+      field: change.field,
+      before: change.before,
+      after: change.after,
+    })),
+    stats_before: scan.stats.current,
+    stats_after: recalculated,
+  };
+  const basePayload =
+    payloadObject && !payloadObject.type && !payloadObject.features
+      ? { ...payloadObject }
+      : {};
+
+  delete (basePayload as any).coordinates;
+  delete (basePayload as any).path;
+  delete (basePayload as any).data;
+  delete (basePayload as any).polyline;
+  delete (basePayload as any).geometry;
+
+  const repairedPayload = {
+    ...basePayload,
+    points: cleanPoints,
+    stages,
+    rest_blocks: restBlocks,
+    nutrition_summary: nutritionSummary,
+    signal_logs: signalLogs,
+    metadata: {
+      ...metadata,
+      activity_type: activityType,
+      distance_km: recalculated.distance_km,
+      moving_time: recalculated.moving_time,
+      average_speed: recalculated.average_speed,
+      max_speed: recalculated.max_speed,
+      total_elevation_gain: recalculated.total_elevation_gain,
+      time_context: {
+        ...currentTimeContext,
+        start_date: startDateIso,
+        finish_date: finishDateIso,
+        start_timezone_offset_min: normalizeTimezoneOffset(
+          currentTimeContext.start_timezone_offset_min,
+        ),
+        finish_timezone_offset_min: normalizeTimezoneOffset(
+          currentTimeContext.finish_timezone_offset_min,
+        ),
+        start_timezone_name: normalizeTimezoneName(
+          currentTimeContext.start_timezone_name,
+        ),
+        finish_timezone_name: normalizeTimezoneName(
+          currentTimeContext.finish_timezone_name,
+        ),
+      },
+      rest_summary: restSummary,
+      nutrition_summary: {
+        enabled: nutritionSummary.enabled,
+        water_count: nutritionSummary.water_count,
+        food_count: nutritionSummary.food_count,
+      },
+      signal_summary: signalSummary,
+      source: metadata?.source || ride?.source || "GASPOOL",
+      exported_at: metadata?.exported_at || nowIso,
+      repaired_at: nowIso,
+      repair_acknowledged_actions: appliedActions,
+      repair_history: [...previousHistory, repairEntry].slice(-30),
+    },
+  };
+
+  return {
+    payload: repairedPayload,
+    points,
+    stats: recalculated,
+    start_date: startDateIso,
+    applied_actions: scan.repair_plan,
+  };
+};
+
+const buildActivityDoctorScan = (
+  ride: any,
+  payloadInfo: ActivityDoctorPayloadInfo,
+) => {
+  const issues: ActivityDoctorIssue[] = [];
+  const changes: ActivityDoctorChange[] = [];
+  const payload = payloadInfo.raw_payload;
+  const rawPoints = extractActivityDoctorRawPoints(payload);
+  const boundedRawPoints = rawPoints.slice(0, DOCTOR_MAX_RAW_POINTS);
+  const normalizedRecords = boundedRawPoints.map((point: any, index: number) =>
+    normalizeDoctorPoint(point, index),
+  );
+  const validPoints = normalizedRecords.filter(Boolean) as ActivityDoctorPoint[];
+  const invalidPointCount = normalizedRecords.length - validPoints.length;
+  const swappedPointCount = validPoints.filter((point) => point._swapped).length;
+  const deduped = dedupeDoctorPoints(validPoints);
+  const points = deduped.points;
+  const payloadObject = getDoctorPayloadObject(payload);
+  const metadata = payloadObject.metadata || {};
+  const acknowledgedActions = getDoctorAcknowledgedActions(metadata);
+  const activityType = String(ride?.activity_type || metadata?.activity_type || "ride");
+  const recalculated = recalculateDoctorStats(points, activityType);
+  const existingRestBlocks = normalizeRestBlocks(payloadObject.rest_blocks);
+  const detectedRestBlocks = detectDoctorRestBlocks(points);
+  const timeContext = metadata?.time_context || {};
+  const rawShape = Array.isArray(payload)
+    ? "legacy_array"
+    : payload && typeof payload === "object"
+      ? payload.points
+        ? "wrapped_points"
+        : payload.coordinates
+          ? "coordinates_object"
+          : "object"
+      : typeof payload === "string"
+        ? "encoded_polyline"
+        : "missing";
+
+  if (payloadInfo.error) {
+    pushDoctorIssue(issues, {
+      code: "payload_read_error",
+      severity: "danger",
+      title: "Route JSON tidak bisa dibaca",
+      detail: payloadInfo.error,
+      fixable: false,
+    });
+  }
+
+  if (rawPoints.length > DOCTOR_MAX_RAW_POINTS) {
+    pushDoctorIssue(issues, {
+      code: "too_many_points",
+      severity: "danger",
+      title: "Route terlalu besar untuk auto repair",
+      detail: `Activity Doctor membatasi scan ke ${DOCTOR_MAX_RAW_POINTS} titik agar Worker tetap aman. Aktivitas ini punya ${rawPoints.length} titik.`,
+      fixable: false,
+      count: rawPoints.length,
+    });
+  }
+
+  if (rawShape === "legacy_array" || rawShape === "encoded_polyline") {
+    pushDoctorIssue(issues, {
+      code: "legacy_route_format",
+      severity: "info",
+      title: "Format route lama terdeteksi",
+      detail: "Route bisa dinormalisasi ke format wrapper baru agar metadata, rest block, dan repair history bisa tersimpan rapi.",
+      fixable: true,
+      action: "normalize_route_wrapper",
+    });
+    pushDoctorChange(changes, "route_format", rawShape, "wrapped_points", "Normalisasi route lama ke struktur JSON baru.");
+  }
+
+  if (rawPoints.length < 2 || points.length < 2) {
+    pushDoctorIssue(issues, {
+      code: "route_points_missing",
+      severity: "danger",
+      title: "Route point tidak cukup",
+      detail: "Aktivitas butuh minimal dua titik GPS valid untuk dihitung ulang.",
+      fixable: false,
+      count: points.length,
+    });
+  }
+
+  if (invalidPointCount > 0) {
+    pushDoctorIssue(issues, {
+      code: "invalid_points",
+      severity: "warning",
+      title: "Titik GPS invalid ditemukan",
+      detail: `${invalidPointCount} titik tanpa koordinat valid bisa dibuang otomatis dari route JSON.`,
+      fixable: true,
+      action: "drop_invalid_points",
+      count: invalidPointCount,
+    });
+    pushDoctorChange(changes, "points.invalid_removed", invalidPointCount, 0, "Buang titik GPS korup.");
+  }
+
+  if (swappedPointCount > 0) {
+    pushDoctorIssue(issues, {
+      code: "swapped_coordinates",
+      severity: "info",
+      title: "Koordinat terbalik terdeteksi",
+      detail: `${swappedPointCount} titik terlihat memakai urutan lng/lat dan bisa dinormalisasi ke lat/lng.`,
+      fixable: true,
+      action: "normalize_coordinate_order",
+      count: swappedPointCount,
+    });
+    pushDoctorChange(changes, "points.swapped_coordinates", swappedPointCount, 0, "Normalisasi urutan koordinat.");
+  }
+
+  if (deduped.removed > 0) {
+    pushDoctorIssue(issues, {
+      code: "duplicate_points",
+      severity: "info",
+      title: "Titik GPS duplikat ditemukan",
+      detail: `${deduped.removed} titik duplikat berurutan bisa dibersihkan otomatis.`,
+      fixable: true,
+      action: "dedupe_points",
+      count: deduped.removed,
+    });
+    pushDoctorChange(changes, "points.duplicate_removed", deduped.removed, 0, "Hapus duplikat berurutan.");
+  }
+
+  if (
+    recalculated.skipped_jump_count > 0 &&
+    !acknowledgedActions.has("ignore_extreme_gps_jumps")
+  ) {
+    pushDoctorIssue(issues, {
+      code: "gps_jumps",
+      severity: "warning",
+      title: "GPS jump ekstrem terdeteksi",
+      detail: `${recalculated.skipped_jump_count} segmen terlihat seperti lompatan GPS dan bisa diabaikan dari statistik repair.`,
+      fixable: true,
+      action: "ignore_extreme_gps_jumps",
+      count: recalculated.skipped_jump_count,
+    });
+  }
+
+  if (
+    recalculated.suspicious_speed_count > 0 &&
+    !acknowledgedActions.has("recalculate_stats_with_speed_guard")
+  ) {
+    pushDoctorIssue(issues, {
+      code: "suspicious_speed",
+      severity: "warning",
+      title: "Kecepatan segmen tidak wajar",
+      detail: `${recalculated.suspicious_speed_count} segmen melampaui batas wajar untuk tipe aktivitas ini.`,
+      fixable: true,
+      action: "recalculate_stats_with_speed_guard",
+      count: recalculated.suspicious_speed_count,
+    });
+  }
+
+  if (detectedRestBlocks.length > existingRestBlocks.length) {
+    pushDoctorIssue(issues, {
+      code: "missing_rest_blocks",
+      severity: "info",
+      title: "Rest block bisa ditambahkan",
+      detail: `${detectedRestBlocks.length} jeda panjang ditemukan dari timestamp GPS.`,
+      fixable: true,
+      action: "add_detected_rest_blocks",
+      count: detectedRestBlocks.length,
+    });
+    pushDoctorChange(
+      changes,
+      "rest_blocks.count",
+      existingRestBlocks.length,
+      detectedRestBlocks.length,
+      "Tambahkan rest block dari gap timestamp.",
+    );
+  }
+
+  const missingMetadata: string[] = [];
+  if (!metadata?.source) missingMetadata.push("source");
+  if (!metadata?.activity_type) missingMetadata.push("activity_type");
+  if (!metadata?.time_context) missingMetadata.push("time_context");
+  if (!metadata?.rest_summary) missingMetadata.push("rest_summary");
+  if (!metadata?.repair_history) missingMetadata.push("repair_history");
+
+  if (missingMetadata.length > 0) {
+    pushDoctorIssue(issues, {
+      code: "missing_metadata",
+      severity: "info",
+      title: "Metadata belum lengkap",
+      detail: `Field metadata kosong: ${missingMetadata.join(", ")}.`,
+      fixable: true,
+      action: "fill_missing_metadata",
+      count: missingMetadata.length,
+    });
+    pushDoctorChange(changes, "metadata.missing_fields", missingMetadata, [], "Isi metadata dasar dari D1 dan payload aktivitas.");
+  }
+
+  const d1Distance = Number(ride?.distance || 0);
+  const d1Moving = Number(ride?.moving_time || 0);
+  const distanceDelta = Math.abs(d1Distance - recalculated.distance_km);
+  const movingDelta = Math.abs(d1Moving - recalculated.moving_time);
+
+  if (
+    points.length >= 2 &&
+    d1Distance > 0 &&
+    (distanceDelta > 0.3 || distanceDelta / Math.max(d1Distance, 0.1) > 0.05)
+  ) {
+    pushDoctorIssue(issues, {
+      code: "distance_mismatch",
+      severity: "warning",
+      title: "Jarak D1 beda dari route GPS",
+      detail: `D1 ${d1Distance.toFixed(2)} km, hasil hitung ulang ${recalculated.distance_km.toFixed(2)} km.`,
+      fixable: true,
+      action: "recalculate_distance",
+    });
+    pushDoctorChange(changes, "distance", Number(d1Distance.toFixed(3)), recalculated.distance_km, "Hitung ulang jarak dari titik GPS valid.");
+  }
+
+  if (points.length >= 2 && d1Moving > 0 && movingDelta > 5 * 60) {
+    pushDoctorIssue(issues, {
+      code: "moving_time_mismatch",
+      severity: "warning",
+      title: "Moving time perlu dicek",
+      detail: `D1 ${formatRecordDuration(d1Moving)}, hasil estimasi point ${formatRecordDuration(recalculated.moving_time)}.`,
+      fixable: true,
+      action: "recalculate_moving_time",
+    });
+    pushDoctorChange(changes, "moving_time", d1Moving, recalculated.moving_time, "Estimasi ulang moving time dengan guard long gap.");
+  }
+
+  const repairPlan = Array.from(
+    new Set(
+      issues
+        .filter((issue) => issue.fixable && issue.action)
+        .map((issue) => String(issue.action)),
+    ),
+  );
+  const dangerCount = issues.filter((issue) => issue.severity === "danger").length;
+  const warningCount = issues.filter((issue) => issue.severity === "warning").length;
+  const status = dangerCount > 0 ? "broken" : warningCount > 0 ? "needs_attention" : issues.length > 0 ? "repairable" : "healthy";
+
+  return {
+    status,
+    healthy: issues.length === 0,
+    can_auto_repair: dangerCount === 0 && repairPlan.length > 0,
+    dry_run: true,
+    source: payloadInfo.source,
+    object_key: payloadInfo.object_key,
+    raw_shape: rawShape,
+    counts: {
+      raw_points: rawPoints.length,
+      scanned_points: boundedRawPoints.length,
+      valid_points: validPoints.length,
+      normalized_points: points.length,
+      invalid_points: invalidPointCount,
+      duplicate_points: deduped.removed,
+      swapped_points: swappedPointCount,
+    },
+    stats: {
+      current: {
+        distance_km: Number(d1Distance.toFixed(3)),
+        moving_time: d1Moving,
+        average_speed: Number(Number(ride?.average_speed || 0).toFixed(2)),
+        max_speed: Number(Number(ride?.max_speed || 0).toFixed(2)),
+        total_elevation_gain: Number(Number(ride?.total_elevation_gain || 0).toFixed(1)),
+      },
+      recalculated,
+    },
+    rest_blocks: {
+      existing_count: existingRestBlocks.length,
+      detected_count: detectedRestBlocks.length,
+      detected_total_seconds: detectedRestBlocks.reduce(
+        (sum, block) => sum + Number(block.duration_s || 0),
+        0,
+      ),
+    },
+    issues,
+    changes,
+    repair_plan: repairPlan,
+    guardrails: {
+      version: DOCTOR_SCAN_VERSION,
+      max_raw_points: DOCTOR_MAX_RAW_POINTS,
+      apply_confirmation_required: true,
+      backup_required: true,
+      external_fetch_policy: "r2_bucket_or_configured_r2_public_url_only_with_legacy_root_activity_json",
+    },
+    route_sample: sampleRoutePoints(points, 12).map((point) => ({
+      lat: Number(point.lat.toFixed(6)),
+      lng: Number(point.lng.toFixed(6)),
+    })),
+  };
 };
 
 const sampleRoutePoints = (points: RoutePoint[], size = 24) => {
@@ -2164,6 +3214,7 @@ api.post("/save_ride", protectAPI, async (c) => {
     const nutritionSummary = normalizeNutritionSummary(b.nutrition_summary);
     const signalLogs = normalizeSignalLogs(b.signal_logs);
     const signalSummary = summarizeSignalLogs(signalLogs);
+    const finishReview = normalizeFinishReview(b.finish_review);
     const skippedClockGapSeconds = Math.max(
       0,
       Math.floor(Number(b.skipped_clock_gap_seconds || 0)),
@@ -2279,6 +3330,7 @@ api.post("/save_ride", protectAPI, async (c) => {
             food_count: nutritionSummary.food_count,
           },
           signal_summary: signalSummary,
+          finish_review: finishReview,
           source: b.source || "GASPOOL",
           exported_at: savedAtIso,
         },
@@ -2346,6 +3398,290 @@ api.post("/save_ride", protectAPI, async (c) => {
       {
         success: false,
         message: e.message,
+      },
+      500,
+    );
+  }
+});
+
+
+// 3. Activity Doctor scan (dry-run)
+api.get("/activity_doctor/:id", protectAPI, async (c) => {
+  const id = Number(c.req.param("id"));
+
+  if (!Number.isFinite(id) || id <= 0) {
+    return c.json(
+      {
+        success: false,
+        message: "ID aktivitas tidak valid.",
+      },
+      400,
+    );
+  }
+
+  try {
+    const ride: any = await c.env.DB.prepare("SELECT * FROM rides WHERE id = ?")
+      .bind(id)
+      .first();
+
+    if (!ride) {
+      return c.json(
+        {
+          success: false,
+          message: "Aktivitas tidak ditemukan.",
+        },
+        404,
+      );
+    }
+
+    const payloadInfo = await loadActivityDoctorPayload(
+      c.env,
+      String(ride.polyline || ""),
+    );
+    const doctor = buildActivityDoctorScan(ride, payloadInfo);
+
+    return c.json({
+      success: true,
+      dry_run: true,
+      message:
+        doctor.status === "healthy"
+          ? "Aktivitas terlihat sehat. Tidak ada repair yang diperlukan."
+          : doctor.can_auto_repair
+            ? "Activity Doctor menemukan perbaikan otomatis yang aman. Gunakan endpoint apply untuk menerapkannya."
+            : "Activity Doctor menemukan masalah yang perlu perhatian.",
+      ride: {
+        id: ride.id,
+        name: ride.name,
+        activity_type: ride.activity_type || "ride",
+        start_date: ride.start_date,
+      },
+      doctor,
+    });
+  } catch (e: any) {
+    return c.json(
+      {
+        success: false,
+        message: e?.message || "Activity Doctor gagal memeriksa aktivitas.",
+      },
+      500,
+    );
+  }
+});
+
+// 3b. Activity Doctor v2 apply auto repair
+api.post("/activity_doctor/:id/apply", protectAPI, async (c) => {
+  const id = Number(c.req.param("id"));
+  const body = await c.req.json().catch(() => ({}));
+  const confirmed =
+    body?.confirm_auto_repair === true ||
+    body?.confirm === true ||
+    body?.confirm_auto_repair === "true" ||
+    body?.confirm === "true";
+  const expectedActions = normalizeDoctorActionList(
+    body?.expected_actions || body?.expectedActions || [],
+  );
+
+  if (!confirmed) {
+    return c.json(
+      {
+        success: false,
+        applied: false,
+        message: "Auto repair butuh konfirmasi eksplisit dari UI.",
+      },
+      400,
+    );
+  }
+
+  if (!Number.isFinite(id) || id <= 0) {
+    return c.json(
+      {
+        success: false,
+        message: "ID aktivitas tidak valid.",
+      },
+      400,
+    );
+  }
+
+  try {
+    const ride: any = await c.env.DB.prepare("SELECT * FROM rides WHERE id = ?")
+      .bind(id)
+      .first();
+
+    if (!ride) {
+      return c.json(
+        {
+          success: false,
+          message: "Aktivitas tidak ditemukan.",
+        },
+        404,
+      );
+    }
+
+    const payloadInfo = await loadActivityDoctorPayload(
+      c.env,
+      String(ride.polyline || ""),
+    );
+    const doctor = buildActivityDoctorScan(ride, payloadInfo);
+
+    if (doctor.healthy) {
+      return c.json({
+        success: true,
+        applied: false,
+        message: "Aktivitas sudah sehat. Tidak ada auto repair yang perlu diterapkan.",
+        ride: {
+          id: ride.id,
+          name: ride.name,
+          activity_type: ride.activity_type || "ride",
+          start_date: ride.start_date,
+        },
+        doctor,
+      });
+    }
+
+    if (!doctor.can_auto_repair) {
+      return c.json(
+        {
+          success: false,
+          applied: false,
+          message: "Activity Doctor menemukan masalah yang belum aman untuk auto repair.",
+          doctor,
+        },
+        409,
+      );
+    }
+
+    if (expectedActions.length > 0 && !sameDoctorActionList(expectedActions, doctor.repair_plan)) {
+      return c.json(
+        {
+          success: false,
+          applied: false,
+          message: "Rencana repair berubah sejak scan terakhir. Scan ulang sebelum apply.",
+          doctor,
+        },
+        409,
+      );
+    }
+
+    const repair = buildActivityDoctorRepair(ride, payloadInfo, doctor);
+
+    if (repair.points.length < 2) {
+      return c.json(
+        {
+          success: false,
+          applied: false,
+          message: "Auto repair dibatalkan karena titik GPS valid kurang dari dua.",
+          doctor,
+        },
+        409,
+      );
+    }
+
+    const targetKey = getDoctorRepairTargetKey(id, payloadInfo);
+    const backupKey = buildDoctorBackupKey(id);
+    const backupPayload = {
+      ride: {
+        id: ride.id,
+        name: ride.name,
+        start_date: ride.start_date,
+        distance: ride.distance,
+        moving_time: ride.moving_time,
+        average_speed: ride.average_speed,
+        max_speed: ride.max_speed,
+        total_elevation_gain: ride.total_elevation_gain,
+        polyline: ride.polyline,
+        activity_type: ride.activity_type,
+      },
+      payload_source: payloadInfo.source,
+      object_key: payloadInfo.object_key,
+      raw_payload: payloadInfo.raw_payload,
+      backed_up_at: new Date().toISOString(),
+    };
+
+    await c.env.R2_BUCKET.put(backupKey, JSON.stringify(backupPayload), {
+      httpMetadata: {
+        contentType: "application/json",
+      },
+    });
+
+    await c.env.R2_BUCKET.put(targetKey, JSON.stringify(repair.payload), {
+      httpMetadata: {
+        contentType: "application/json",
+      },
+    });
+
+    const publicUrl = `${R2_PUBLIC_BASE_URL}/${targetKey}`;
+
+    const updateResult = await c.env.DB.prepare(
+      `UPDATE rides
+       SET distance = ?,
+           moving_time = ?,
+           average_speed = ?,
+           max_speed = ?,
+           total_elevation_gain = ?,
+           start_date = ?,
+           polyline = ?
+       WHERE id = ?`,
+    )
+      .bind(
+        repair.stats.distance_km,
+        repair.stats.moving_time,
+        repair.stats.average_speed,
+        repair.stats.max_speed,
+        repair.stats.total_elevation_gain,
+        repair.start_date,
+        publicUrl,
+        id,
+      )
+      .run();
+
+    if (updateResult && updateResult.success === false) {
+      throw new Error("R2 repair berhasil ditulis, tetapi update D1 gagal.");
+    }
+
+    const repairedRide = {
+      ...ride,
+      distance: repair.stats.distance_km,
+      moving_time: repair.stats.moving_time,
+      average_speed: repair.stats.average_speed,
+      max_speed: repair.stats.max_speed,
+      total_elevation_gain: repair.stats.total_elevation_gain,
+      start_date: repair.start_date,
+      polyline: publicUrl,
+    };
+    const postDoctor = buildActivityDoctorScan(repairedRide, {
+      source: "r2",
+      object_key: targetKey,
+      raw_payload: repair.payload,
+    });
+
+    return c.json({
+      success: true,
+      applied: true,
+      message: "Auto repair diterapkan. Backup R2 dibuat lebih dulu, lalu JSON dan D1 diperbarui.",
+      ride: {
+        id: ride.id,
+        name: ride.name,
+        activity_type: ride.activity_type || "ride",
+        start_date: repair.start_date,
+      },
+      repair: {
+        backup_key: backupKey,
+        object_key: targetKey,
+        public_url: publicUrl,
+        applied_actions: repair.applied_actions,
+        stats: {
+          before: doctor.stats.current,
+          after: repair.stats,
+        },
+      },
+      doctor: postDoctor,
+      previous_doctor: doctor,
+    });
+  } catch (e: any) {
+    return c.json(
+      {
+        success: false,
+        message: e?.message || "Activity Doctor gagal menerapkan auto repair.",
       },
       500,
     );

@@ -619,6 +619,310 @@ studio.get("/detail/:id", async (c) => {
                   stroke-linejoin: round;
               }
 
+
+
+              .doctor-btn {
+                  grid-column: 1 / -1;
+                  background: linear-gradient(135deg, #0f766e, #14b8a6);
+                  border: 1px solid rgba(45, 212, 191, 0.35);
+                  box-shadow: 0 10px 26px rgba(20, 184, 166, 0.16);
+              }
+
+              .doctor-modal {
+                  position: fixed;
+                  inset: 0;
+                  z-index: 9999;
+                  display: none;
+                  align-items: flex-end;
+                  justify-content: center;
+                  padding: 14px;
+                  background: rgba(0, 0, 0, 0.72);
+                  backdrop-filter: blur(8px);
+              }
+
+              .doctor-modal.is-open {
+                  display: flex;
+              }
+
+              .doctor-dialog {
+                  width: 100%;
+                  max-width: 620px;
+                  max-height: 88vh;
+                  overflow: auto;
+                  border-radius: 24px;
+                  border: 1px solid rgba(255,255,255,0.12);
+                  background: #10101a;
+                  box-shadow: 0 -20px 60px rgba(0,0,0,0.55);
+              }
+
+              .doctor-header {
+                  position: sticky;
+                  top: 0;
+                  z-index: 2;
+                  display: flex;
+                  justify-content: space-between;
+                  align-items: flex-start;
+                  gap: 12px;
+                  padding: 18px;
+                  border-bottom: 1px solid rgba(255,255,255,0.08);
+                  background: linear-gradient(180deg, #151522, #10101a);
+              }
+
+              .doctor-title {
+                  margin: 0;
+                  color: var(--primary);
+                  font-size: 1.05rem;
+                  font-weight: 950;
+                  font-style: italic;
+                  text-transform: uppercase;
+                  letter-spacing: 0.6px;
+              }
+
+              .doctor-subtitle {
+                  margin-top: 5px;
+                  color: var(--text-muted);
+                  font-size: 0.72rem;
+                  font-weight: 800;
+                  line-height: 1.4;
+              }
+
+              .doctor-close {
+                  border: 1px solid rgba(255,255,255,0.12);
+                  background: rgba(255,255,255,0.06);
+                  color: #fff;
+                  border-radius: 12px;
+                  padding: 9px 12px;
+                  font-weight: 950;
+                  cursor: pointer;
+              }
+
+              .doctor-body {
+                  padding: 16px;
+                  display: grid;
+                  gap: 12px;
+              }
+
+              .doctor-card {
+                  border-radius: 18px;
+                  border: 1px solid rgba(255,255,255,0.08);
+                  background: rgba(255,255,255,0.045);
+                  padding: 14px;
+              }
+
+              .doctor-status-row {
+                  display: flex;
+                  align-items: center;
+                  justify-content: space-between;
+                  gap: 10px;
+                  margin-bottom: 10px;
+              }
+
+              .doctor-pill {
+                  display: inline-flex;
+                  align-items: center;
+                  justify-content: center;
+                  border-radius: 999px;
+                  padding: 7px 11px;
+                  font-size: 0.62rem;
+                  font-weight: 950;
+                  text-transform: uppercase;
+                  letter-spacing: 0.8px;
+                  color: #fff;
+                  background: rgba(148, 163, 184, 0.18);
+                  border: 1px solid rgba(148, 163, 184, 0.28);
+                  white-space: nowrap;
+              }
+
+              .doctor-pill.healthy {
+                  background: rgba(46, 204, 113, 0.16);
+                  border-color: rgba(46, 204, 113, 0.35);
+                  color: #86efac;
+              }
+
+              .doctor-pill.repairable,
+              .doctor-pill.needs_attention {
+                  background: rgba(255, 95, 0, 0.16);
+                  border-color: rgba(255, 95, 0, 0.34);
+                  color: #fdba74;
+              }
+
+              .doctor-pill.broken {
+                  background: rgba(231, 76, 60, 0.16);
+                  border-color: rgba(231, 76, 60, 0.34);
+                  color: #fca5a5;
+              }
+
+              .doctor-summary {
+                  color: #dbeafe;
+                  font-size: 0.8rem;
+                  font-weight: 820;
+                  line-height: 1.55;
+              }
+
+              .doctor-mini-grid {
+                  display: grid;
+                  grid-template-columns: repeat(3, 1fr);
+                  gap: 8px;
+              }
+
+              .doctor-mini {
+                  border-radius: 14px;
+                  padding: 10px;
+                  text-align: center;
+                  background: rgba(0,0,0,0.18);
+                  border: 1px solid rgba(255,255,255,0.06);
+              }
+
+              .doctor-mini strong {
+                  display: block;
+                  color: var(--primary);
+                  font-size: 1rem;
+                  font-weight: 950;
+              }
+
+              .doctor-mini span {
+                  display: block;
+                  margin-top: 4px;
+                  color: var(--text-muted);
+                  font-size: 0.56rem;
+                  font-weight: 900;
+                  letter-spacing: 0.8px;
+                  text-transform: uppercase;
+              }
+
+              .doctor-section-title {
+                  margin: 0 0 8px;
+                  color: var(--primary);
+                  font-size: 0.72rem;
+                  font-weight: 950;
+                  letter-spacing: 0.9px;
+                  text-transform: uppercase;
+              }
+
+              .doctor-list {
+                  display: grid;
+                  gap: 8px;
+              }
+
+              .doctor-empty {
+                  color: var(--text-muted);
+                  font-size: 0.74rem;
+                  font-weight: 800;
+                  line-height: 1.45;
+              }
+
+              .doctor-issue {
+                  display: grid;
+                  grid-template-columns: 82px 1fr;
+                  gap: 10px;
+                  align-items: start;
+                  border-radius: 14px;
+                  padding: 11px;
+                  background: rgba(0,0,0,0.18);
+                  border: 1px solid rgba(255,255,255,0.06);
+              }
+
+              .doctor-severity {
+                  border-radius: 999px;
+                  padding: 6px 8px;
+                  text-align: center;
+                  font-size: 0.56rem;
+                  font-weight: 950;
+                  text-transform: uppercase;
+                  color: #fff;
+                  background: rgba(148,163,184,0.18);
+              }
+
+              .doctor-severity.warning { background: rgba(255, 95, 0, 0.22); color: #fdba74; }
+              .doctor-severity.danger { background: rgba(231, 76, 60, 0.22); color: #fca5a5; }
+              .doctor-severity.info { background: rgba(52, 152, 219, 0.20); color: #93c5fd; }
+
+              .doctor-issue-title {
+                  color: #fff;
+                  font-size: 0.82rem;
+                  font-weight: 950;
+                  margin-bottom: 4px;
+              }
+
+              .doctor-issue-detail,
+              .doctor-change-detail {
+                  color: var(--text-muted);
+                  font-size: 0.68rem;
+                  font-weight: 800;
+                  line-height: 1.45;
+              }
+
+              .doctor-change {
+                  border-radius: 14px;
+                  padding: 11px;
+                  background: rgba(0,0,0,0.18);
+                  border: 1px solid rgba(255,255,255,0.06);
+              }
+
+              .doctor-change-field {
+                  color: #fff;
+                  font-size: 0.78rem;
+                  font-weight: 950;
+                  margin-bottom: 4px;
+              }
+
+              .doctor-before-after {
+                  margin-top: 6px;
+                  color: #cbd5e1;
+                  font-size: 0.68rem;
+                  font-weight: 850;
+              }
+
+              .doctor-actions {
+                  display: flex;
+                  flex-wrap: wrap;
+                  gap: 7px;
+              }
+
+              .doctor-action-chip {
+                  border-radius: 999px;
+                  padding: 7px 10px;
+                  color: #dbeafe;
+                  background: rgba(255,255,255,0.07);
+                  border: 1px solid rgba(255,255,255,0.08);
+                  font-size: 0.62rem;
+                  font-weight: 900;
+              }
+
+              .doctor-footer {
+                  position: sticky;
+                  bottom: 0;
+                  z-index: 2;
+                  display: grid;
+                  grid-template-columns: 1fr 1fr;
+                  gap: 10px;
+                  padding: 14px 16px 16px;
+                  background: linear-gradient(0deg, #10101a, rgba(16,16,26,0.92));
+                  border-top: 1px solid rgba(255,255,255,0.08);
+              }
+
+              .doctor-footer .btn {
+                  width: 100%;
+              }
+
+              .doctor-message {
+                  grid-column: 1 / -1;
+                  min-height: 18px;
+                  color: var(--text-muted);
+                  font-size: 0.72rem;
+                  font-weight: 850;
+                  line-height: 1.45;
+              }
+
+              @media (min-width: 720px) {
+                  .doctor-modal { align-items: center; }
+              }
+
+              @media (max-width: 430px) {
+                  .doctor-mini-grid { grid-template-columns: repeat(2, 1fr); }
+                  .doctor-issue { grid-template-columns: 1fr; }
+              }
+
               ${isGuest ? ".btn-group { display: none !important; } .back-btn { display: none !important; }" : ""}
           </style>
       </head>
@@ -759,8 +1063,72 @@ studio.get("/detail/:id", async (c) => {
               <button onclick="takeScreenshot('minimalist')" class="btn" style="background: #333;">✨ SHARE STATS</button>
               <a href="/video_flex/${id}" class="btn" style="background: #8e44ad;">🎬 BUAT VIDEO</a>
               <button onclick="downloadGPX()" class="btn" style="background: #27ae60;">📥 EXPORT GPX</button>
+              <button id="doctor-open-btn" onclick="openActivityDoctor()" class="btn doctor-btn" type="button">🩺 CEK & PERBAIKI AKTIVITAS INI</button>
           </div>
       </div>
+
+      ${
+        isGuest
+          ? ""
+          : `
+      <div id="doctor-modal" class="doctor-modal" role="dialog" aria-modal="true" aria-labelledby="doctor-title">
+          <div class="doctor-dialog">
+              <div class="doctor-header">
+                  <div>
+                      <h3 id="doctor-title" class="doctor-title">Activity Doctor</h3>
+                      <div class="doctor-subtitle">Scan otomatis untuk route JSON, metadata, rest block, dan statistik aktivitas.</div>
+                  </div>
+                  <button class="doctor-close" type="button" onclick="closeActivityDoctor()">TUTUP</button>
+              </div>
+
+              <div class="doctor-body">
+                  <div class="doctor-card">
+                      <div class="doctor-status-row">
+                          <div id="doctor-status-pill" class="doctor-pill">BELUM DICEK</div>
+                          <div id="doctor-source" class="doctor-empty" style="text-align:right;">-</div>
+                      </div>
+                      <div id="doctor-summary" class="doctor-summary">Tekan scan untuk memeriksa aktivitas ini.</div>
+                  </div>
+
+                  <div class="doctor-card">
+                      <div class="doctor-section-title">Ringkasan Data</div>
+                      <div id="doctor-counts" class="doctor-mini-grid">
+                          <div class="doctor-mini"><strong>-</strong><span>Raw Point</span></div>
+                          <div class="doctor-mini"><strong>-</strong><span>Valid</span></div>
+                          <div class="doctor-mini"><strong>-</strong><span>Duplikat</span></div>
+                      </div>
+                  </div>
+
+                  <div class="doctor-card">
+                      <div class="doctor-section-title">Preview Statistik</div>
+                      <div id="doctor-stats" class="doctor-list"><div class="doctor-empty">Belum ada hasil scan.</div></div>
+                  </div>
+
+                  <div class="doctor-card">
+                      <div class="doctor-section-title">Masalah Terdeteksi</div>
+                      <div id="doctor-issues" class="doctor-list"><div class="doctor-empty">Belum ada hasil scan.</div></div>
+                  </div>
+
+                  <div class="doctor-card">
+                      <div class="doctor-section-title">Rencana Perubahan</div>
+                      <div id="doctor-changes" class="doctor-list"><div class="doctor-empty">Belum ada perubahan.</div></div>
+                  </div>
+
+                  <div class="doctor-card">
+                      <div class="doctor-section-title">Auto Repair Actions</div>
+                      <div id="doctor-actions" class="doctor-actions"><span class="doctor-action-chip">Belum ada action</span></div>
+                  </div>
+              </div>
+
+              <div class="doctor-footer">
+                  <div id="doctor-message" class="doctor-message"></div>
+                  <button id="doctor-rescan-btn" class="btn" style="background:#334155;" type="button" onclick="scanActivityDoctor()">SCAN ULANG</button>
+                  <button id="doctor-apply-btn" class="btn" style="background:#0f766e;" type="button" onclick="applyActivityDoctor()" disabled>APPLY AUTO REPAIR</button>
+              </div>
+          </div>
+      </div>
+      `
+      }
 
       <div id="minimalist-card">
           <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; width: 100%; margin-bottom: 25px;">
@@ -842,6 +1210,8 @@ studio.get("/detail/:id", async (c) => {
           const canLoadMatches = ${isGuest ? "false" : "true"};
           const totalMovingSeconds = ${Math.max(0, Math.floor(Number(mTime || 0)))};
           const totalActivityDistanceKm = ${Math.max(0, Number(ride.distance || 0))};
+          let shareRouteBounds = null;
+          let shareRouteLatLngs = [];
 
           function decodePolyline(str, precision = 5) {
               let index = 0;
@@ -1009,12 +1379,71 @@ studio.get("/detail/:id", async (c) => {
               }
           }
 
+          function centerRoutePixelBounds() {
+              if (!Array.isArray(shareRouteLatLngs) || shareRouteLatLngs.length < 2) return;
+
+              const size = map.getSize();
+              let minX = Infinity;
+              let maxX = -Infinity;
+              let minY = Infinity;
+              let maxY = -Infinity;
+
+              shareRouteLatLngs.forEach(function(latlng) {
+                  const point = map.latLngToContainerPoint(latlng);
+                  minX = Math.min(minX, point.x);
+                  maxX = Math.max(maxX, point.x);
+                  minY = Math.min(minY, point.y);
+                  maxY = Math.max(maxY, point.y);
+              });
+
+              if (!Number.isFinite(minX) || !Number.isFinite(minY)) return;
+
+              const routeCenter = L.point((minX + maxX) / 2, (minY + maxY) / 2);
+              const mapCenter = L.point(size.x / 2, size.y / 2);
+
+              if (Math.abs(routeCenter.x - mapCenter.x) < 1 && Math.abs(routeCenter.y - mapCenter.y) < 1) return;
+
+              map.setView(map.containerPointToLatLng(routeCenter), map.getZoom(), {
+                  animate: false,
+                  reset: true
+              });
+          }
+
+          function refitStandardMapForCapture() {
+              if (!shareRouteBounds || !shareRouteBounds.isValid()) return Promise.resolve();
+
+              return new Promise(function(resolve) {
+                  const mapEl = document.getElementById('map');
+                  const width = mapEl ? mapEl.clientWidth : 0;
+                  const height = mapEl ? mapEl.clientHeight : 0;
+                  const padX = Math.max(34, Math.round(width * 0.08));
+                  const padY = Math.max(30, Math.round(height * 0.12));
+
+                  map.invalidateSize(true);
+                  map.fitBounds(shareRouteBounds, {
+                      paddingTopLeft: [padX, padY],
+                      paddingBottomRight: [padX, padY],
+                      animate: false
+                  });
+
+                  requestAnimationFrame(function() {
+                      centerRoutePixelBounds();
+                      map.invalidateSize(true);
+                      requestAnimationFrame(function() {
+                          centerRoutePixelBounds();
+                          resolve();
+                      });
+                  });
+              });
+          }
+
           async function drawMap() {
               try {
                   const coordsObj = await getCoordinates();
 
                   if (coordsObj.length > 1) {
                       const coordsLatLng = coordsObj.map(p => [p.lat, p.lng]);
+                      shareRouteLatLngs = coordsLatLng;
                       const dashStyle = ('${type}' === 'run' || '${type}' === 'walk' || '${type}' === 'hike') ? '5, 10' : null;
 
                       const outlinePath = L.polyline(coordsLatLng, {
@@ -1042,16 +1471,19 @@ studio.get("/detail/:id", async (c) => {
                       }).addTo(map);
 
                       renderMinimalRoute(coordsObj, dashStyle);
+                      shareRouteBounds = outlinePath.getBounds();
 
-                      map.fitBounds(outlinePath.getBounds(), {
+                      map.fitBounds(shareRouteBounds, {
                           padding: [30, 30]
                       });
+                      centerRoutePixelBounds();
 
                       setTimeout(() => {
                           map.invalidateSize();
-                          map.fitBounds(outlinePath.getBounds(), {
+                          map.fitBounds(shareRouteBounds, {
                               padding: [30, 30]
                           });
+                          centerRoutePixelBounds();
                       }, 500);
 
                       renderAutoSplits(coordsObj);
@@ -1566,7 +1998,310 @@ studio.get("/detail/:id", async (c) => {
               setSegmentStatus('Pilih start dan finish segmen, lalu simpan.', false);
           }
 
-          function takeScreenshot(mode) {
+
+          let latestDoctorResult = null;
+          let doctorIsApplying = false;
+
+          function getDoctorModal() {
+              return document.getElementById('doctor-modal');
+          }
+
+          function openActivityDoctor() {
+              if (!canLoadMatches) return;
+              const modal = getDoctorModal();
+              if (!modal) return;
+              modal.classList.add('is-open');
+              if (!latestDoctorResult) scanActivityDoctor();
+          }
+
+          function closeActivityDoctor() {
+              const modal = getDoctorModal();
+              if (modal) modal.classList.remove('is-open');
+          }
+
+          function setDoctorMessage(text, isError) {
+              const el = document.getElementById('doctor-message');
+              if (!el) return;
+              el.innerText = text || '';
+              el.style.color = isError ? '#fca5a5' : 'var(--text-muted)';
+          }
+
+          function setDoctorBusy(isBusy, text) {
+              const scanBtn = document.getElementById('doctor-rescan-btn');
+              const applyBtn = document.getElementById('doctor-apply-btn');
+              if (scanBtn) scanBtn.disabled = isBusy;
+              if (applyBtn) applyBtn.disabled = true;
+              if (text) setDoctorMessage(text, false);
+          }
+
+          function doctorStatusLabel(status) {
+              if (status === 'healthy') return 'SEHAT';
+              if (status === 'repairable') return 'REPAIRABLE';
+              if (status === 'needs_attention') return 'PERLU PERHATIAN';
+              if (status === 'broken') return 'BUTUH MANUAL CHECK';
+              return 'BELUM DICEK';
+          }
+
+          function doctorSeverityLabel(severity) {
+              if (severity === 'danger') return 'DANGER';
+              if (severity === 'warning') return 'WARNING';
+              return 'INFO';
+          }
+
+          function formatDoctorDuration(seconds) {
+              return formatSplitTime(Math.max(0, Math.round(Number(seconds || 0))));
+          }
+
+          function formatDoctorValue(field, value) {
+              if (Array.isArray(value)) return value.length ? value.join(', ') : '-';
+              if (value && typeof value === 'object') return JSON.stringify(value);
+              if (value === null || value === undefined || value === '') return '-';
+
+              const numeric = Number(value);
+              if (field === 'moving_time' || String(field || '').includes('time')) {
+                  return Number.isFinite(numeric) ? formatDoctorDuration(numeric) : String(value);
+              }
+              if (field === 'distance' || String(field || '').includes('distance')) {
+                  return Number.isFinite(numeric) ? numeric.toFixed(2) + ' km' : String(value);
+              }
+              if (field === 'average_speed' || field === 'max_speed') {
+                  return Number.isFinite(numeric) ? numeric.toFixed(1) + ' km/h' : String(value);
+              }
+              if (String(field || '').includes('elevation')) {
+                  return Number.isFinite(numeric) ? Math.round(numeric) + ' m' : String(value);
+              }
+
+              return String(value);
+          }
+
+          function renderDoctorCounts(counts, restBlocks) {
+              const el = document.getElementById('doctor-counts');
+              if (!el) return;
+              const data = counts || {};
+              const rest = restBlocks || {};
+              el.innerHTML =
+                  '<div class="doctor-mini"><strong>' + Number(data.raw_points || 0) + '</strong><span>Raw Point</span></div>' +
+                  '<div class="doctor-mini"><strong>' + Number(data.normalized_points || 0) + '</strong><span>Normal</span></div>' +
+                  '<div class="doctor-mini"><strong>' + Number(data.invalid_points || 0) + '</strong><span>Invalid</span></div>' +
+                  '<div class="doctor-mini"><strong>' + Number(data.duplicate_points || 0) + '</strong><span>Duplikat</span></div>' +
+                  '<div class="doctor-mini"><strong>' + Number(data.swapped_points || 0) + '</strong><span>Lng/Lat</span></div>' +
+                  '<div class="doctor-mini"><strong>' + Number(rest.detected_count || 0) + '</strong><span>Rest Gap</span></div>';
+          }
+
+          function renderDoctorStats(stats) {
+              const el = document.getElementById('doctor-stats');
+              if (!el) return;
+              const current = stats && stats.current ? stats.current : {};
+              const recalculated = stats && stats.recalculated ? stats.recalculated : {};
+              const rows = [
+                  ['distance_km', 'Jarak', 'distance'],
+                  ['moving_time', 'Moving Time', 'moving_time'],
+                  ['average_speed', 'Average Speed', 'average_speed'],
+                  ['max_speed', 'Max Speed', 'max_speed'],
+                  ['total_elevation_gain', 'Elevasi', 'total_elevation_gain']
+              ];
+
+              el.innerHTML = rows.map(function(row) {
+                  const key = row[0];
+                  const label = row[1];
+                  const formatterField = row[2];
+                  const before = current[key];
+                  const after = recalculated[key];
+                  const changed = JSON.stringify(before ?? null) !== JSON.stringify(after ?? null);
+                  return '<div class="doctor-change">' +
+                      '<div class="doctor-change-field">' + escapeClientHTML(label) + (changed ? ' • akan disesuaikan' : ' • stabil') + '</div>' +
+                      '<div class="doctor-before-after">D1: ' + escapeClientHTML(formatDoctorValue(formatterField, before)) + ' → Repair: ' + escapeClientHTML(formatDoctorValue(formatterField, after)) + '</div>' +
+                  '</div>';
+              }).join('');
+          }
+
+          function renderDoctorIssues(issues) {
+              const el = document.getElementById('doctor-issues');
+              if (!el) return;
+              if (!Array.isArray(issues) || issues.length === 0) {
+                  el.innerHTML = '<div class="doctor-empty">Tidak ada masalah. Aktivitas terlihat sehat.</div>';
+                  return;
+              }
+
+              el.innerHTML = issues.map(function(issue) {
+                  const severity = String(issue.severity || 'info');
+                  const fixText = issue.fixable ? 'Bisa auto repair' : 'Tidak aman untuk auto repair';
+                  const countText = Number.isFinite(Number(issue.count)) ? ' • ' + Number(issue.count) + ' item' : '';
+                  return '<div class="doctor-issue">' +
+                      '<div class="doctor-severity ' + escapeClientHTML(severity) + '">' + escapeClientHTML(doctorSeverityLabel(severity)) + '</div>' +
+                      '<div>' +
+                          '<div class="doctor-issue-title">' + escapeClientHTML(issue.title || issue.code || 'Issue') + '</div>' +
+                          '<div class="doctor-issue-detail">' + escapeClientHTML(issue.detail || '-') + '</div>' +
+                          '<div class="doctor-issue-detail" style="margin-top:5px;">' + escapeClientHTML(fixText + countText) + '</div>' +
+                      '</div>' +
+                  '</div>';
+              }).join('');
+          }
+
+          function renderDoctorChanges(changes) {
+              const el = document.getElementById('doctor-changes');
+              if (!el) return;
+              if (!Array.isArray(changes) || changes.length === 0) {
+                  el.innerHTML = '<div class="doctor-empty">Tidak ada perubahan yang direncanakan.</div>';
+                  return;
+              }
+
+              el.innerHTML = changes.map(function(change) {
+                  return '<div class="doctor-change">' +
+                      '<div class="doctor-change-field">' + escapeClientHTML(change.field || 'field') + '</div>' +
+                      '<div class="doctor-change-detail">' + escapeClientHTML(change.reason || '-') + '</div>' +
+                      '<div class="doctor-before-after">' +
+                          escapeClientHTML(formatDoctorValue(change.field, change.before)) +
+                          ' → ' +
+                          escapeClientHTML(formatDoctorValue(change.field, change.after)) +
+                      '</div>' +
+                  '</div>';
+              }).join('');
+          }
+
+          function renderDoctorActions(actions) {
+              const el = document.getElementById('doctor-actions');
+              if (!el) return;
+              if (!Array.isArray(actions) || actions.length === 0) {
+                  el.innerHTML = '<span class="doctor-action-chip">Tidak ada action</span>';
+                  return;
+              }
+
+              el.innerHTML = actions.map(function(action) {
+                  return '<span class="doctor-action-chip">' + escapeClientHTML(String(action || '').replace(/_/g, ' ')) + '</span>';
+              }).join('');
+          }
+
+          function renderActivityDoctorResponse(data, applyResult) {
+              latestDoctorResult = data || null;
+              const doctor = data && data.doctor ? data.doctor : null;
+              const statusPill = document.getElementById('doctor-status-pill');
+              const source = document.getElementById('doctor-source');
+              const summary = document.getElementById('doctor-summary');
+              const applyBtn = document.getElementById('doctor-apply-btn');
+
+              if (!doctor) {
+                  if (summary) summary.innerText = data && data.message ? data.message : 'Activity Doctor belum punya hasil.';
+                  if (applyBtn) applyBtn.disabled = true;
+                  return;
+              }
+
+              if (statusPill) {
+                  statusPill.className = 'doctor-pill ' + String(doctor.status || '');
+                  statusPill.innerText = doctorStatusLabel(doctor.status);
+              }
+
+              if (source) {
+                  const guard = doctor.guardrails || {};
+                  source.innerText = 'Source: ' + (doctor.source || '-') +
+                      (doctor.raw_shape ? ' • ' + doctor.raw_shape : '') +
+                      (guard.version ? ' • guard v' + guard.version : '');
+              }
+
+              if (summary) {
+                  const issues = Array.isArray(doctor.issues) ? doctor.issues.length : 0;
+                  const changes = Array.isArray(doctor.changes) ? doctor.changes.length : 0;
+                  summary.innerText = data.message || (
+                      doctor.healthy
+                          ? 'Aktivitas terlihat sehat.'
+                          : 'Ditemukan ' + issues + ' issue dan ' + changes + ' rencana perubahan.'
+                  );
+              }
+
+              renderDoctorCounts(doctor.counts, doctor.rest_blocks);
+              renderDoctorStats(doctor.stats);
+              renderDoctorIssues(doctor.issues);
+              renderDoctorChanges(doctor.changes);
+              renderDoctorActions(doctor.repair_plan);
+
+              if (applyBtn) {
+                  applyBtn.disabled = doctorIsApplying || !doctor.can_auto_repair || doctor.healthy;
+                  applyBtn.innerText = doctor.healthy ? 'TIDAK PERLU REPAIR' : 'APPLY AUTO REPAIR';
+              }
+
+              if (applyResult && applyResult.repair && applyResult.repair.stats) {
+                  setDoctorMessage('Auto repair diterapkan. Backup: ' + (applyResult.repair.backup_key || '-') + '. Halaman akan reload agar angka terbaru tampil.', false);
+              } else {
+                  setDoctorMessage(doctor.can_auto_repair ? 'Auto repair aman tersedia. Apply akan membuat backup R2 dulu sebelum update D1.' : 'Tidak ada auto repair aman untuk diterapkan.', doctor.status === 'broken');
+              }
+          }
+
+          async function scanActivityDoctor() {
+              if (!canLoadMatches) return;
+              latestDoctorResult = null;
+              setDoctorBusy(true, 'Activity Doctor sedang memeriksa aktivitas...');
+
+              try {
+                  const res = await fetch('/api/activity_doctor/' + encodeURIComponent(currentRideId), {
+                      cache: 'no-store'
+                  });
+                  const data = await res.json();
+
+                  if (!res.ok || !data.success) {
+                      throw new Error(data.message || 'Activity Doctor gagal scan.');
+                  }
+
+                  renderActivityDoctorResponse(data);
+              } catch (err) {
+                  console.error(err);
+                  setDoctorMessage(err.message || 'Activity Doctor gagal scan.', true);
+              } finally {
+                  const scanBtn = document.getElementById('doctor-rescan-btn');
+                  if (scanBtn) scanBtn.disabled = false;
+                  const applyBtn = document.getElementById('doctor-apply-btn');
+                  const doctor = latestDoctorResult && latestDoctorResult.doctor ? latestDoctorResult.doctor : null;
+                  if (applyBtn && doctor) applyBtn.disabled = !doctor.can_auto_repair || doctor.healthy;
+              }
+          }
+
+          async function applyActivityDoctor() {
+              if (!canLoadMatches || doctorIsApplying) return;
+              const doctor = latestDoctorResult && latestDoctorResult.doctor ? latestDoctorResult.doctor : null;
+              if (!doctor || !doctor.can_auto_repair || doctor.healthy) return;
+
+              const ok = window.confirm('Activity Doctor akan membuat backup R2 lalu menerapkan auto repair. Lanjutkan?');
+              if (!ok) return;
+
+              doctorIsApplying = true;
+              setDoctorBusy(true, 'Membuat backup R2 dan menerapkan auto repair...');
+
+              try {
+                  const res = await fetch('/api/activity_doctor/' + encodeURIComponent(currentRideId) + '/apply', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                          confirm_auto_repair: true,
+                          expected_actions: Array.isArray(doctor.repair_plan) ? doctor.repair_plan : [],
+                          doctor_status: doctor.status || ''
+                      })
+                  });
+                  const data = await res.json();
+
+                  if (!res.ok || !data.success) {
+                      throw new Error(data.message || 'Auto repair gagal diterapkan.');
+                  }
+
+                  renderActivityDoctorResponse(data, data);
+
+                  if (data.applied) {
+                      setTimeout(function() {
+                          window.location.reload();
+                      }, 1800);
+                  }
+              } catch (err) {
+                  console.error(err);
+                  setDoctorMessage(err.message || 'Auto repair gagal diterapkan.', true);
+              } finally {
+                  doctorIsApplying = false;
+                  const scanBtn = document.getElementById('doctor-rescan-btn');
+                  if (scanBtn) scanBtn.disabled = false;
+                  const applyBtn = document.getElementById('doctor-apply-btn');
+                  const nextDoctor = latestDoctorResult && latestDoctorResult.doctor ? latestDoctorResult.doctor : null;
+                  if (applyBtn && nextDoctor) applyBtn.disabled = !nextDoctor.can_auto_repair || nextDoctor.healthy;
+              }
+          }
+
+          async function takeScreenshot(mode) {
               const target = (mode === 'standard')
                   ? document.getElementById('capture-area')
                   : document.getElementById('minimalist-card');
@@ -1588,6 +2323,7 @@ studio.get("/detail/:id", async (c) => {
                   }
 
                   map.invalidateSize(true);
+                  await refitStandardMapForCapture();
               }
 
               if (mode === 'minimalist') {
