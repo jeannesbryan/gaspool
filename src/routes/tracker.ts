@@ -44,8 +44,8 @@ tracker.get("/record", async (c) => {
             body { font-family: 'Inter', sans-serif; background: #000; color: #fff; margin: 0; overflow: hidden; }
             #map { height: 100vh; width: 100%; position: absolute; z-index: 1; }
             .ui { position: absolute; left: 0; width: 100%; z-index: 100; pointer-events: none; }
-            .top { top: 0; padding: 20px; display: flex; justify-content: space-between; align-items: flex-start; }
-            .bottom { bottom: 0; padding: 25px; background: linear-gradient(0deg, #000 0%, transparent 100%); pointer-events: auto; }
+            .top { top: 0; padding: 20px; display: flex; justify-content: space-between; align-items: flex-start; z-index: 2400; pointer-events: none; }
+            .bottom { bottom: 0; padding: 25px; background: linear-gradient(0deg, #000 0%, transparent 100%); pointer-events: auto; z-index: 900; }
             
             .stat-card { background: rgba(0,0,0,0.6); backdrop-filter: blur(20px); border-radius: 18px; border: 1px solid rgba(255,255,255,0.1); padding: 15px; pointer-events: auto; }
             .label { font-size: 9px; font-weight: 900; color: #aaa; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 3px; transition: 0.3s;}
@@ -56,7 +56,7 @@ tracker.get("/record", async (c) => {
             .btn:active { transform: scale(0.95); }
             .btn-start { background: var(--primary); color: #fff; }
             .btn-stop { background: #e74c3c; color: #fff; display: none; }
-            .btn-cancel { background: rgba(231,76,60,0.8); width: auto; padding: 10px 15px; font-size: 10px; color: #fff; border-radius: 10px; border: none; cursor: pointer; pointer-events: auto; position: relative; /* Menyelamatkan interaksi klik di iOS/Mobile */ z-index: 101; }
+            .btn-cancel { background: rgba(231,76,60,0.88); width: auto; padding: 10px 15px; font-size: 10px; color: #fff; border-radius: 10px; border: none; cursor: pointer; pointer-events: auto; position: fixed; top: calc(env(safe-area-inset-top, 0px) + 16px); right: 16px; /* Selalu di atas panel bawah / card statistik pada layar kecil */ z-index: 10050; touch-action: manipulation; box-shadow: 0 10px 28px rgba(0,0,0,0.45); }
             
             .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px; }
 
@@ -342,7 +342,7 @@ tracker.get("/record", async (c) => {
                 </div>
                 <div class="stage-actions">
                     <button id="btn-stage" class="btn btn-stage" onclick="startManualStage()" disabled>ETAPE BARU</button>
-                    <button id="btn-overnight" class="btn btn-overnight" onclick="pauseOvernight()" disabled>LANJUT NANTI</button>
+                    <button id="btn-overnight" class="btn btn-overnight" onclick="pauseOvernight()" disabled>LANJUT BESOK</button>
                 </div>
             </div>
             ` : ""}
@@ -915,7 +915,7 @@ function clearDB() {
 
 			function restBlockLabel(type) {
 				const labels = {
-					overnight_pause: 'Lanjut Nanti',
+					overnight_pause: 'Pause overnight',
 					resume_gap: 'Jeda resume panjang',
 					system_gap: 'Jeda sistem panjang',
 					auto_pause: 'Auto-pause panjang'
@@ -1470,7 +1470,7 @@ function clearDB() {
 				renderResumeSummary(buildBlackboxSnapshot(pausedAt));
 				document.getElementById('resume-copy').innerHTML = 'Sesi disimpan untuk dilanjutkan nanti.<br>Buka lagi saat siap berangkat.';
 				document.getElementById('safeMode').style.display = 'flex';
-				speakRoute('Sesi disimpan. Lanjutkan nanti dari resume mission.', true);
+				speakRoute('Sesi disimpan. Lanjutkan besok dari resume mission.', true);
 			}
 
 			function maybeStartResumeStage(savedAt) {
@@ -2759,12 +2759,12 @@ document.getElementById(
 					ensureCurrentStage('resume');
 					const overnightPauseStart = overnightPause && overnightPause.paused_at ? Number(overnightPause.paused_at) : 0;
 					const overnightRecorded = overnightPauseStart > 0
-						? recordRestBlock(overnightPauseStart, Date.now(), 'overnight_pause', 'Sesi dilanjutkan dari Lanjut Nanti.')
+						? recordRestBlock(overnightPauseStart, Date.now(), 'overnight_pause', 'Sesi dilanjutkan dari Pause Overnight.')
 						: false;
 					overnightPause = null;
 					if (overnightRecorded && dist >= 0.2 && path.length >= 2) {
 						beginNextStage('overnight_resume');
-						speakRoute('Lanjut Nanti selesai. Etape baru dimulai.', true);
+						speakRoute('Pause overnight selesai. Etape baru dimulai.', true);
 					} else {
 						maybeStartResumeStage(d.savedAt);
 					}
