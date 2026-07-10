@@ -342,7 +342,7 @@ tracker.get("/record", async (c) => {
                 </div>
                 <div class="stage-actions">
                     <button id="btn-stage" class="btn btn-stage" onclick="startManualStage()" disabled>ETAPE BARU</button>
-                    <button id="btn-overnight" class="btn btn-overnight" onclick="pauseOvernight()" disabled>LANJUT BESOK</button>
+                    <button id="btn-overnight" class="btn btn-overnight" onclick="pauseOvernight()" disabled>LANJUT NANTI</button>
                 </div>
             </div>
             ` : ""}
@@ -915,7 +915,7 @@ function clearDB() {
 
 			function restBlockLabel(type) {
 				const labels = {
-					overnight_pause: 'Pause overnight',
+					overnight_pause: 'Lanjut Nanti',
 					resume_gap: 'Jeda resume panjang',
 					system_gap: 'Jeda sistem panjang',
 					auto_pause: 'Auto-pause panjang'
@@ -1470,7 +1470,7 @@ function clearDB() {
 				renderResumeSummary(buildBlackboxSnapshot(pausedAt));
 				document.getElementById('resume-copy').innerHTML = 'Sesi disimpan untuk dilanjutkan nanti.<br>Buka lagi saat siap berangkat.';
 				document.getElementById('safeMode').style.display = 'flex';
-				speakRoute('Sesi disimpan. Lanjutkan besok dari resume mission.', true);
+				speakRoute('Sesi disimpan. Lanjutkan nanti dari resume mission.', true);
 			}
 
 			function maybeStartResumeStage(savedAt) {
@@ -2759,12 +2759,12 @@ document.getElementById(
 					ensureCurrentStage('resume');
 					const overnightPauseStart = overnightPause && overnightPause.paused_at ? Number(overnightPause.paused_at) : 0;
 					const overnightRecorded = overnightPauseStart > 0
-						? recordRestBlock(overnightPauseStart, Date.now(), 'overnight_pause', 'Sesi dilanjutkan dari Pause Overnight.')
+						? recordRestBlock(overnightPauseStart, Date.now(), 'overnight_pause', 'Sesi dilanjutkan dari Lanjut Nanti.')
 						: false;
 					overnightPause = null;
 					if (overnightRecorded && dist >= 0.2 && path.length >= 2) {
 						beginNextStage('overnight_resume');
-						speakRoute('Pause overnight selesai. Etape baru dimulai.', true);
+						speakRoute('Lanjut Nanti selesai. Etape baru dimulai.', true);
 					} else {
 						maybeStartResumeStage(d.savedAt);
 					}

@@ -759,6 +759,58 @@ studio.get("/detail/:id", async (c) => {
                   line-height: 1.55;
               }
 
+              .doctor-recommendation {
+                  display: grid;
+                  gap: 6px;
+                  margin-top: 10px;
+                  padding: 12px;
+                  border-radius: 16px;
+                  background: rgba(148, 163, 184, 0.10);
+                  border: 1px solid rgba(148, 163, 184, 0.20);
+              }
+
+              .doctor-recommendation.safe,
+              .doctor-recommendation.healthy {
+                  background: rgba(46, 204, 113, 0.12);
+                  border-color: rgba(46, 204, 113, 0.28);
+              }
+
+              .doctor-recommendation.warning {
+                  background: rgba(255, 95, 0, 0.13);
+                  border-color: rgba(255, 95, 0, 0.30);
+              }
+
+              .doctor-recommendation.danger {
+                  background: rgba(231, 76, 60, 0.13);
+                  border-color: rgba(231, 76, 60, 0.30);
+              }
+
+              .doctor-recommendation-label {
+                  display: inline-flex;
+                  width: fit-content;
+                  border-radius: 999px;
+                  padding: 7px 10px;
+                  font-size: 0.6rem;
+                  font-weight: 950;
+                  letter-spacing: 0.8px;
+                  text-transform: uppercase;
+                  color: #fff;
+                  background: rgba(255,255,255,0.09);
+              }
+
+              .doctor-recommendation-title {
+                  color: #fff;
+                  font-size: 0.86rem;
+                  font-weight: 950;
+              }
+
+              .doctor-recommendation-detail {
+                  color: var(--text-muted);
+                  font-size: 0.7rem;
+                  font-weight: 820;
+                  line-height: 1.45;
+              }
+
               .doctor-mini-grid {
                   display: grid;
                   grid-template-columns: repeat(3, 1fr);
@@ -1088,6 +1140,7 @@ studio.get("/detail/:id", async (c) => {
                           <div id="doctor-source" class="doctor-empty" style="text-align:right;">-</div>
                       </div>
                       <div id="doctor-summary" class="doctor-summary">Tekan scan untuk memeriksa aktivitas ini.</div>
+                      <div id="doctor-recommendation" class="doctor-recommendation" style="display:none;"></div>
                   </div>
 
                   <div class="doctor-card">
@@ -2082,6 +2135,8 @@ studio.get("/detail/:id", async (c) => {
               el.innerHTML =
                   '<div class="doctor-mini"><strong>' + Number(data.raw_points || 0) + '</strong><span>Raw Point</span></div>' +
                   '<div class="doctor-mini"><strong>' + Number(data.normalized_points || 0) + '</strong><span>Normal</span></div>' +
+                  '<div class="doctor-mini"><strong>' + Number(data.timestamp_points || 0) + '</strong><span>Timestamp</span></div>' +
+                  '<div class="doctor-mini"><strong>' + Number(data.elevation_samples || 0) + '</strong><span>Elevasi</span></div>' +
                   '<div class="doctor-mini"><strong>' + Number(data.invalid_points || 0) + '</strong><span>Invalid</span></div>' +
                   '<div class="doctor-mini"><strong>' + Number(data.duplicate_points || 0) + '</strong><span>Duplikat</span></div>' +
                   '<div class="doctor-mini"><strong>' + Number(data.swapped_points || 0) + '</strong><span>Lng/Lat</span></div>' +
@@ -2092,7 +2147,9 @@ studio.get("/detail/:id", async (c) => {
               const el = document.getElementById('doctor-stats');
               if (!el) return;
               const current = stats && stats.current ? stats.current : {};
-              const recalculated = stats && stats.recalculated ? stats.recalculated : {};
+              const proposed = stats && stats.recalculated ? stats.recalculated : {};
+              const raw = stats && stats.raw_recalculated ? stats.raw_recalculated : proposed;
+              const trust = stats && stats.trust ? stats.trust : {};
               const rows = [
                   ['distance_km', 'Jarak', 'distance'],
                   ['moving_time', 'Moving Time', 'moving_time'],
@@ -2106,11 +2163,22 @@ studio.get("/detail/:id", async (c) => {
                   const label = row[1];
                   const formatterField = row[2];
                   const before = current[key];
-                  const after = recalculated[key];
+                  const after = proposed[key];
+                  const rawValue = raw[key];
+                  const trustItem = trust[key] || {};
                   const changed = JSON.stringify(before ?? null) !== JSON.stringify(after ?? null);
+                  const rawDiffers = JSON.stringify(before ?? null) !== JSON.stringify(rawValue ?? null);
+                  const trusted = trustItem.trusted === true;
+                  const labelSuffix = changed
+                      ? ' • akan disesuaikan'
+                      : (!trusted && rawDiffers ? ' • dipertahankan' : ' • stabil');
+                  const rawNote = (!trusted && rawDiffers)
+                      ? '<div class="doctor-trust-note">Raw Doctor: ' + escapeClientHTML(formatDoctorValue(formatterField, rawValue)) + ' ditahan. ' + escapeClientHTML(trustItem.reason || 'Belum trusted.') + '</div>'
+                      : (trustItem.reason ? '<div class="doctor-trust-note">' + escapeClientHTML(trustItem.reason) + '</div>' : '');
                   return '<div class="doctor-change">' +
-                      '<div class="doctor-change-field">' + escapeClientHTML(label) + (changed ? ' • akan disesuaikan' : ' • stabil') + '</div>' +
-                      '<div class="doctor-before-after">D1: ' + escapeClientHTML(formatDoctorValue(formatterField, before)) + ' → Repair: ' + escapeClientHTML(formatDoctorValue(formatterField, after)) + '</div>' +
+                      '<div class="doctor-change-field">' + escapeClientHTML(label) + labelSuffix + '</div>' +
+                      '<div class="doctor-before-after">D1: ' + escapeClientHTML(formatDoctorValue(formatterField, before)) + ' → Usulan: ' + escapeClientHTML(formatDoctorValue(formatterField, after)) + '</div>' +
+                      rawNote +
                   '</div>';
               }).join('');
           }
@@ -2172,6 +2240,24 @@ studio.get("/detail/:id", async (c) => {
               }).join('');
           }
 
+          function renderDoctorRecommendation(recommendation) {
+              const el = document.getElementById('doctor-recommendation');
+              if (!el) return;
+              if (!recommendation) {
+                  el.style.display = 'none';
+                  el.innerHTML = '';
+                  return;
+              }
+
+              const level = String(recommendation.level || 'info');
+              el.style.display = 'grid';
+              el.className = 'doctor-recommendation ' + escapeClientHTML(level);
+              el.innerHTML =
+                  '<div class="doctor-recommendation-label">' + escapeClientHTML(recommendation.label || 'REKOMENDASI') + '</div>' +
+                  '<div class="doctor-recommendation-title">' + escapeClientHTML(recommendation.summary || '-') + '</div>' +
+                  '<div class="doctor-recommendation-detail">' + escapeClientHTML(recommendation.detail || '-') + '</div>';
+          }
+
           function renderActivityDoctorResponse(data, applyResult) {
               latestDoctorResult = data || null;
               const doctor = data && data.doctor ? data.doctor : null;
@@ -2208,6 +2294,7 @@ studio.get("/detail/:id", async (c) => {
                   );
               }
 
+              renderDoctorRecommendation(doctor.recommendation);
               renderDoctorCounts(doctor.counts, doctor.rest_blocks);
               renderDoctorStats(doctor.stats);
               renderDoctorIssues(doctor.issues);
@@ -2216,13 +2303,17 @@ studio.get("/detail/:id", async (c) => {
 
               if (applyBtn) {
                   applyBtn.disabled = doctorIsApplying || !doctor.can_auto_repair || doctor.healthy;
-                  applyBtn.innerText = doctor.healthy ? 'TIDAK PERLU REPAIR' : 'APPLY AUTO REPAIR';
+                  const recLabel = doctor.recommendation && doctor.recommendation.label ? String(doctor.recommendation.label) : '';
+                  applyBtn.innerText = doctor.healthy
+                      ? 'TIDAK PERLU REPAIR'
+                      : (recLabel === 'AMAN SEBAGIAN' ? 'APPLY SAFE PARTIAL REPAIR' : 'APPLY AUTO REPAIR');
               }
 
               if (applyResult && applyResult.repair && applyResult.repair.stats) {
                   setDoctorMessage('Auto repair diterapkan. Backup: ' + (applyResult.repair.backup_key || '-') + '. Halaman akan reload agar angka terbaru tampil.', false);
               } else {
-                  setDoctorMessage(doctor.can_auto_repair ? 'Auto repair aman tersedia. Apply akan membuat backup R2 dulu sebelum update D1.' : 'Tidak ada auto repair aman untuk diterapkan.', doctor.status === 'broken');
+                  const rec = doctor.recommendation || {};
+                  setDoctorMessage(doctor.can_auto_repair ? 'Auto repair aman tersedia. Apply akan membuat backup R2 dulu sebelum update D1.' : (rec.summary || 'Tidak ada auto repair aman untuk diterapkan.'), doctor.status === 'broken');
               }
           }
 

@@ -542,17 +542,24 @@ const summarizeRestBlocks = (blocks: ReturnType<typeof normalizeRestBlocks>) => 
   ),
 });
 
+type NutritionSummaryEvent = {
+  type: string;
+  time: number;
+  moving_time: number;
+  distance_km: number;
+};
+
 const normalizeNutritionSummary = (value: any) => {
-  const rawEvents = Array.isArray(value?.events) ? value.events : [];
-  const events = rawEvents
-    .map((event: any) => ({
+  const rawEvents: any[] = Array.isArray(value?.events) ? value.events : [];
+  const events: NutritionSummaryEvent[] = rawEvents
+    .map((event: any): NutritionSummaryEvent => ({
       type: String(event?.type || "water").trim().slice(0, 20),
       time: Number(event?.time || Date.now()),
       moving_time: Math.max(0, Math.floor(Number(event?.moving_time || 0))),
       distance_km: Number(Number(event?.distance_km || 0).toFixed(3)),
     }))
     .filter(
-      (event) =>
+      (event: NutritionSummaryEvent) =>
         event.type === "water" ||
         event.type === "food" ||
         event.type === "water_food",
@@ -560,10 +567,12 @@ const normalizeNutritionSummary = (value: any) => {
     .slice(-120);
 
   const waterFromEvents = events.filter(
-    (event) => event.type === "water" || event.type === "water_food",
+    (event: NutritionSummaryEvent) =>
+      event.type === "water" || event.type === "water_food",
   ).length;
   const foodFromEvents = events.filter(
-    (event) => event.type === "food" || event.type === "water_food",
+    (event: NutritionSummaryEvent) =>
+      event.type === "food" || event.type === "water_food",
   ).length;
 
   return {
@@ -582,8 +591,8 @@ const normalizeNutritionSummary = (value: any) => {
 
 
 const normalizeFinishReview = (value: any) => {
-  const rawIssues = Array.isArray(value?.issues) ? value.issues : [];
-  const rawChanges = Array.isArray(value?.changes) ? value.changes : [];
+  const rawIssues: any[] = Array.isArray(value?.issues) ? value.issues : [];
+  const rawChanges: any[] = Array.isArray(value?.changes) ? value.changes : [];
 
   return {
     status: String(value?.status || "unknown").trim().slice(0, 40),
@@ -613,7 +622,7 @@ const normalizeFinishReview = (value: any) => {
         message: String(issue?.message || "").trim().slice(0, 180),
         auto_fix: issue?.auto_fix === true || issue?.autoFix === true,
       }))
-      .filter((issue) => issue.message)
+      .filter((issue: { message: string }) => issue.message)
       .slice(0, 30),
     changes: rawChanges
       .map((change: any) => String(change || "").trim().slice(0, 180))
@@ -712,7 +721,10 @@ const DOCTOR_LONG_GAP_SECONDS = 20 * 60;
 const DOCTOR_MOVING_GAP_SECONDS = 5 * 60;
 const DOCTOR_EXTREME_JUMP_METERS = 1500;
 const DOCTOR_MAX_RAW_POINTS = 100000;
-const DOCTOR_SCAN_VERSION = 2;
+const DOCTOR_SCAN_VERSION = 4;
+const DOCTOR_MIN_STATS_POINTS = 100;
+const DOCTOR_MIN_TIMED_POINT_RATIO = 0.55;
+const DOCTOR_MIN_ELEVATION_POINT_RATIO = 0.12;
 
 const getR2PublicHostname = () => {
   try {
@@ -741,7 +753,7 @@ const isActivityDoctorR2ObjectKeyAllowed = (value: any) => {
 
   // Legacy Gaspool activity JSON used to be stored in the R2 bucket root.
   // Example: gaspool_ride_1783092976455_572.json
-  return /^gaspool_ride_[a-zA-Z0-9_-]+\.json$/.test(key);
+  return /^gaspool_(ride|node)_[a-zA-Z0-9_-]+\.json$/.test(key);
 };
 
 const isActivityDoctorFetchUrlAllowed = (raw: string, objectKey = "") => {
@@ -841,6 +853,31 @@ const loadActivityDoctorPayload = async (
         raw_payload: null,
         error: e?.message || "Gagal membaca JSON R2.",
       };
+    }
+
+    const legacyFolderKey = !objectKey.startsWith("gaspool/") && /^gaspool_(ride|node)_[a-zA-Z0-9_-]+\.json$/.test(objectKey)
+      ? `gaspool/${objectKey}`
+      : "";
+
+    if (legacyFolderKey && isActivityDoctorR2ObjectKeyAllowed(legacyFolderKey)) {
+      try {
+        const folderObject = await env.R2_BUCKET.get(legacyFolderKey);
+
+        if (folderObject) {
+          return {
+            source: "r2",
+            object_key: legacyFolderKey,
+            raw_payload: JSON.parse(await folderObject.text()),
+          };
+        }
+      } catch (e: any) {
+        return {
+          source: "r2",
+          object_key: legacyFolderKey,
+          raw_payload: null,
+          error: e?.message || "Gagal membaca JSON R2 fallback folder.",
+        };
+      }
     }
 
     if (!raw.startsWith("http")) {
@@ -1075,6 +1112,242 @@ const detectDoctorRestBlocks = (points: ActivityDoctorPoint[]) => {
   return normalizeRestBlocks(blocks);
 };
 
+const getDoctorSpeedLimits = (activityType: string) => {
+  const type = String(activityType || "ride").toLowerCase();
+
+  if (type === "ride") {
+    return {
+      calculation_max_kmh: 120,
+      trusted_max_kmh: 65,
+      suspicious_ratio: 1.75,
+    };
+  }
+
+  if (type === "run") {
+    return {
+      calculation_max_kmh: 45,
+      trusted_max_kmh: 32,
+      suspicious_ratio: 1.65,
+    };
+  }
+
+  return {
+    calculation_max_kmh: 25,
+    trusted_max_kmh: 18,
+    suspicious_ratio: 1.6,
+  };
+};
+
+const getDoctorCurrentStats = (ride: any) => ({
+  distance_km: Number(Number(ride?.distance || 0).toFixed(3)),
+  moving_time: Math.max(0, Math.floor(Number(ride?.moving_time || 0))),
+  average_speed: Number(Number(ride?.average_speed || 0).toFixed(2)),
+  max_speed: Number(Number(ride?.max_speed || 0).toFixed(2)),
+  total_elevation_gain: Number(Number(ride?.total_elevation_gain || 0).toFixed(1)),
+});
+
+const countDoctorTimedSegments = (points: ActivityDoctorPoint[]) => {
+  let count = 0;
+
+  for (let i = 1; i < points.length; i++) {
+    const prevMs = points[i - 1]?.time ? Date.parse(String(points[i - 1].time)) : 0;
+    const pointMs = points[i]?.time ? Date.parse(String(points[i].time)) : 0;
+
+    if (prevMs && pointMs && pointMs > prevMs) count += 1;
+  }
+
+  return count;
+};
+
+const countDoctorElevationSamples = (points: ActivityDoctorPoint[]) =>
+  points.filter((point) => Number.isFinite(Number(point.ele))).length;
+
+const doctorStatTrustItem = (
+  trusted: boolean,
+  reason: string,
+  raw: any,
+  proposed: any,
+  current: any,
+) => ({ trusted, reason, raw, proposed, current });
+
+const buildDoctorStatTrust = (
+  ride: any,
+  points: ActivityDoctorPoint[],
+  activityType: string,
+  rawStats: any,
+) => {
+  const current = getDoctorCurrentStats(ride);
+  const pointCount = points.length;
+  const segmentCount = Math.max(0, pointCount - 1);
+  const timestampCount = points.filter((point) => Boolean(point.time)).length;
+  const timedSegmentCount = countDoctorTimedSegments(points);
+  const elevationSampleCount = countDoctorElevationSamples(points);
+  const limits = getDoctorSpeedLimits(activityType);
+  const isSparseRoute = pointCount > 0 && pointCount < DOCTOR_MIN_STATS_POINTS;
+  const hasEnoughDistancePoints = pointCount >= DOCTOR_MIN_STATS_POINTS;
+  const hasEnoughTimedPoints =
+    pointCount > 0 &&
+    timestampCount >= Math.max(20, Math.ceil(pointCount * DOCTOR_MIN_TIMED_POINT_RATIO)) &&
+    timedSegmentCount >= Math.max(10, Math.ceil(segmentCount * 0.35));
+  const hasEnoughElevationSamples =
+    elevationSampleCount >= Math.max(
+      20,
+      Math.ceil(Math.max(pointCount, 1) * DOCTOR_MIN_ELEVATION_POINT_RATIO),
+    );
+  const distanceRatio =
+    current.distance_km > 0 && rawStats.distance_km > 0
+      ? rawStats.distance_km / current.distance_km
+      : null;
+  const movingRatio =
+    current.moving_time > 0 && rawStats.moving_time > 0
+      ? rawStats.moving_time / current.moving_time
+      : null;
+  const jumpRatio = segmentCount > 0 ? rawStats.skipped_jump_count / segmentCount : 0;
+  const distanceMismatchExtreme =
+    distanceRatio !== null && (distanceRatio < 0.65 || distanceRatio > 1.35);
+  const movingMismatchExtreme =
+    movingRatio !== null && (movingRatio < 0.35 || movingRatio > 1.35);
+  const maxSpeedRatio =
+    current.max_speed > 0 && rawStats.max_speed > 0
+      ? rawStats.max_speed / current.max_speed
+      : null;
+  const maxSpeedLooksLikeSpike =
+    rawStats.max_speed > limits.trusted_max_kmh ||
+    (maxSpeedRatio !== null &&
+      current.max_speed >= 8 &&
+      maxSpeedRatio > limits.suspicious_ratio);
+
+  const distanceTrusted =
+    hasEnoughDistancePoints &&
+    rawStats.distance_km > 0 &&
+    !distanceMismatchExtreme &&
+    jumpRatio <= 0.03;
+  const movingTrusted =
+    !isSparseRoute &&
+    hasEnoughTimedPoints &&
+    rawStats.moving_time > 0 &&
+    !movingMismatchExtreme;
+  const averageTrusted = distanceTrusted && movingTrusted && rawStats.average_speed > 0;
+  const maxSpeedTrusted =
+    !isSparseRoute &&
+    hasEnoughTimedPoints &&
+    rawStats.max_speed > 0 &&
+    !maxSpeedLooksLikeSpike;
+  const elevationTrusted =
+    hasEnoughElevationSamples &&
+    (rawStats.total_elevation_gain > 0 || current.total_elevation_gain <= 0);
+
+  const safeStats = {
+    distance_km: distanceTrusted ? rawStats.distance_km : current.distance_km,
+    moving_time: movingTrusted ? rawStats.moving_time : current.moving_time,
+    average_speed: averageTrusted ? rawStats.average_speed : current.average_speed,
+    max_speed: maxSpeedTrusted ? rawStats.max_speed : current.max_speed,
+    total_elevation_gain: elevationTrusted
+      ? rawStats.total_elevation_gain
+      : current.total_elevation_gain,
+    skipped_jump_count: rawStats.skipped_jump_count,
+    long_gap_count: rawStats.long_gap_count,
+    suspicious_speed_count: rawStats.suspicious_speed_count,
+  };
+
+  const trust = {
+    distance_km: doctorStatTrustItem(
+      distanceTrusted,
+      distanceTrusted
+        ? "Point route cukup padat dan selisih jarak masih wajar."
+        : isSparseRoute
+          ? `Route hanya punya ${pointCount} titik; jarak D1 lebih aman dipertahankan.`
+          : distanceMismatchExtreme
+            ? `Selisih jarak terlalu besar (${distanceRatio ? distanceRatio.toFixed(2) + "x" : "n/a"}); D1 dipertahankan.`
+            : jumpRatio > 0.03
+              ? "Terlalu banyak GPS jump untuk update jarak otomatis."
+              : "Jarak hasil hitung ulang belum cukup dipercaya.",
+      rawStats.distance_km,
+      safeStats.distance_km,
+      current.distance_km,
+    ),
+    moving_time: doctorStatTrustItem(
+      movingTrusted,
+      movingTrusted
+        ? "Timestamp GPS cukup lengkap untuk moving-time oriented stats."
+        : isSparseRoute
+          ? `Route hanya punya ${pointCount} titik; moving time D1 dipertahankan.`
+          : !hasEnoughTimedPoints
+            ? `Timestamp valid belum cukup (${timestampCount}/${pointCount} titik, ${timedSegmentCount}/${segmentCount} segmen).`
+            : rawStats.moving_time <= 0 && current.moving_time > 0
+              ? "Hasil repair moving time menjadi 0; D1 dipertahankan."
+              : movingMismatchExtreme
+                ? "Selisih moving time terlalu ekstrem; D1 dipertahankan."
+                : "Moving time hasil hitung ulang belum cukup dipercaya.",
+      rawStats.moving_time,
+      safeStats.moving_time,
+      current.moving_time,
+    ),
+    average_speed: doctorStatTrustItem(
+      averageTrusted,
+      averageTrusted
+        ? "Average speed dihitung dari jarak dan moving time yang sama-sama trusted."
+        : "Average speed dipertahankan karena jarak atau moving time tidak trusted.",
+      rawStats.average_speed,
+      safeStats.average_speed,
+      current.average_speed,
+    ),
+    max_speed: doctorStatTrustItem(
+      maxSpeedTrusted,
+      maxSpeedTrusted
+        ? "Max speed masih dalam batas wajar untuk tipe aktivitas."
+        : maxSpeedLooksLikeSpike
+          ? `Max speed repair ${rawStats.max_speed.toFixed(1)} km/h terlihat seperti spike; nilai D1 dipertahankan.`
+          : !hasEnoughTimedPoints
+            ? "Timestamp tidak cukup untuk max speed yang bisa dipercaya."
+            : "Max speed hasil hitung ulang belum cukup dipercaya.",
+      rawStats.max_speed,
+      safeStats.max_speed,
+      current.max_speed,
+    ),
+    total_elevation_gain: doctorStatTrustItem(
+      elevationTrusted,
+      elevationTrusted
+        ? "Sample elevasi cukup untuk update elevation gain."
+        : !hasEnoughElevationSamples
+          ? `Sample elevasi tidak cukup (${elevationSampleCount}/${pointCount} titik); nilai D1 dipertahankan.`
+          : rawStats.total_elevation_gain <= 0 && current.total_elevation_gain > 0
+            ? "Hasil repair elevasi menjadi 0; nilai D1 dipertahankan."
+            : "Elevation gain hasil hitung ulang belum cukup dipercaya.",
+      rawStats.total_elevation_gain,
+      safeStats.total_elevation_gain,
+      current.total_elevation_gain,
+    ),
+  };
+
+  const untrustedFields = Object.entries(trust)
+    .filter(([, value]: any) => !value.trusted && JSON.stringify(value.raw ?? null) !== JSON.stringify(value.current ?? null))
+    .map(([field]) => field);
+
+  return {
+    current,
+    raw: rawStats,
+    safe: safeStats,
+    trust,
+    quality: {
+      point_count: pointCount,
+      segment_count: segmentCount,
+      timestamp_points: timestampCount,
+      timed_segments: timedSegmentCount,
+      elevation_samples: elevationSampleCount,
+      skipped_jump_count: rawStats.skipped_jump_count,
+      suspicious_speed_count: rawStats.suspicious_speed_count,
+      distance_ratio: distanceRatio,
+      moving_ratio: movingRatio,
+      max_speed_ratio: maxSpeedRatio,
+      is_sparse_route: isSparseRoute,
+      has_enough_timed_points: hasEnoughTimedPoints,
+      has_enough_elevation_samples: hasEnoughElevationSamples,
+    },
+    untrusted_fields: untrustedFields,
+  };
+};
+
 const recalculateDoctorStats = (
   points: ActivityDoctorPoint[],
   activityType: string,
@@ -1087,8 +1360,7 @@ const recalculateDoctorStats = (
   let longGapCount = 0;
   let suspiciousSpeedCount = 0;
   let lastEle: number | null = null;
-  const type = String(activityType || "ride").toLowerCase();
-  const plausibleMaxSpeed = type === "ride" ? 120 : type === "run" ? 45 : 25;
+  const plausibleMaxSpeed = getDoctorSpeedLimits(activityType).calculation_max_kmh;
 
   for (let i = 1; i < points.length; i++) {
     const prev = points[i - 1];
@@ -1282,9 +1554,12 @@ const buildActivityDoctorRepair = (
   const activityType = String(
     ride?.activity_type || metadata?.activity_type || "ride",
   ).toLowerCase();
-  const recalculated = recalculateDoctorStats(points, activityType);
+  const rawRecalculated = recalculateDoctorStats(points, activityType);
+  const safeStats = scan?.stats?.recalculated || rawRecalculated;
   const existingRestBlocks = normalizeRestBlocks(payloadObject.rest_blocks);
-  const detectedRestBlocks = detectDoctorRestBlocks(points);
+  const detectedRestBlocks = scan?.stats?.trust?.moving_time?.trusted
+    ? detectDoctorRestBlocks(points)
+    : existingRestBlocks;
   const restBlocks = mergeDoctorRestBlocks(existingRestBlocks, detectedRestBlocks);
   const restSummary = summarizeRestBlocks(restBlocks);
   const stages = normalizeActivityStages(payloadObject.stages);
@@ -1321,7 +1596,8 @@ const buildActivityDoctorRepair = (
       after: change.after,
     })),
     stats_before: scan.stats.current,
-    stats_after: recalculated,
+    stats_after: safeStats,
+    raw_stats_after: rawRecalculated,
   };
   const basePayload =
     payloadObject && !payloadObject.type && !payloadObject.features
@@ -1344,11 +1620,11 @@ const buildActivityDoctorRepair = (
     metadata: {
       ...metadata,
       activity_type: activityType,
-      distance_km: recalculated.distance_km,
-      moving_time: recalculated.moving_time,
-      average_speed: recalculated.average_speed,
-      max_speed: recalculated.max_speed,
-      total_elevation_gain: recalculated.total_elevation_gain,
+      distance_km: safeStats.distance_km,
+      moving_time: safeStats.moving_time,
+      average_speed: safeStats.average_speed,
+      max_speed: safeStats.max_speed,
+      total_elevation_gain: safeStats.total_elevation_gain,
       time_context: {
         ...currentTimeContext,
         start_date: startDateIso,
@@ -1376,6 +1652,9 @@ const buildActivityDoctorRepair = (
       source: metadata?.source || ride?.source || "GASPOOL",
       exported_at: metadata?.exported_at || nowIso,
       repaired_at: nowIso,
+      doctor_guard_version: DOCTOR_SCAN_VERSION,
+      stat_trust: scan?.stats?.trust || {},
+      raw_recalculated_stats: rawRecalculated,
       repair_acknowledged_actions: appliedActions,
       repair_history: [...previousHistory, repairEntry].slice(-30),
     },
@@ -1384,7 +1663,7 @@ const buildActivityDoctorRepair = (
   return {
     payload: repairedPayload,
     points,
-    stats: recalculated,
+    stats: safeStats,
     start_date: startDateIso,
     applied_actions: scan.repair_plan,
   };
@@ -1411,9 +1690,15 @@ const buildActivityDoctorScan = (
   const metadata = payloadObject.metadata || {};
   const acknowledgedActions = getDoctorAcknowledgedActions(metadata);
   const activityType = String(ride?.activity_type || metadata?.activity_type || "ride");
-  const recalculated = recalculateDoctorStats(points, activityType);
+  const rawRecalculated = recalculateDoctorStats(points, activityType);
+  const statTrust = buildDoctorStatTrust(ride, points, activityType, rawRecalculated);
+  const currentStats = statTrust.current;
+  const proposedStats = statTrust.safe;
+  const timestampCount = statTrust.quality.timestamp_points;
   const existingRestBlocks = normalizeRestBlocks(payloadObject.rest_blocks);
-  const detectedRestBlocks = detectDoctorRestBlocks(points);
+  const detectedRestBlocks = statTrust.trust.moving_time.trusted
+    ? detectDoctorRestBlocks(points)
+    : existingRestBlocks;
   const timeContext = metadata?.time_context || {};
   const rawShape = Array.isArray(payload)
     ? "legacy_array"
@@ -1471,6 +1756,28 @@ const buildActivityDoctorScan = (
     });
   }
 
+  if (
+    points.length >= 2 &&
+    (statTrust.quality.is_sparse_route || !statTrust.quality.has_enough_timed_points)
+  ) {
+    const reasons: string[] = [];
+    if (statTrust.quality.is_sparse_route) {
+      reasons.push(`${points.length} titik terlalu sedikit untuk statistik penuh`);
+    }
+    if (!statTrust.quality.has_enough_timed_points) {
+      reasons.push(`${timestampCount}/${points.length} titik punya timestamp valid`);
+    }
+
+    pushDoctorIssue(issues, {
+      code: "stats_repair_limited",
+      severity: "warning",
+      title: "Repair statistik dibatasi",
+      detail: `${reasons.join("; ")}. Doctor boleh menormalkan JSON/metadata, tetapi statistik D1 yang tidak trusted akan dipertahankan.`,
+      fixable: false,
+      count: points.length,
+    });
+  }
+
   if (invalidPointCount > 0) {
     pushDoctorIssue(issues, {
       code: "invalid_points",
@@ -1510,37 +1817,40 @@ const buildActivityDoctorScan = (
     pushDoctorChange(changes, "points.duplicate_removed", deduped.removed, 0, "Hapus duplikat berurutan.");
   }
 
-  if (
-    recalculated.skipped_jump_count > 0 &&
-    !acknowledgedActions.has("ignore_extreme_gps_jumps")
-  ) {
+  if (rawRecalculated.skipped_jump_count > 0 && !acknowledgedActions.has("ignore_extreme_gps_jumps")) {
+    const canUseJumpGuard = statTrust.trust.distance_km.trusted || statTrust.trust.moving_time.trusted;
     pushDoctorIssue(issues, {
       code: "gps_jumps",
       severity: "warning",
       title: "GPS jump ekstrem terdeteksi",
-      detail: `${recalculated.skipped_jump_count} segmen terlihat seperti lompatan GPS dan bisa diabaikan dari statistik repair.`,
-      fixable: true,
-      action: "ignore_extreme_gps_jumps",
-      count: recalculated.skipped_jump_count,
+      detail: canUseJumpGuard
+        ? `${rawRecalculated.skipped_jump_count} segmen terlihat seperti lompatan GPS dan bisa diabaikan dari statistik repair.`
+        : `${rawRecalculated.skipped_jump_count} segmen terlihat seperti lompatan GPS. Statistik D1 dipertahankan karena data belum cukup trusted.`,
+      fixable: canUseJumpGuard,
+      action: canUseJumpGuard ? "ignore_extreme_gps_jumps" : undefined,
+      count: rawRecalculated.skipped_jump_count,
     });
   }
 
   if (
-    recalculated.suspicious_speed_count > 0 &&
+    rawRecalculated.suspicious_speed_count > 0 &&
     !acknowledgedActions.has("recalculate_stats_with_speed_guard")
   ) {
+    const canUseSpeedGuard = statTrust.trust.moving_time.trusted || statTrust.trust.max_speed.trusted;
     pushDoctorIssue(issues, {
       code: "suspicious_speed",
       severity: "warning",
       title: "Kecepatan segmen tidak wajar",
-      detail: `${recalculated.suspicious_speed_count} segmen melampaui batas wajar untuk tipe aktivitas ini.`,
-      fixable: true,
-      action: "recalculate_stats_with_speed_guard",
-      count: recalculated.suspicious_speed_count,
+      detail: canUseSpeedGuard
+        ? `${rawRecalculated.suspicious_speed_count} segmen melampaui batas wajar untuk tipe aktivitas ini dan akan diabaikan dari statistik repair.`
+        : `${rawRecalculated.suspicious_speed_count} segmen melampaui batas wajar. Statistik terkait speed dipertahankan.`,
+      fixable: canUseSpeedGuard,
+      action: canUseSpeedGuard ? "recalculate_stats_with_speed_guard" : undefined,
+      count: rawRecalculated.suspicious_speed_count,
     });
   }
 
-  if (detectedRestBlocks.length > existingRestBlocks.length) {
+  if (statTrust.trust.moving_time.trusted && detectedRestBlocks.length > existingRestBlocks.length) {
     pushDoctorIssue(issues, {
       code: "missing_rest_blocks",
       severity: "info",
@@ -1579,37 +1889,114 @@ const buildActivityDoctorScan = (
     pushDoctorChange(changes, "metadata.missing_fields", missingMetadata, [], "Isi metadata dasar dari D1 dan payload aktivitas.");
   }
 
-  const d1Distance = Number(ride?.distance || 0);
-  const d1Moving = Number(ride?.moving_time || 0);
-  const distanceDelta = Math.abs(d1Distance - recalculated.distance_km);
-  const movingDelta = Math.abs(d1Moving - recalculated.moving_time);
+  const statChanged = (field: keyof typeof currentStats, threshold = 0) =>
+    Math.abs(Number(currentStats[field] || 0) - Number(proposedStats[field] || 0)) > threshold;
+  const rawChanged = (field: keyof typeof currentStats, threshold = 0) =>
+    Math.abs(Number(currentStats[field] || 0) - Number(rawRecalculated[field] || 0)) > threshold;
 
-  if (
-    points.length >= 2 &&
-    d1Distance > 0 &&
-    (distanceDelta > 0.3 || distanceDelta / Math.max(d1Distance, 0.1) > 0.05)
-  ) {
+  if (statChanged("distance_km", 0.02)) {
     pushDoctorIssue(issues, {
       code: "distance_mismatch",
       severity: "warning",
       title: "Jarak D1 beda dari route GPS",
-      detail: `D1 ${d1Distance.toFixed(2)} km, hasil hitung ulang ${recalculated.distance_km.toFixed(2)} km.`,
+      detail: `D1 ${currentStats.distance_km.toFixed(2)} km, hasil trusted repair ${proposedStats.distance_km.toFixed(2)} km.`,
       fixable: true,
       action: "recalculate_distance",
     });
-    pushDoctorChange(changes, "distance", Number(d1Distance.toFixed(3)), recalculated.distance_km, "Hitung ulang jarak dari titik GPS valid.");
+    pushDoctorChange(changes, "distance", currentStats.distance_km, proposedStats.distance_km, "Hitung ulang jarak dari titik GPS valid yang trusted.");
+  } else if (!statTrust.trust.distance_km.trusted && rawChanged("distance_km", 0.3)) {
+    pushDoctorIssue(issues, {
+      code: "distance_repair_untrusted",
+      severity: "warning",
+      title: "Jarak repair tidak trusted",
+      detail: statTrust.trust.distance_km.reason,
+      fixable: false,
+    });
+    pushDoctorChange(changes, "distance.preserved", rawRecalculated.distance_km, currentStats.distance_km, "Jarak D1 dipertahankan karena hasil hitung ulang belum trusted.");
   }
 
-  if (points.length >= 2 && d1Moving > 0 && movingDelta > 5 * 60) {
+  if (statChanged("moving_time", 60)) {
     pushDoctorIssue(issues, {
       code: "moving_time_mismatch",
       severity: "warning",
       title: "Moving time perlu dicek",
-      detail: `D1 ${formatRecordDuration(d1Moving)}, hasil estimasi point ${formatRecordDuration(recalculated.moving_time)}.`,
+      detail: `D1 ${formatRecordDuration(currentStats.moving_time)}, hasil trusted repair ${formatRecordDuration(proposedStats.moving_time)}.`,
       fixable: true,
       action: "recalculate_moving_time",
     });
-    pushDoctorChange(changes, "moving_time", d1Moving, recalculated.moving_time, "Estimasi ulang moving time dengan guard long gap.");
+    pushDoctorChange(changes, "moving_time", currentStats.moving_time, proposedStats.moving_time, "Estimasi ulang moving time dengan guard long gap dan timestamp trusted.");
+  } else if (!statTrust.trust.moving_time.trusted && rawChanged("moving_time", 5 * 60)) {
+    pushDoctorIssue(issues, {
+      code: "moving_time_repair_untrusted",
+      severity: "warning",
+      title: "Moving time repair tidak trusted",
+      detail: statTrust.trust.moving_time.reason,
+      fixable: false,
+    });
+    pushDoctorChange(changes, "moving_time.preserved", rawRecalculated.moving_time, currentStats.moving_time, "Moving time D1 dipertahankan karena timestamp tidak cukup trusted.");
+  }
+
+  if (statChanged("average_speed", 0.2)) {
+    pushDoctorIssue(issues, {
+      code: "average_speed_recalculated",
+      severity: "info",
+      title: "Average speed akan dihitung ulang",
+      detail: "Average speed mengikuti jarak dan moving time trusted.",
+      fixable: true,
+      action: "recalculate_average_speed",
+    });
+    pushDoctorChange(changes, "average_speed", currentStats.average_speed, proposedStats.average_speed, "Hitung ulang average speed dari statistik trusted.");
+  } else if (!statTrust.trust.average_speed.trusted && rawChanged("average_speed", 0.5)) {
+    pushDoctorIssue(issues, {
+      code: "average_speed_repair_untrusted",
+      severity: "warning",
+      title: "Average speed repair tidak trusted",
+      detail: statTrust.trust.average_speed.reason,
+      fixable: false,
+    });
+    pushDoctorChange(changes, "average_speed.preserved", rawRecalculated.average_speed, currentStats.average_speed, "Average speed D1 dipertahankan karena jarak atau moving time tidak trusted.");
+  }
+
+  if (statChanged("max_speed", 0.5)) {
+    pushDoctorIssue(issues, {
+      code: "max_speed_recalculated",
+      severity: "info",
+      title: "Max speed akan dihitung ulang",
+      detail: "Max speed repair masih dalam batas wajar untuk tipe aktivitas.",
+      fixable: true,
+      action: "recalculate_max_speed",
+    });
+    pushDoctorChange(changes, "max_speed", currentStats.max_speed, proposedStats.max_speed, "Hitung ulang max speed dari titik GPS trusted.");
+  } else if (!statTrust.trust.max_speed.trusted && rawChanged("max_speed", 1)) {
+    pushDoctorIssue(issues, {
+      code: "max_speed_repair_untrusted",
+      severity: "warning",
+      title: "Max speed repair ditahan",
+      detail: statTrust.trust.max_speed.reason,
+      fixable: false,
+    });
+    pushDoctorChange(changes, "max_speed.preserved", rawRecalculated.max_speed, currentStats.max_speed, "Max speed D1 dipertahankan karena hasil repair terlihat seperti spike atau timestamp kurang.");
+  }
+
+  if (statChanged("total_elevation_gain", 1)) {
+    pushDoctorIssue(issues, {
+      code: "elevation_gain_recalculated",
+      severity: "info",
+      title: "Elevasi akan dihitung ulang",
+      detail: "Sample elevasi cukup untuk update total elevation gain.",
+      fixable: true,
+      action: "recalculate_elevation_gain",
+    });
+    pushDoctorChange(changes, "total_elevation_gain", currentStats.total_elevation_gain, proposedStats.total_elevation_gain, "Hitung ulang elevation gain dari sample elevasi trusted.");
+  } else if (!statTrust.trust.total_elevation_gain.trusted && rawChanged("total_elevation_gain", 1)) {
+    pushDoctorIssue(issues, {
+      code: "elevation_gain_repair_untrusted",
+      severity: "warning",
+      title: "Elevasi repair ditahan",
+      detail: statTrust.trust.total_elevation_gain.reason,
+      fixable: false,
+    });
+    pushDoctorChange(changes, "total_elevation_gain.preserved", rawRecalculated.total_elevation_gain, currentStats.total_elevation_gain, "Elevasi D1 dipertahankan karena sample elevasi tidak cukup atau hasil repair menjadi nol.");
   }
 
   const repairPlan = Array.from(
@@ -1621,12 +2008,76 @@ const buildActivityDoctorScan = (
   );
   const dangerCount = issues.filter((issue) => issue.severity === "danger").length;
   const warningCount = issues.filter((issue) => issue.severity === "warning").length;
+  const hasUntrustedStatDelta = statTrust.untrusted_fields.length > 0;
   const status = dangerCount > 0 ? "broken" : warningCount > 0 ? "needs_attention" : issues.length > 0 ? "repairable" : "healthy";
+  const canAutoRepair = dangerCount === 0 && repairPlan.length > 0;
+  const recommendation = (() => {
+    if (issues.length === 0) {
+      return {
+        level: "healthy",
+        label: "SEHAT",
+        summary: "Tidak perlu repair",
+        detail: "Route JSON, metadata, dan statistik terlihat konsisten.",
+        can_apply: false,
+      };
+    }
+
+    if (dangerCount > 0) {
+      return {
+        level: "danger",
+        label: "MANUAL CHECK",
+        summary: "Tidak aman untuk auto repair",
+        detail: "Doctor menemukan masalah fatal seperti route tidak terbaca atau point valid kurang. Jangan apply auto repair.",
+        can_apply: false,
+      };
+    }
+
+    if (canAutoRepair && hasUntrustedStatDelta) {
+      return {
+        level: "warning",
+        label: "AMAN SEBAGIAN",
+        summary: "Repair aman, statistik rawan dipertahankan",
+        detail: "Doctor hanya akan menerapkan perbaikan yang trusted. Statistik yang berpotensi merusak data, seperti elevasi kosong atau max speed spike, akan tetap memakai nilai D1 lama.",
+        can_apply: true,
+      };
+    }
+
+    if (canAutoRepair) {
+      return {
+        level: warningCount > 0 ? "warning" : "safe",
+        label: warningCount > 0 ? "AMAN DENGAN BACKUP" : "AMAN DIREPAIR",
+        summary: "Auto repair tersedia",
+        detail: "Gaspool akan membuat backup R2 dulu, lalu menerapkan perbaikan aman dan update D1 terakhir.",
+        can_apply: true,
+      };
+    }
+
+    if (hasUntrustedStatDelta) {
+      return {
+        level: "danger",
+        label: "JANGAN REPAIR STATISTIK",
+        summary: "Hasil hitung ulang berisiko merusak data",
+        detail: "Doctor tidak menemukan perbaikan aman untuk diterapkan. Pertahankan statistik D1 sampai ada raw GPS lengkap atau metadata yang lebih baik.",
+        can_apply: false,
+      };
+    }
+
+    return {
+      level: "info",
+      label: "INFO SAJA",
+      summary: "Tidak ada auto repair yang perlu diterapkan",
+      detail: "Doctor hanya menemukan catatan informatif atau perubahan yang belum didukung auto repair.",
+      can_apply: false,
+    };
+  })();
 
   return {
     status,
     healthy: issues.length === 0,
-    can_auto_repair: dangerCount === 0 && repairPlan.length > 0,
+    can_auto_repair: canAutoRepair,
+    recommendation,
+    stats_repair_allowed: !hasUntrustedStatDelta,
+    partial_stat_repair: hasUntrustedStatDelta,
     dry_run: true,
     source: payloadInfo.source,
     object_key: payloadInfo.object_key,
@@ -1636,19 +2087,19 @@ const buildActivityDoctorScan = (
       scanned_points: boundedRawPoints.length,
       valid_points: validPoints.length,
       normalized_points: points.length,
+      timestamp_points: timestampCount,
+      timed_segments: statTrust.quality.timed_segments,
+      elevation_samples: statTrust.quality.elevation_samples,
       invalid_points: invalidPointCount,
       duplicate_points: deduped.removed,
       swapped_points: swappedPointCount,
     },
     stats: {
-      current: {
-        distance_km: Number(d1Distance.toFixed(3)),
-        moving_time: d1Moving,
-        average_speed: Number(Number(ride?.average_speed || 0).toFixed(2)),
-        max_speed: Number(Number(ride?.max_speed || 0).toFixed(2)),
-        total_elevation_gain: Number(Number(ride?.total_elevation_gain || 0).toFixed(1)),
-      },
-      recalculated,
+      current: currentStats,
+      recalculated: proposedStats,
+      raw_recalculated: rawRecalculated,
+      trust: statTrust.trust,
+      quality: statTrust.quality,
     },
     rest_blocks: {
       existing_count: existingRestBlocks.length,
@@ -1667,6 +2118,9 @@ const buildActivityDoctorScan = (
       apply_confirmation_required: true,
       backup_required: true,
       external_fetch_policy: "r2_bucket_or_configured_r2_public_url_only_with_legacy_root_activity_json",
+      sparse_or_untimed_route_blocks_stat_repair: true,
+      partial_stat_trust_enabled: true,
+      untrusted_stats_are_preserved: true,
     },
     route_sample: sampleRoutePoints(points, 12).map((point) => ({
       lat: Number(point.lat.toFixed(6)),
@@ -2250,7 +2704,7 @@ api.get("/geocode", protectAPI, async (c) => {
       );
     }
 
-    const data = await orsRes.json();
+    const data: any = await orsRes.json();
     const results = (data?.features || [])
       .map(normalizeGeocodeFeature)
       .filter(Boolean) as GeocodeResult[];
@@ -3468,7 +3922,7 @@ api.get("/activity_doctor/:id", protectAPI, async (c) => {
   }
 });
 
-// 3b. Activity Doctor v2 apply auto repair
+// 3b. Activity Doctor v4 apply auto repair
 api.post("/activity_doctor/:id/apply", protectAPI, async (c) => {
   const id = Number(c.req.param("id"));
   const body = await c.req.json().catch(() => ({}));
@@ -3634,7 +4088,9 @@ api.post("/activity_doctor/:id/apply", protectAPI, async (c) => {
       )
       .run();
 
-    if (updateResult && updateResult.success === false) {
+    const updateResultStatus = updateResult as { success?: boolean } | null | undefined;
+
+    if (!updateResultStatus || updateResultStatus.success === false) {
       throw new Error("R2 repair berhasil ditulis, tetapi update D1 gagal.");
     }
 
@@ -4370,7 +4826,7 @@ api.post("/radar_sync", async (c) => {
     // Ambil daftar teman satu room
     const list = await c.env.GASPOOL_RADAR.list({ prefix: room + ":" });
     const participants = await Promise.all(
-      list.keys.map(async (k) => {
+      list.keys.map(async (k: { name: string }) => {
         const val = await c.env.GASPOOL_RADAR.get(k.name);
         return { user: k.name.split(":")[1], ...JSON.parse(val || "{}") };
       }),
@@ -4381,7 +4837,7 @@ api.post("/radar_sync", async (c) => {
       prefix: `RADIO:${room}:`,
     });
     const radios = await Promise.all(
-      radioList.keys.map(async (k) => {
+      radioList.keys.map(async (k: { name: string }) => {
         const val = await c.env.GASPOOL_RADAR.get(k.name);
         return { user: k.name.split(":")[2], ...JSON.parse(val || "{}") };
       }),
@@ -4483,7 +4939,7 @@ api.post("/radio_cleanup", protectAPI, async (c) => {
     });
 
     await Promise.all(
-      radioList.keys.map((key) => c.env.GASPOOL_RADAR.delete(key.name)),
+      radioList.keys.map((key: { name: string }) => c.env.GASPOOL_RADAR.delete(key.name)),
     );
 
     return c.json({ success: true, deleted });
@@ -4527,7 +4983,7 @@ api.get("/radar_view/:room", async (c) => {
   try {
     const list = await c.env.GASPOOL_RADAR.list({ prefix: room + ":" });
     const participants = await Promise.all(
-      list.keys.map(async (k) => {
+      list.keys.map(async (k: { name: string }) => {
         const val = await c.env.GASPOOL_RADAR.get(k.name);
         return { user: k.name.split(":")[1], ...JSON.parse(val || "{}") };
       }),

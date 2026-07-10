@@ -33,7 +33,7 @@ Gaspool is designed to run serverlessly on Cloudflare using **Workers**, **D1**,
 - Basic spoken turn prompts around 300m, 80m, and near the turn point
 - Water and food voice reminders for long activities
 - Rest block detection for long pauses, sleep, system gaps, and overnight breaks
-- Pause Overnight / Finish Later mode for continuing an activity later
+- Lanjut Nanti / Finish Later mode for continuing an activity later
 
 ### Peleton Mode
 
@@ -827,9 +827,9 @@ Rest blocks can come from:
 - long auto-pause periods,
 - long browser/system gaps,
 - resume after a long blackbox gap,
-- manual Pause Overnight / Finish Later mode.
+- manual Lanjut Nanti / Finish Later mode.
 
-Pause Overnight saves the current blackbox session without uploading the activity. When the user resumes later, Gaspool records the rest block and starts a new etape when appropriate.
+Lanjut Nanti / Finish Later saves the current blackbox session without uploading the activity. When the user resumes later, Gaspool records the rest block and starts a new etape when appropriate.
 
 No D1 migration is required. Rest blocks are stored inside the R2 activity JSON and shown in the dashboard activity modal.
 
@@ -848,20 +848,24 @@ GET /api/activity_doctor/:id
 POST /api/activity_doctor/:id/apply
 ```
 
-The `GET` endpoint is a dry-run scanner. It reads the saved route JSON, detects old route formats, invalid or duplicate GPS points, obvious lng/lat coordinate order, extreme GPS jumps, long timestamp gaps, missing metadata, and mismatch between D1 stats and route-derived estimates.
+The `GET` endpoint is a dry-run scanner. It reads the saved route JSON, detects old route formats, invalid or duplicate GPS points, obvious lng/lat coordinate order, extreme GPS jumps, long timestamp gaps, missing metadata, sparse route-node JSON, missing timestamps, and mismatch between D1 stats and route-derived estimates.
 
-The `POST` apply endpoint only runs when the scan result has safe automatic fixes. It requires an explicit confirmation payload from the UI, optionally checks that the expected repair action list still matches the latest scan, creates an R2 backup under `gaspool/repair-backups/`, writes the repaired activity JSON, then updates D1 stats last. The repaired JSON includes normalized points, rest blocks, metadata summaries, acknowledged repair actions, and `repair_history`.
+The `POST` apply endpoint only runs when the scan result has safe automatic fixes. Guard v4 uses **partial stat trust**: distance, moving time, average speed, max speed, and elevation are judged separately. If a field is risky, for example route nodes are sparse, timestamps are missing, max speed looks like a GPS spike, or elevation samples are missing, Doctor preserves the D1 value for that field instead of overwriting it with a bad recalculation. It requires an explicit confirmation payload from the UI, optionally checks that the expected repair action list still matches the latest scan, creates an R2 backup under `gaspool/repair-backups/`, writes the repaired activity JSON, then updates D1 stats last. The repaired JSON includes normalized points, rest blocks, metadata summaries, stat trust notes, acknowledged repair actions, and `repair_history`.
 
 Activity Doctor hardening rules:
 
 - GET is dry-run only. It never writes R2 or D1.
 - POST apply refuses broken scans, missing confirmation, stale repair plans, and routes with too many raw GPS points.
-- Route payload loading uses the bound R2 object whenever possible. External arbitrary fetch is blocked; only the configured public R2 host and `gaspool/` object path are accepted as a fallback.
+- Sparse route-node data, missing timestamps, missing elevation samples, and suspicious max-speed spikes no longer force a full repair. Guard v4 switches to safe partial repair and preserves untrusted D1 fields.
+- Route payload loading uses the bound R2 object whenever possible. External arbitrary fetch is blocked; only the configured public R2 host, `gaspool/` object path, and recognized legacy root activity JSON names are accepted. If an old root URL points to a file now stored under `gaspool/`, Doctor tries the safe folder fallback first.
 - Repair writes backup first, repaired JSON second, and D1 stats last.
 
-The activity detail Studio page includes a **CEK & PERBAIKI AKTIVITAS INI** button for logged-in users. The modal shows Doctor status, source shape, point counts, preview of D1 vs recalculated stats, issues, planned changes, guardrails, and safe auto-repair actions. Applying repair reloads the page after the backup and update complete so the refreshed D1 stats are visible.
+The activity detail Studio page includes a **CEK & PERBAIKI AKTIVITAS INI** button for logged-in users. The modal shows Doctor status, a recommendation badge, source shape, point counts, timestamp/elevation sample counts, preview of D1 vs safe proposed stats, issues, planned changes, guardrails, and safe auto-repair actions. The recommendation badge summarizes the decision, for example **AMAN DIREPAIR**, **AMAN DENGAN BACKUP**, **AMAN SEBAGIAN**, **JANGAN REPAIR STATISTIK**, **MANUAL CHECK**, or **SEHAT**. Applying repair reloads the page after the backup and update complete so the refreshed D1 stats are visible.
 
 The tracker also includes a **Finish Review** screen before a new activity is uploaded. When the captain taps **TERMINATE & SAVE**, Gaspool pauses the live engines, scans the local GPS points, shows distance, moving time, GPS point count, stages, rest blocks, no-signal logs, privacy, and warning rows, then offers **SAVE FINAL** or **AUTO REPAIR & SAVE** when the issue is safe to fix automatically. Finish Review metadata is stored in the R2 activity JSON under `metadata.finish_review`.
+
+For Strava/Garmin-like moving-time statistics, choose **AUTO REPAIR & SAVE** from Finish Review when the review says the data is safe. This lets Gaspool ignore long rest gaps from moving time, clean safe GPS anomalies, and recalculate average speed or pace from repaired moving-time data. When Doctor shows **AMAN SEBAGIAN**, applying repair is still safe because untrusted fields are preserved. When Doctor shows **JANGAN REPAIR STATISTIK** or **MANUAL CHECK**, keep the existing D1 stats instead of applying repair.
+
 
 Manual trim, split, merge, and point-by-point editing are not part of Activity Doctor v1.
 
