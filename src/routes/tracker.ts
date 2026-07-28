@@ -45,7 +45,9 @@ tracker.get("/record", async (c) => {
             #map { height: 100vh; width: 100%; position: absolute; z-index: 1; }
             .ui { position: absolute; left: 0; width: 100%; z-index: 100; pointer-events: none; }
             .top { top: 0; padding: 20px; display: flex; justify-content: space-between; align-items: flex-start; z-index: 2400; pointer-events: none; }
-            .bottom { bottom: 0; padding: 25px; background: linear-gradient(0deg, #000 0%, transparent 100%); pointer-events: auto; z-index: 900; }
+            .bottom { bottom: 0; padding: 16px 18px calc(16px + env(safe-area-inset-bottom, 0px)); background: linear-gradient(0deg, rgba(0,0,0,0.92) 0%, rgba(0,0,0,0.62) 72%, transparent 100%); pointer-events: none; z-index: 900; }
+            .bottom button, .bottom .btn, .bottom .mode-btn, .bottom .tracking-mode-panel, .bottom .stage-panel, .bottom .nutrition-panel, .bottom .privacy-row { pointer-events: auto; }
+            .bottom .stat-card, .bottom .tracker-distance, .bottom .signal-panel, .bottom .nav-voice-status { pointer-events: none; }
             
             .stat-card { background: rgba(0,0,0,0.6); backdrop-filter: blur(20px); border-radius: 18px; border: 1px solid rgba(255,255,255,0.1); padding: 15px; pointer-events: auto; }
             .label { font-size: 9px; font-weight: 900; color: #aaa; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 3px; transition: 0.3s;}
@@ -58,7 +60,12 @@ tracker.get("/record", async (c) => {
             .btn-stop { background: #e74c3c; color: #fff; display: none; }
             .btn-cancel { background: rgba(231,76,60,0.88); width: auto; padding: 10px 15px; font-size: 10px; color: #fff; border-radius: 10px; border: none; cursor: pointer; pointer-events: auto; position: fixed; top: calc(env(safe-area-inset-top, 0px) + 16px); right: 16px; /* Selalu di atas panel bawah / card statistik pada layar kecil */ z-index: 10050; touch-action: manipulation; box-shadow: 0 10px 28px rgba(0,0,0,0.45); }
             
-            .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px; }
+            .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+            .tracker-distance { text-align:center; margin-bottom: 8px; }
+            .action-row { display:grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap:8px; margin-bottom:8px; pointer-events:auto; }
+            .action-row .btn { padding:9px 6px !important; font-size:9px !important; min-height:38px; }
+            .btn-panel-toggle { display:none; margin:0 0 8px; padding:10px; font-size:10px; background:rgba(255,255,255,0.09); border:1px solid rgba(255,255,255,0.14); color:#fff; }
+            .tracker-extra.is-collapsed { display:none; }
 
             #safeMode { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.95); z-index: 1000; flex-direction: column; justify-content: center; align-items: center; padding: 30px; text-align: center; }
             #guestFinish { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000; z-index: 999; flex-direction: column; align-items: center; justify-content: center; padding: 20px; }
@@ -136,6 +143,46 @@ tracker.get("/record", async (c) => {
             
             .join-overlay { position: fixed; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.9); z-index:9000; display: ${isCaptain ? "none" : "flex"}; flex-direction: column; justify-content: center; align-items: center; padding: 20px;}
             .join-input { width: 100%; padding: 15px; margin: 15px 0; background: #000; border: 1px solid #333; color: white; border-radius: 12px; font-size: 16px; text-align: center; outline: none; max-width: 300px;}
+            @media (max-width: 640px), (max-height: 740px) {
+                .top { padding: calc(env(safe-area-inset-top, 0px) + 10px) 10px 0; }
+                .top .stat-card { max-width: calc(100vw - 112px); padding: 9px 10px; border-radius: 14px; }
+                .route-status { max-width: 180px; font-size: 9px; margin-top: 5px; padding-top: 5px; }
+                .btn-cancel { top: calc(env(safe-area-inset-top, 0px) + 10px); right: 10px; padding: 9px 12px; font-size: 9px; border-radius: 999px; }
+                .bottom { padding: 8px 10px calc(10px + env(safe-area-inset-bottom, 0px)); max-height: 54vh; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: none; }
+                .bottom::-webkit-scrollbar { display: none; }
+                .tracker-distance { margin-bottom: 5px; }
+                .tracker-distance > div:first-child { font-size: 8px !important; letter-spacing: 1.4px !important; }
+                .tracker-distance > div:last-child { font-size: 10px !important; margin-top: -6px !important; }
+                .val-main { font-size: clamp(2.15rem, 13vw, 3.1rem); line-height: 0.92; margin: 0; text-shadow: 0 0 14px rgba(255,95,0,0.36); }
+                .grid-2 { gap: 7px; margin-bottom: 8px; }
+                .bottom .grid-2 .stat-card { padding: 8px 10px; border-radius: 13px; background: rgba(0,0,0,0.58); }
+                .label { font-size: 7px; letter-spacing: 1px; margin-bottom: 2px; }
+                .val { font-size: 15px; line-height: 1.05; }
+                .action-row { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin-bottom: 6px; }
+                .action-row .btn { padding: 8px 4px !important; min-height: 34px; border-radius: 10px; font-size: 8px !important; letter-spacing: 0.2px; }
+                .nav-voice-status { margin: -2px 0 6px; font-size: 7px; letter-spacing: 0.8px; }
+                .btn-panel-toggle { display:block; }
+                .tracking-mode-panel, .stage-panel, .signal-panel, .nutrition-panel, .privacy-row { margin-bottom: 7px; padding: 8px; border-radius: 12px; }
+                .signal-panel, .nutrition-panel { grid-template-columns: 1fr auto; gap: 7px; }
+                .signal-title, .nutrition-title, .tracking-mode-head, .stage-title, .privacy-hint { font-size: 7px; letter-spacing: 0.7px; }
+                .signal-meta, .nutrition-meta, .stage-meta { font-size: 8px; line-height: 1.25; }
+                .signal-pill { font-size: 7px; padding: 4px 6px; }
+                .mode-btn { padding: 7px 4px; border-radius: 9px; font-size: 8px; letter-spacing: 0.2px; }
+                .stage-panel { grid-template-columns: 1fr 102px; gap: 7px; }
+                .stage-actions { gap: 5px; }
+                .btn-stage, .btn-overnight, .btn-nutrition { padding: 8px 5px; font-size: 8px; border-radius: 10px; }
+                .privacy-row { grid-template-columns: 112px 1fr; gap: 8px; }
+                .privacy-row .btn { padding: 8px 6px !important; font-size: 8px !important; border-radius: 10px; }
+                .btn-start, .btn-stop { padding: 12px; border-radius: 13px; font-size: 11px; box-shadow: 0 12px 30px rgba(0,0,0,0.35); }
+                .radio-panel { bottom: calc(155px + env(safe-area-inset-bottom, 0px)); right: 10px; width: min(200px, calc(100vw - 20px)); max-height: 42vh; overflow-y: auto; }
+            }
+
+            @media (max-height: 640px) {
+                .bottom { max-height: 48vh; }
+                .val-main { font-size: clamp(1.95rem, 10vw, 2.6rem); }
+                .tracker-extra:not(.is-collapsed) { max-height: 30vh; overflow-y: auto; padding-right: 2px; }
+            }
+
         </style>
     </head>
     <body>
@@ -255,6 +302,7 @@ tracker.get("/record", async (c) => {
 
         <div class="ui bottom">
             <div
+  class="tracker-distance"
   style="
     text-align:center;
     margin-bottom:8px;
@@ -300,7 +348,7 @@ tracker.get("/record", async (c) => {
                 </div>
             </div>
             
-            <div style="display:flex; gap:10px; margin-bottom:10px; pointer-events:auto;">
+            <div class="action-row">
 			<button id="btn-recenter" class="btn" style="background:rgba(52,152,219,0.2); border:1px solid #3498db; padding:10px; font-size:10px; color:#3498db; display:none; position:relative; z-index:101;" onclick="recenterMap()">📍 RECENTER</button>
             <button id="btn-stealth" class="btn" style="background:rgba(255,255,255,0.1); padding:10px; font-size:10px; color:#fff;" onclick="enableStealth()">🔒 STEALTH</button>
             <button id="btn-nav-voice" class="btn" style="background:rgba(52,152,219,0.2); border:1px solid #3498db; padding:10px; font-size:10px; color:#3498db;" onclick="toggleNavVoice()">🔊 SUARA</button>
@@ -309,6 +357,8 @@ tracker.get("/record", async (c) => {
                 ${isPeleton ? `<button class="btn" style="background:rgba(37, 211, 102, 0.2); border: 1px solid #25D366; padding:10px; font-size:10px; color:#2ecc71;" onclick="shareSpectator()">📡 SHARE RADAR</button>` : ""}
             </div>
             <div id="nav-voice-status" class="nav-voice-status">SUARA NAV SIAP</div>
+            <button id="btn-panel-toggle" class="btn btn-panel-toggle" onclick="toggleTrackerPanel()" aria-expanded="true">⚙️ PANEL KONTROL</button>
+            <div id="tracker-extra" class="tracker-extra">
             <div class="signal-panel">
                 <div>
                     <div class="signal-title">NO SIGNAL LOG</div>
@@ -342,13 +392,14 @@ tracker.get("/record", async (c) => {
                 </div>
                 <div class="stage-actions">
                     <button id="btn-stage" class="btn btn-stage" onclick="startManualStage()" disabled>ETAPE BARU</button>
-                    <button id="btn-overnight" class="btn btn-overnight" onclick="pauseOvernight()" disabled>LANJUT BESOK</button>
+                    <button id="btn-overnight" class="btn btn-overnight" onclick="pauseOvernight()" disabled>LANJUT NANTI</button>
                 </div>
             </div>
             ` : ""}
             <div class="privacy-row">
                 <button id="btn-privacy" class="btn" style="background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.14); padding:10px; font-size:10px; color:#fff;" onclick="toggleRidePrivacy()">🔒 PRIVATE</button>
                 <div id="privacy-hint" class="privacy-hint">Tidak tampil di profil publik.</div>
+            </div>
             </div>
 
             <button class="btn btn-start" id="btn-start" onclick="mulai()">▶️ INITIATE TRACKING</button>
@@ -803,6 +854,36 @@ function clearDB() {
 			function setText(id, value) {
 				const el = document.getElementById(id);
 				if (el) el.innerText = value;
+			}
+
+
+			function isCompactTrackerViewport() {
+				return window.matchMedia('(max-width: 640px), (max-height: 740px)').matches;
+			}
+
+			function setTrackerPanelCollapsed(collapsed) {
+				const panel = document.getElementById('tracker-extra');
+				const btn = document.getElementById('btn-panel-toggle');
+				if (!panel || !btn) return;
+
+				panel.classList.toggle('is-collapsed', Boolean(collapsed));
+				btn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+				btn.innerText = collapsed ? '⚙️ PANEL: TAMPILKAN KONTROL' : '🗺️ MAP: CIUTKAN PANEL';
+			}
+
+			function toggleTrackerPanel() {
+				const panel = document.getElementById('tracker-extra');
+				if (!panel) return;
+				setTrackerPanelCollapsed(!panel.classList.contains('is-collapsed'));
+			}
+
+			function bootCompactTrackerPanel() {
+				setTrackerPanelCollapsed(isCompactTrackerViewport());
+				window.addEventListener('orientationchange', function() {
+					setTimeout(function() {
+						if (isCompactTrackerViewport()) setTrackerPanelCollapsed(true);
+					}, 300);
+				});
 			}
 
 			function formatResumeDuration(seconds) {
@@ -2873,6 +2954,7 @@ function gpsQuality(acc) {
 				}
 				updateNutritionUI();
 				updateSignalUI();
+				bootCompactTrackerPanel();
 				
 				document.getElementById('btn-start').style.display = 'none';
 				document.getElementById('btn-stop').style.display = 'block';

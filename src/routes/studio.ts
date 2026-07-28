@@ -165,6 +165,33 @@ studio.get("/detail/:id", async (c) => {
                   background: var(--map-bg);
               }
 
+              #share-route-snapshot {
+                  position: absolute;
+                  left: 0;
+                  top: 0;
+                  width: 100%;
+                  height: 350px;
+                  z-index: 8;
+                  display: none;
+                  pointer-events: none;
+                  overflow: hidden;
+              }
+
+              #share-route-snapshot path {
+                  fill: none;
+                  stroke-linecap: round;
+                  stroke-linejoin: round;
+              }
+
+              #share-route-snapshot-outline { stroke: #ffffff; stroke-width: 8; }
+              #share-route-snapshot-line { stroke: var(--primary); stroke-width: 4; }
+
+              #share-route-snapshot-start,
+              #share-route-snapshot-finish { stroke: #ffffff; stroke-width: 2; }
+
+              #share-route-snapshot-start { fill: #2ecc71; }
+              #share-route-snapshot-finish { fill: #e74c3c; }
+
               .info-panel {
                   padding: 25px 20px 20px 20px;
                   background: var(--bg-body);
@@ -993,6 +1020,12 @@ studio.get("/detail/:id", async (c) => {
 
           <div id="capture-area">
               <div id="map"></div>
+              <svg id="share-route-snapshot" viewBox="0 0 600 350" preserveAspectRatio="none" aria-hidden="true">
+                  <path id="share-route-snapshot-outline" d=""></path>
+                  <path id="share-route-snapshot-line" d=""></path>
+                  <circle id="share-route-snapshot-start" cx="0" cy="0" r="6"></circle>
+                  <circle id="share-route-snapshot-finish" cx="0" cy="0" r="6"></circle>
+              </svg>
 
               <div class="info-panel">
                   <span class="badge-type">${type}</span>
@@ -1265,6 +1298,94 @@ studio.get("/detail/:id", async (c) => {
           const totalActivityDistanceKm = ${Math.max(0, Number(ride.distance || 0))};
           let shareRouteBounds = null;
           let shareRouteLatLngs = [];
+          let shareRouteSnapshotRestore = null;
+
+          function waitForMapSettle(delay = 220) {
+              return new Promise(function(resolve) {
+                  requestAnimationFrame(function() {
+                      requestAnimationFrame(function() {
+                          setTimeout(resolve, delay);
+                      });
+                  });
+              });
+          }
+
+          function getPaneStyleSnapshot(paneName) {
+              const pane = map.getPane ? map.getPane(paneName) : null;
+              if (!pane) return null;
+              return { pane: pane, opacity: pane.style.opacity, visibility: pane.style.visibility };
+          }
+
+          function restorePaneStyle(snapshot) {
+              if (!snapshot || !snapshot.pane) return;
+              snapshot.pane.style.opacity = snapshot.opacity || '';
+              snapshot.pane.style.visibility = snapshot.visibility || '';
+          }
+
+          function prepareShareRouteSnapshot() {
+              const svg = document.getElementById('share-route-snapshot');
+              const outline = document.getElementById('share-route-snapshot-outline');
+              const line = document.getElementById('share-route-snapshot-line');
+              const start = document.getElementById('share-route-snapshot-start');
+              const finish = document.getElementById('share-route-snapshot-finish');
+              const mapEl = document.getElementById('map');
+
+              if (!svg || !outline || !line || !start || !finish || !mapEl) return function() {};
+              if (!Array.isArray(shareRouteLatLngs) || shareRouteLatLngs.length < 2) return function() {};
+
+              const width = Math.max(1, Math.round(mapEl.clientWidth || 0));
+              const height = Math.max(1, Math.round(mapEl.clientHeight || 0));
+              const points = shareRouteLatLngs
+                  .map(function(latlng) {
+                      const point = map.latLngToContainerPoint(latlng);
+                      return { x: Number(point.x), y: Number(point.y) };
+                  })
+                  .filter(function(point) {
+                      return Number.isFinite(point.x) && Number.isFinite(point.y);
+                  });
+
+              if (points.length < 2) return function() {};
+
+              const d = points.map(function(point, index) {
+                  return (index === 0 ? 'M ' : 'L ') + point.x.toFixed(2) + ' ' + point.y.toFixed(2);
+              }).join(' ');
+              const first = points[0];
+              const last = points[points.length - 1];
+              const dashStyle = ('${type}' === 'run' || '${type}' === 'walk' || '${type}' === 'hike') ? '10 14' : '';
+              const overlayPane = getPaneStyleSnapshot('overlayPane');
+              const markerPane = getPaneStyleSnapshot('markerPane');
+
+              svg.setAttribute('viewBox', '0 0 ' + width + ' ' + height);
+              svg.style.width = width + 'px';
+              svg.style.height = height + 'px';
+              outline.setAttribute('d', d);
+              line.setAttribute('d', d);
+
+              if (dashStyle) {
+                  outline.setAttribute('stroke-dasharray', dashStyle);
+                  line.setAttribute('stroke-dasharray', dashStyle);
+              } else {
+                  outline.removeAttribute('stroke-dasharray');
+                  line.removeAttribute('stroke-dasharray');
+              }
+
+              start.setAttribute('cx', first.x.toFixed(2));
+              start.setAttribute('cy', first.y.toFixed(2));
+              finish.setAttribute('cx', last.x.toFixed(2));
+              finish.setAttribute('cy', last.y.toFixed(2));
+
+              if (overlayPane && overlayPane.pane) overlayPane.pane.style.opacity = '0';
+              if (markerPane && markerPane.pane) markerPane.pane.style.opacity = '0';
+              svg.style.display = 'block';
+
+              return function() {
+                  svg.style.display = 'none';
+                  outline.setAttribute('d', '');
+                  line.setAttribute('d', '');
+                  restorePaneStyle(overlayPane);
+                  restorePaneStyle(markerPane);
+              };
+          }
 
           function decodePolyline(str, precision = 5) {
               let index = 0;
@@ -1411,7 +1532,7 @@ studio.get("/detail/:id", async (c) => {
                       }
                   }
 
-                  if (urlStr.startsWith('[')) {
+                  if (urlStr.startsWith('[') || urlStr.startsWith('{')) {
                       pts = JSON.parse(urlStr);
                   } else if (urlStr.startsWith('http')) {
                       const res = await fetch(urlStr, { cache: 'no-store' });
@@ -1462,32 +1583,31 @@ studio.get("/detail/:id", async (c) => {
               });
           }
 
-          function refitStandardMapForCapture() {
-              if (!shareRouteBounds || !shareRouteBounds.isValid()) return Promise.resolve();
+          async function refitStandardMapForCapture() {
+              if (!shareRouteBounds || !shareRouteBounds.isValid()) return;
 
-              return new Promise(function(resolve) {
-                  const mapEl = document.getElementById('map');
-                  const width = mapEl ? mapEl.clientWidth : 0;
-                  const height = mapEl ? mapEl.clientHeight : 0;
-                  const padX = Math.max(34, Math.round(width * 0.08));
-                  const padY = Math.max(30, Math.round(height * 0.12));
+              const mapEl = document.getElementById('map');
+              const width = mapEl ? mapEl.clientWidth : 0;
+              const height = mapEl ? mapEl.clientHeight : 0;
+              const padX = Math.max(42, Math.round(width * 0.10));
+              const padY = Math.max(34, Math.round(height * 0.12));
 
-                  map.invalidateSize(true);
-                  map.fitBounds(shareRouteBounds, {
-                      paddingTopLeft: [padX, padY],
-                      paddingBottomRight: [padX, padY],
-                      animate: false
-                  });
-
-                  requestAnimationFrame(function() {
-                      centerRoutePixelBounds();
-                      map.invalidateSize(true);
-                      requestAnimationFrame(function() {
-                          centerRoutePixelBounds();
-                          resolve();
-                      });
-                  });
+              map.invalidateSize(true);
+              map.fitBounds(shareRouteBounds, {
+                  paddingTopLeft: [padX, padY],
+                  paddingBottomRight: [padX, padY],
+                  animate: false
               });
+
+              await waitForMapSettle(160);
+
+              for (let i = 0; i < 4; i++) {
+                  centerRoutePixelBounds();
+                  await waitForMapSettle(80);
+              }
+
+              map.invalidateSize(true);
+              await waitForMapSettle(220);
           }
 
           async function drawMap() {
@@ -2415,6 +2535,9 @@ studio.get("/detail/:id", async (c) => {
 
                   map.invalidateSize(true);
                   await refitStandardMapForCapture();
+                  if (shareRouteSnapshotRestore) shareRouteSnapshotRestore();
+                  shareRouteSnapshotRestore = prepareShareRouteSnapshot();
+                  await waitForMapSettle(180);
               }
 
               if (mode === 'minimalist') {
@@ -2436,6 +2559,10 @@ studio.get("/detail/:id", async (c) => {
                       }
 
                       if (mode === 'standard') {
+                          if (shareRouteSnapshotRestore) {
+                              shareRouteSnapshotRestore();
+                              shareRouteSnapshotRestore = null;
+                          }
                           target.style.background = '';
                           target.style.border = '';
 
@@ -2460,6 +2587,10 @@ studio.get("/detail/:id", async (c) => {
                       }
 
                       if (mode === 'standard') {
+                          if (shareRouteSnapshotRestore) {
+                              shareRouteSnapshotRestore();
+                              shareRouteSnapshotRestore = null;
+                          }
                           target.style.background = '';
                           target.style.border = '';
 
@@ -3058,6 +3189,51 @@ studio.get("/video_flex/:id", async (c) => {
               return coordinates;
           }
 
+          function extractVideoCoordinateList(value) {
+              if (Array.isArray(value)) return value;
+              if (!value || typeof value !== 'object') return [];
+              if (value.type === 'FeatureCollection' && Array.isArray(value.features)) return value.features.flatMap(extractVideoCoordinateList);
+              if (value.type === 'Feature') return extractVideoCoordinateList(value.geometry);
+              if (value.type === 'LineString' && Array.isArray(value.coordinates)) return value.coordinates;
+              if (value.type === 'MultiLineString' && Array.isArray(value.coordinates)) return value.coordinates.flat();
+              if (value.geometry) return extractVideoCoordinateList(value.geometry);
+              if (value.points) return extractVideoCoordinateList(value.points);
+              if (value.path) return extractVideoCoordinateList(value.path);
+              if (value.data) return extractVideoCoordinateList(value.data);
+              if (value.polyline) return extractVideoCoordinateList(value.polyline);
+              if (value.coordinates) return extractVideoCoordinateList(value.coordinates);
+              return [];
+          }
+
+          function normalizeVideoRoutePoints(value) {
+              return extractVideoCoordinateList(value)
+                  .map(function(point) {
+                      if (Array.isArray(point)) {
+                          const first = parseFloat(point[0]);
+                          const second = parseFloat(point[1]);
+
+                          if (Math.abs(first) > 90 && Math.abs(second) <= 90) {
+                              return [second, first];
+                          }
+
+                          return [first, second];
+                      }
+
+                      if (point && point.lat !== undefined) {
+                          return [parseFloat(point.lat), parseFloat(point.lng !== undefined ? point.lng : point.lon)];
+                      }
+
+                      if (point && point.latitude !== undefined) {
+                          return [parseFloat(point.latitude), parseFloat(point.longitude !== undefined ? point.longitude : point.lon)];
+                      }
+
+                      return null;
+                  })
+                  .filter(function(point) {
+                      return point !== null && Number.isFinite(point[0]) && Number.isFinite(point[1]) && Math.abs(point[0]) <= 90 && Math.abs(point[1]) <= 180;
+                  });
+          }
+
           function escapeClientHTML(value) {
               return String(value || '')
                   .replace(/&/g, '&amp;')
@@ -3164,7 +3340,7 @@ function spreadPeletonMarkers(baseLatLng) {
               }
 
               try {
-                  let pts = [];
+                  let payload = [];
                   let urlStr = rawUrl.trim();
 
                   if (urlStr.startsWith('"')) {
@@ -3175,8 +3351,8 @@ function spreadPeletonMarkers(baseLatLng) {
                       }
                   }
 
-                  if (urlStr.startsWith('[')) {
-                      pts = JSON.parse(urlStr);
+                  if (urlStr.startsWith('[') || urlStr.startsWith('{')) {
+                      payload = JSON.parse(urlStr);
                   } else if (urlStr.startsWith('http')) {
                       const res = await fetch(urlStr, { cache: 'no-store' });
 
@@ -3184,32 +3360,18 @@ function spreadPeletonMarkers(baseLatLng) {
                           throw new Error('Fetch rute gagal: HTTP ' + res.status);
                       }
 
-                      pts = await res.json();
-                  } else {
-                      pts = decodePolyline(urlStr);
+                      payload = await res.json();
+                  } else if (urlStr.length > 0) {
+                      payload = decodePolyline(urlStr);
                   }
 
-                  if (!Array.isArray(pts)) {
-                      pts = pts.path || pts.data || pts.polyline || pts.coordinates || [];
+                  const points = normalizeVideoRoutePoints(payload);
+
+                  if (points.length < 2) {
+                      console.warn('Rute video terbaca, tapi titik valid kurang:', points.length, payload);
                   }
 
-                  return pts.map(p => {
-                      if (Array.isArray(p)) {
-                          return [
-                              parseFloat(p[0]),
-                              parseFloat(p[1])
-                          ];
-                      }
-
-                      if (p && p.lat !== undefined) {
-                          return [
-                              parseFloat(p.lat),
-                              parseFloat(p.lng !== undefined ? p.lng : p.lon)
-                          ];
-                      }
-
-                      return null;
-                  }).filter(p => p !== null && !isNaN(p[0]) && !isNaN(p[1]));
+                  return points;
               } catch (e) {
                   console.error('Gagal load rute video:', e);
                   return [];

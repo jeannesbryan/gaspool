@@ -143,9 +143,23 @@ dashboard.get("/", async (c) => {
           .visibility-public { color: #2ecc71; background: rgba(46,204,113,0.12); border: 1px solid rgba(46,204,113,0.35); }
           .visibility-private { color: #94a3b8; background: rgba(148,163,184,0.12); border: 1px solid rgba(148,163,184,0.25); }
           
-          .modal { display: none; position: fixed; z-index: 2000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); backdrop-filter: blur(10px); justify-content: center; align-items: center; padding: 20px; }
-          .modal-content { background: #16161d; border-radius: 30px; width: 100%; max-width: 500px; border: 1px solid rgba(255,255,255,0.1); padding: 25px; box-shadow: 0 25px 50px rgba(0,0,0,0.5); }
-          #map-modal { height: 350px; width: 100%; border-radius: 20px; margin: 15px 0; background: #e5e7eb; border: 1px solid rgba(255,255,255,0.1); }
+          .modal { display: none; position: fixed; z-index: 2000; inset: 0; width: 100%; height: 100%; height: 100dvh; background: rgba(0,0,0,0.9); backdrop-filter: blur(10px); justify-content: center; align-items: center; padding: 20px; overflow: hidden; }
+          .modal-content { background: #16161d; border-radius: 30px; width: 100%; max-width: 500px; max-height: calc(100dvh - 40px); border: 1px solid rgba(255,255,255,0.1); padding: 25px; box-shadow: 0 25px 50px rgba(0,0,0,0.5); overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; scrollbar-width: thin; }
+          body.modal-open { overflow: hidden; }
+          #mapModal { align-items: stretch; padding: max(10px, env(safe-area-inset-top)) max(10px, env(safe-area-inset-right)) max(10px, env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left)); }
+          #mapModal .activity-modal-content { display: flex; flex-direction: column; max-height: calc(100dvh - max(20px, env(safe-area-inset-top)) - max(20px, env(safe-area-inset-bottom))); margin: auto; padding: 20px; }
+          #map-modal { height: clamp(220px, 42dvh, 350px); width: 100%; min-height: 220px; flex: 0 0 auto; border-radius: 20px; margin: 12px 0; background: #e5e7eb; border: 1px solid rgba(255,255,255,0.1); }
+          .activity-modal-actions { position: sticky; bottom: -1px; z-index: 5; display:grid; grid-template-columns: 1fr 1fr; gap:8px; margin-top:10px; padding-top: 14px; background: linear-gradient(180deg, rgba(22,22,29,0), #16161d 18px, #16161d 100%); }
+          .activity-modal-actions .btn { min-height: 44px; }
+          @media (max-width: 560px) {
+            .modal { padding: 10px; }
+            .modal-content { border-radius: 22px; padding: 16px; max-height: calc(100dvh - 20px); }
+            #mapModal .activity-modal-content { max-height: calc(100dvh - 14px); padding: 14px; border-radius: 20px; }
+            #map-modal { height: clamp(190px, 34dvh, 260px); min-height: 190px; margin: 10px 0; }
+            .activity-modal-actions { grid-template-columns: 1fr 1fr; gap: 7px; padding-top: 12px; }
+            .activity-modal-actions .btn { padding: 12px 8px; font-size: 0.62rem !important; }
+            #mTitle { font-size: 1.12rem !important; line-height: 1.15; }
+          }
           .stage-list { display:none; gap:8px; margin:10px 0 0; }
           .stage-item { display:grid; grid-template-columns:1fr auto; gap:10px; align-items:center; padding:9px 10px; border-radius:12px; border:1px solid rgba(255,255,255,0.08); background:rgba(255,255,255,0.045); }
           .stage-name { color:#fff; font-size:0.7rem; font-weight:950; text-transform:uppercase; letter-spacing:0.7px; }
@@ -332,7 +346,7 @@ dashboard.get("/", async (c) => {
         </div>
 
         <div id="mapModal" class="modal">
-            <div class="modal-content" style="max-width:600px; padding:20px;">
+            <div class="modal-content activity-modal-content" style="max-width:600px;">
                 <div style="display:flex; justify-content:space-between; align-items:center;">
                     <h3 id="mTitle" style="color:var(--primary); font-style:italic; margin:0; font-size:1.4rem;">Activity</h3>
                     <span onclick="closeModal('mapModal')" style="font-size:28px; color:#666; cursor:pointer; font-weight:bold;">&times;</span>
@@ -346,7 +360,7 @@ dashboard.get("/", async (c) => {
                 
                 <div id="map-modal"></div>
                 
-                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px; margin-top:10px;">
+                <div class="activity-modal-actions">
                     <button class="btn btn-orange" style="font-size: 0.65rem;" id="btn-detail-link">🔍 STUDIO</button>
                     <button class="btn" style="background:#2ecc71; color:white; font-size: 0.65rem;" id="btn-visibility-link">🌐 PUBLIC</button>
                     <button class="btn" style="background:#3498db; color:white; font-size: 0.65rem;" id="btn-edit-link">✏️ EDIT</button>
@@ -370,8 +384,22 @@ dashboard.get("/", async (c) => {
           let searchTimer = null;
           const primaryColor = '#FF5F00';
 
-          function openModal(id) { document.getElementById(id).style.display = 'flex'; }
-          function closeModal(id) { document.getElementById(id).style.display = 'none'; }
+          function openModal(id) {
+            const modal = document.getElementById(id);
+            if (!modal) return;
+            modal.style.display = 'flex';
+            document.body.classList.add('modal-open');
+          }
+
+          function closeModal(id) {
+            const modal = document.getElementById(id);
+            if (!modal) return;
+            modal.style.display = 'none';
+            const stillOpen = Array.from(document.querySelectorAll('.modal')).some(function(item) {
+              return item.style.display === 'flex';
+            });
+            if (!stillOpen) document.body.classList.remove('modal-open');
+          }
           
           function startPeleton() { 
             let val = document.getElementById('roomName').value.trim(); 
