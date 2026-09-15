@@ -337,18 +337,9 @@ This creates the base Gaspool tables:
 - `planned_routes`
 - `personal_segments`
 
-If you are updating an existing instance that was installed before these features existed, apply only the missing feature migrations instead of re-running the full schema. Example:
+If you are updating an existing instance, you do not need to do anything extra: columns added after the first release (`rides.notes`, `planned_routes.is_favorite`) are created on demand by the Worker, which inspects `PRAGMA table_info` first and only runs the `ALTER TABLE` when the column is genuinely missing. Re-running is therefore safe.
 
-```bash
-npx wrangler d1 execute gaspool-db --remote --file MIGRATION_ACTIVITY_NOTES.sql
-npx wrangler d1 execute gaspool-db --remote --file MIGRATION_ROUTE_FAVORITES.sql
-```
-
-If the repo later ships Wrangler migration files, you can also run:
-
-```bash
-npx wrangler d1 migrations apply gaspool-db --remote
-```
+Earlier revisions of this document told you to apply `MIGRATION_ACTIVITY_NOTES.sql` and `MIGRATION_ROUTE_FAVORITES.sql`. Those files were never shipped with the repository, so the step could not be followed; the runtime path above has been doing the work all along.
 
 ### 8. Generate types and deploy
 

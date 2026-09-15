@@ -4260,6 +4260,13 @@ api.post("/save_ride", protectAPI, async (c) => {
           activity_type: activity_type || "ride",
           distance_km: distance || 0,
           moving_time: duration || 0,
+          // Stat turunan ikut disimpan. D1 memegang angka yang sama, tetapi
+          // tanpa salinan di sini sebuah aktivitas kehilangan rata-rata
+          // kecepatan dan elevasinya begitu baris D1 hilang, dan yang tersisa
+          // hanya titik-titik yang mungkin sudah rusak.
+          average_speed: Number(avgSpeed.toFixed(2)),
+          max_speed: Number(Number(b.max_speed || 0).toFixed(2)),
+          total_elevation_gain: Number(Number(total_elevation || 0).toFixed(1)),
           time_context: timeContext,
           rest_summary: restSummary,
           skipped_clock_gap_seconds: skippedClockGapSeconds,
@@ -4680,6 +4687,12 @@ api.post("/activity_doctor/:id/apply", protectAPI, async (c) => {
 
 // 3. Edit Judul dan Catatan Aktivitas
 api.post("/edit_ride/:id", protectAPI, async (c) => {
+  const id = Number(c.req.param("id"));
+
+  if (!Number.isFinite(id) || id <= 0) {
+    return c.json({ success: false, message: "ID aktivitas tidak valid." }, 400);
+  }
+
   const body = await c.req.json();
   const updates: string[] = [];
   const values: any[] = [];
@@ -4707,10 +4720,18 @@ api.post("/edit_ride/:id", protectAPI, async (c) => {
     );
   }
 
+  const existing = await c.env.DB.prepare("SELECT id FROM rides WHERE id = ?")
+    .bind(id)
+    .first();
+
+  if (!existing) {
+    return c.json({ success: false, message: "Aktivitas tidak ditemukan." }, 404);
+  }
+
   await c.env.DB.prepare(`UPDATE rides SET ${updates.join(", ")} WHERE id = ?`)
-    .bind(...values, c.req.param("id"))
+    .bind(...values, id)
     .run();
-  return c.json({ success: true });
+  return c.json({ success: true, id });
 });
 
 api.post("/ride_visibility/:id", protectAPI, async (c) => {
