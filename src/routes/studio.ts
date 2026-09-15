@@ -655,6 +655,18 @@ studio.get("/detail/:id", async (c) => {
                   box-shadow: 0 10px 26px rgba(20, 184, 166, 0.16);
               }
 
+              /* Tombol footer doctor memakai background inline, sehingga aturan
+                 disabled harus menang lewat !important. Tanpa ini tombol yang
+                 sudah disabled tetap terlihat hijau dan siap diklik. */
+              #doctor-apply-btn:disabled,
+              #doctor-rescan-btn:disabled {
+                  background: #1e293b !important;
+                  border-color: rgba(148, 163, 184, 0.22) !important;
+                  color: #64748b !important;
+                  box-shadow: none !important;
+                  cursor: not-allowed !important;
+              }
+
               .doctor-modal {
                   position: fixed;
                   inset: 0;
@@ -764,6 +776,12 @@ studio.get("/detail/:id", async (c) => {
                   background: rgba(46, 204, 113, 0.16);
                   border-color: rgba(46, 204, 113, 0.35);
                   color: #86efac;
+              }
+
+              .doctor-pill.info_only {
+                  background: rgba(148, 163, 184, 0.14);
+                  border-color: rgba(148, 163, 184, 0.3);
+                  color: #cbd5e1;
               }
 
               .doctor-pill.repairable,
@@ -1193,6 +1211,11 @@ studio.get("/detail/:id", async (c) => {
                   <div class="doctor-card">
                       <div class="doctor-section-title">Masalah Terdeteksi</div>
                       <div id="doctor-issues" class="doctor-list"><div class="doctor-empty">Belum ada hasil scan.</div></div>
+                  </div>
+
+                  <div class="doctor-card">
+                      <div class="doctor-section-title">Lokasi Anomali</div>
+                      <div id="doctor-anomalies" class="doctor-list"><div class="doctor-empty">Belum ada hasil scan.</div></div>
                   </div>
 
                   <div class="doctor-card">
@@ -2211,6 +2234,7 @@ studio.get("/detail/:id", async (c) => {
               if (status === 'healthy') return 'SEHAT';
               if (status === 'repairable') return 'REPAIRABLE';
               if (status === 'needs_attention') return 'PERLU PERHATIAN';
+              if (status === 'info_only') return 'CATATAN INFO';
               if (status === 'broken') return 'BUTUH MANUAL CHECK';
               return 'BELUM DICEK';
           }
@@ -2326,6 +2350,62 @@ studio.get("/detail/:id", async (c) => {
               }).join('');
           }
 
+          function formatDoctorAnomalyStamp(anomaly) {
+              const at = String(anomaly.at || '');
+              if (!at) return 'titik #' + Number(anomaly.point_index || 0);
+              return 'titik #' + Number(anomaly.point_index || 0) + ' • ' + at;
+          }
+
+          function renderDoctorAnomalies(doctor) {
+              const el = document.getElementById('doctor-anomalies');
+              if (!el) return;
+
+              const anomalies = doctor && Array.isArray(doctor.anomalies) ? doctor.anomalies : [];
+              const clusters = doctor && Array.isArray(doctor.clusters) ? doctor.clusters : [];
+              const integrity = doctor && doctor.time_integrity ? doctor.time_integrity : null;
+
+              if (anomalies.length === 0 && clusters.length <= 1) {
+                  el.innerHTML = '<div class="doctor-empty">Tidak ada anomali terlokalisasi.</div>';
+                  return;
+              }
+
+              let html = anomalies.map(function(anomaly) {
+                  const severity = String(anomaly.severity || 'info');
+                  return '<div class="doctor-issue">' +
+                      '<div class="doctor-severity ' + escapeClientHTML(severity) + '">' + escapeClientHTML(doctorSeverityLabel(severity)) + '</div>' +
+                      '<div>' +
+                          '<div class="doctor-issue-title">' + escapeClientHTML(formatDoctorAnomalyStamp(anomaly)) + '</div>' +
+                          '<div class="doctor-issue-detail">' + escapeClientHTML(anomaly.detail || '-') + '</div>' +
+                          '<div class="doctor-issue-detail" style="margin-top:5px;">' +
+                              escapeClientHTML('(' + Number(anomaly.lat || 0).toFixed(5) + ', ' + Number(anomaly.lng || 0).toFixed(5) + ')') +
+                          '</div>' +
+                      '</div>' +
+                  '</div>';
+              }).join('');
+
+              if (clusters.length > 1) {
+                  html += '<div class="doctor-issue">' +
+                      '<div class="doctor-severity danger">GUGUS</div>' +
+                      '<div>' +
+                          '<div class="doctor-issue-title">Route terbagi ' + clusters.length + ' bagian</div>' +
+                          '<div class="doctor-issue-detail">' + clusters.map(function(cluster) {
+                              return '#' + Number(cluster.cluster_index || 0) + ': ' + Number(cluster.point_count || 0) +
+                                  ' titik di (' + Number(cluster.lat || 0).toFixed(5) + ', ' + Number(cluster.lng || 0).toFixed(5) + ')';
+                          }).join(' • ') + '</div>' +
+                      '</div>' +
+                  '</div>';
+              }
+
+              if (integrity && Number(integrity.span_seconds || 0) > 0) {
+                  html += '<div class="doctor-empty">Rentang waktu: ' + formatDoctorDuration(integrity.span_seconds) +
+                      ' • mundur ' + Number(integrity.time_reversal_count || 0) +
+                      ' • kembar ' + Number(integrity.duplicate_timestamp_count || 0) +
+                      ' • rusak ' + Number(integrity.invalid_timestamp_count || 0) + '</div>';
+              }
+
+              el.innerHTML = html;
+          }
+
           function renderDoctorChanges(changes) {
               const el = document.getElementById('doctor-changes');
               if (!el) return;
@@ -2399,9 +2479,12 @@ studio.get("/detail/:id", async (c) => {
 
               if (source) {
                   const guard = doctor.guardrails || {};
+                  const provenance = doctor.provenance || {};
+                  const repairCount = Number(provenance.repair_history_count || 0);
                   source.innerText = 'Source: ' + (doctor.source || '-') +
                       (doctor.raw_shape ? ' • ' + doctor.raw_shape : '') +
-                      (guard.version ? ' • guard v' + guard.version : '');
+                      (guard.version ? ' • guard v' + guard.version : '') +
+                      ' • ' + (repairCount > 0 ? 'repair x' + repairCount : 'belum pernah repair');
               }
 
               if (summary) {
@@ -2418,6 +2501,7 @@ studio.get("/detail/:id", async (c) => {
               renderDoctorCounts(doctor.counts, doctor.rest_blocks);
               renderDoctorStats(doctor.stats);
               renderDoctorIssues(doctor.issues);
+              renderDoctorAnomalies(doctor);
               renderDoctorChanges(doctor.changes);
               renderDoctorActions(doctor.repair_plan);
 
@@ -2431,6 +2515,12 @@ studio.get("/detail/:id", async (c) => {
 
               if (applyResult && applyResult.repair && applyResult.repair.stats) {
                   setDoctorMessage('Auto repair diterapkan. Backup: ' + (applyResult.repair.backup_key || '-') + '. Halaman akan reload agar angka terbaru tampil.', false);
+              } else if (applyResult && applyResult.applied === false && applyResult.validation) {
+                  const blocked = Array.isArray(applyResult.validation.blocked) ? applyResult.validation.blocked : [];
+                  setDoctorMessage(
+                      'Auto repair dibatalkan validasi: ' + (blocked.length ? blocked.map(function(item) { return String(item.detail || item.code || ''); }).join(' ') : 'hasil simulasi tidak lebih baik.') + ' Tidak ada perubahan yang ditulis.',
+                      true
+                  );
               } else {
                   const rec = doctor.recommendation || {};
                   setDoctorMessage(doctor.can_auto_repair ? 'Auto repair aman tersedia. Apply akan membuat backup R2 dulu sebelum update D1.' : (rec.summary || 'Tidak ada auto repair aman untuk diterapkan.'), doctor.status === 'broken');
