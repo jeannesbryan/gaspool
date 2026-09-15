@@ -35,6 +35,26 @@ const sanitizeRadioUser = (value: string) =>
     .replace(/[^a-zA-Z0-9_-]/g, "")
     .slice(0, 32) || "user";
 
+// Pembacaan nilai KV yang tidak boleh menjatuhkan seluruh request hanya karena
+// satu entri rusak atau ditulis dengan bentuk yang tidak terduga.
+const parseRadarEntry = (value: string | null) => {
+  try {
+    const parsed = JSON.parse(value || "{}");
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+};
+
+// Batas peserta per room ditarik jauh di atas kebutuhan wajar (TTL-nya hanya 60
+// detik) tetapi tetap di bawah batas subrequest Worker, supaya room yang
+// disalahgunakan tidak menjatuhkan endpoint untuk semua orang.
+const RADAR_MAX_PARTICIPANTS = 100;
+
+// Rekaman PTT tunggal wajar berukuran ratusan KB. Tanpa plafon, endpoint publik
+// ini bisa dipakai menitipkan file apa pun ke bucket.
+const RADIO_MAX_BYTES = 2 * 1024 * 1024;
+
 const normalizeIsoDate = (value: any, fallback: string) => {
   const parsed = Date.parse(String(value || ""));
 
@@ -5275,11 +5295,17 @@ api.delete("/segments/:id", protectAPI, async (c) => {
 
 // 4. Hapus Aktivitas
 api.delete("/delete_ride/:id", protectAPI, async (c) => {
+  const id = Number(c.req.param("id"));
+
+  if (!Number.isFinite(id) || id <= 0) {
+    return c.json({ success: false, message: "ID aktivitas tidak valid." }, 400);
+  }
+
   try {
     const ride: any = await c.env.DB.prepare(
       "SELECT polyline FROM rides WHERE id = ?",
     )
-      .bind(c.req.param("id"))
+      .bind(id)
       .first();
 
     if (!ride) {
@@ -5292,22 +5318,55 @@ api.delete("/delete_ride/:id", protectAPI, async (c) => {
       );
     }
 
-    if (ride.polyline && ride.polyline.includes(".r2.dev/")) {
-	  try {
-		const url = new URL(ride.polyline);
-		const objectKey = decodeURIComponent(url.pathname.replace(/^\/+/, ""));
+    // Host dibandingkan dengan helper yang sama yang dipakai doctor, bukan
+    // string ".r2.dev/" yang kebetulan cocok. Domain publik bucket bisa
+    // dikonfigurasi, dan pencocokan substring bisa tertipu URL seperti
+    // "https://contoh.com/x.r2.dev/y".
+    const r2Hostname = getR2PublicHostname();
+    let objectKey = "";
 
-		if (objectKey) {
-		  await c.env.R2_BUCKET.delete(objectKey);
-		}
-	  } catch (e) {
-		console.warn("R2 cleanup gagal:", e);
-	  }
-	}
+    if (ride.polyline && r2Hostname) {
+      try {
+        const url = new URL(ride.polyline);
 
-    await c.env.DB.prepare("DELETE FROM rides WHERE id = ?")
-      .bind(c.req.param("id"))
-      .run();
+        if (url.hostname === r2Hostname) {
+          objectKey = decodeURIComponent(url.pathname.replace(/^\/+/, ""));
+        }
+      } catch (e) {
+        console.warn("R2 cleanup: polyline bukan URL yang bisa dibaca:", e);
+      }
+    }
+
+    // Hanya objek di dalam namespace aplikasi yang boleh dihapus. Tanpa batas
+    // ini, polyline yang dibuat-buat bisa menunjuk objek lain di bucket.
+    if (objectKey && !objectKey.startsWith("gaspool/")) {
+      console.warn("R2 cleanup: object key di luar namespace gaspool, dilewati:", objectKey);
+      objectKey = "";
+    }
+
+    if (objectKey) {
+      try {
+        await c.env.R2_BUCKET.delete(objectKey);
+      } catch (e) {
+        console.warn("R2 cleanup gagal:", e);
+      }
+    }
+
+    // Backup hasil auto repair ikut dihapus. Sebelumnya aktivitas dihapus tetapi
+    // backup-nya tertinggal di bucket tanpa apa pun yang menunjuk ke sana.
+    const backupPrefix = `gaspool/repair-backups/ride_${id}_`;
+
+    try {
+      const backups = await c.env.R2_BUCKET.list({ prefix: backupPrefix });
+
+      for (const object of backups.objects || []) {
+        await c.env.R2_BUCKET.delete(object.key);
+      }
+    } catch (e) {
+      console.warn("R2 cleanup: gagal menghapus backup repair:", e);
+    }
+
+    await c.env.DB.prepare("DELETE FROM rides WHERE id = ?").bind(id).run();
 
     return c.json({
       success: true,
@@ -5327,33 +5386,38 @@ api.delete("/delete_ride/:id", protectAPI, async (c) => {
 api.post("/radar_sync", async (c) => {
   try {
     const { room, user, lat, lng, speed } = await c.req.json();
-    if (!room || !user || room === "SINGLE_MODE")
+    // `room` diambil dari klien dan dipakai langsung sebagai prefix KV. Tanpa
+    // sanitasi, nilai seperti "A:B" atau "\n" bisa menulis ke namespace room
+    // lain, sama seperti yang sudah dicegah di endpoint /radio.
+    const safeRoom = sanitizeRoomId(room);
+    const safeUser = sanitizeRadioUser(user);
+    if (!safeRoom || safeRoom === "SINGLE_MODE")
       return c.json({ success: true, participants: [], radios: [] });
 
     // Simpan koordinat lokasi ke Radar
     await c.env.GASPOOL_RADAR.put(
-      `${room}:${user}`,
+      `${safeRoom}:${safeUser}`,
       JSON.stringify({ lat, lng, speed, time: Date.now() }),
       { expirationTtl: 60 },
     );
 
     // Ambil daftar teman satu room
-    const list = await c.env.GASPOOL_RADAR.list({ prefix: room + ":" });
+    const list = await c.env.GASPOOL_RADAR.list({ prefix: safeRoom + ":" });
     const participants = await Promise.all(
-      list.keys.map(async (k: { name: string }) => {
+      list.keys.slice(0, RADAR_MAX_PARTICIPANTS).map(async (k: { name: string }) => {
         const val = await c.env.GASPOOL_RADAR.get(k.name);
-        return { user: k.name.split(":")[1], ...JSON.parse(val || "{}") };
+        return { user: k.name.split(":")[1], ...parseRadarEntry(val) };
       }),
     );
 
     // Telinga Satelit: Dengarkan apakah ada file radio (suara) baru di room ini
     const radioList = await c.env.GASPOOL_RADAR.list({
-      prefix: `RADIO:${room}:`,
+      prefix: `RADIO:${safeRoom}:`,
     });
     const radios = await Promise.all(
-      radioList.keys.map(async (k: { name: string }) => {
+      radioList.keys.slice(0, RADAR_MAX_PARTICIPANTS).map(async (k: { name: string }) => {
         const val = await c.env.GASPOOL_RADAR.get(k.name);
-        return { user: k.name.split(":")[2], ...JSON.parse(val || "{}") };
+        return { user: k.name.split(":")[2], ...parseRadarEntry(val) };
       }),
     );
     const peletonRouteRaw = await c.env.GASPOOL_RADAR.get(
@@ -5377,18 +5441,48 @@ api.post("/radio", async (c) => {
   try {
     const body = await c.req.parseBody();
     const room = sanitizeRoomId(body["room"] as string);
-    const user = body["user"] as string;
+    const rawUser = body["user"] as string;
     const audioFile = body["audio"] as File;
 
-    if (!room || room === "SINGLE_MODE" || !user || !audioFile) {
+    if (!room || room === "SINGLE_MODE" || !rawUser || !audioFile) {
       return c.json(
         { success: false, message: "Data transmisi tidak lengkap" },
         400,
       );
     }
 
+    // Endpoint ini memang terbuka untuk tamu peleton, jadi batasnya bukan token
+    // melainkan ukuran dan jenis berkas: tanpa plafon, siapa pun bisa memakai
+    // bucket sebagai tempat menitipkan file sembarang.
+    if (audioFile.size > RADIO_MAX_BYTES) {
+      return c.json(
+        {
+          success: false,
+          message: `Rekaman terlalu besar (maksimal ${Math.round(RADIO_MAX_BYTES / 1024 / 1024)} MB).`,
+        },
+        413,
+      );
+    }
+
+    if (audioFile.size === 0) {
+      return c.json({ success: false, message: "Rekaman kosong." }, 400);
+    }
+
+    const audioType = String(audioFile.type || "");
+    if (audioType && !audioType.startsWith("audio/") && !audioType.startsWith("video/")) {
+      return c.json(
+        { success: false, message: "Berkas transmisi harus berupa audio." },
+        415,
+      );
+    }
+
+    // `user` dipakai dua kali: sebagai bagian object key DAN sebagai bagian key
+    // KV di bawah. Nilai mentah di key KV memecah format `${room}:${user}`
+    // sehingga pembacaan kembali oleh radar salah menebak pemiliknya.
+    const user = sanitizeRadioUser(rawUser);
+
     // Generate nama file unik agar tidak bertabrakan
-    const objectKey = `gaspool/audio/${room}/radio_${sanitizeRadioUser(user)}_${Date.now()}.webm`;
+    const objectKey = `gaspool/audio/${room}/radio_${user}_${Date.now()}.webm`;
 
     // Konversi file suara menjadi ArrayBuffer untuk diunggah
     const arrayBuffer = await audioFile.arrayBuffer();
@@ -5480,8 +5574,17 @@ api.get("/public_rides/:username", async (c) => {
     return c.json({ error: "Public profile not found" }, 404);
 
   try {
+    // Kolom dipilih satu per satu, bukan SELECT *: endpoint ini publik dan
+    // `notes` berisi catatan pribadi pemilik aktivitas (mis. kondisi kesehatan)
+    // yang tidak pernah ditampilkan halaman profil publik.
     const { results: rides } = await c.env.DB.prepare(
-      "SELECT * FROM rides WHERE is_public = 1 ORDER BY start_date DESC LIMIT ? OFFSET ?",
+      `SELECT id, name, start_date, distance, moving_time, total_elevation_gain,
+              average_speed, max_speed, polyline, activity_type, participants,
+              avg_temp, source, planned_route_id, is_public
+       FROM rides
+       WHERE is_public = 1
+       ORDER BY start_date DESC
+       LIMIT ? OFFSET ?`,
     )
       .bind(lim, off)
       .all();
@@ -5493,13 +5596,15 @@ api.get("/public_rides/:username", async (c) => {
 
 // 8. RADAR SPECTATOR (Hanya Membaca Data Peleton untuk Keluarga)
 api.get("/radar_view/:room", async (c) => {
-  const room = c.req.param("room").toUpperCase();
+  const room = sanitizeRoomId(c.req.param("room"));
+  if (!room) return c.json({ success: true, participants: [] });
+
   try {
     const list = await c.env.GASPOOL_RADAR.list({ prefix: room + ":" });
     const participants = await Promise.all(
-      list.keys.map(async (k: { name: string }) => {
+      list.keys.slice(0, RADAR_MAX_PARTICIPANTS).map(async (k: { name: string }) => {
         const val = await c.env.GASPOOL_RADAR.get(k.name);
-        return { user: k.name.split(":")[1], ...JSON.parse(val || "{}") };
+        return { user: k.name.split(":")[1], ...parseRadarEntry(val) };
       }),
     );
     return c.json({ success: true, participants });
@@ -5510,13 +5615,27 @@ api.get("/radar_view/:room", async (c) => {
 
 // 9. SATELIT CUACA (Open-Meteo Proxy)
 api.get("/weather", async (c) => {
-  const lat = c.req.query("lat");
-  const lng = c.req.query("lng");
-  if (!lat || !lng) return c.json({ temp: null });
+  // Nilai dari klien dipakai menyusun URL upstream, jadi harus berupa angka
+  // dalam rentang koordinat. Tanpa ini, parameter tambahan seperti "&foo=bar"
+  // ikut terbawa ke Open-Meteo dari proxy publik kita.
+  const rawLat = c.req.query("lat");
+  const rawLng = c.req.query("lng");
+
+  // Number("") bernilai 0, jadi parameter kosong harus ditolak lebih dulu —
+  // kalau tidak, "lat=&lng=" diam-diam berubah menjadi koordinat (0, 0).
+  if (!String(rawLat ?? "").trim() || !String(rawLng ?? "").trim()) {
+    return c.json({ temp: null });
+  }
+
+  const lat = Number(rawLat);
+  const lng = Number(rawLng);
+
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return c.json({ temp: null });
+  if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return c.json({ temp: null });
 
   try {
     const res = await fetch(
-      `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current_weather=true`,
+      `https://api.open-meteo.com/v1/forecast?latitude=${lat.toFixed(6)}&longitude=${lng.toFixed(6)}&current_weather=true`,
     );
     const data: any = await res.json();
     return c.json({ temp: data.current_weather?.temperature || null });
