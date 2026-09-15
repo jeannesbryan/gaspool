@@ -567,9 +567,20 @@ The file is generated automatically and should not be committed.
 ## Tests and CI
 
 ```bash
-npm run typecheck   # tsc --noEmit
-npm test            # boots the Worker locally and runs the smoke test
+npm run cf-typegen:test   # generate types without needing a personal wrangler.jsonc
+npm run typecheck         # tsc --noEmit
+npm test                  # boots the Worker locally and runs the smoke test
 ```
+
+`worker-configuration.d.ts` is generated and gitignored, and `tsconfig.json`
+references it, so **a fresh clone fails to typecheck until it exists** with
+`error TS2688: Cannot find type definition file for './worker-configuration.d.ts'`.
+That is expected, not a broken checkout.
+
+If you have your own `wrangler.jsonc`, `npm run cf-typegen` generates it from
+your real bindings. `npm run cf-typegen:test` does the same from
+`tests/wrangler.test.jsonc`, which is the variant CI uses because your personal
+config is gitignored and therefore absent there.
 
 `npm test` runs `tests/smoke.mjs`. It starts the real Worker with Wrangler in
 local mode using `tests/wrangler.test.jsonc`, seeds a throwaway D1 database in a

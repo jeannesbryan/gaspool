@@ -27,6 +27,13 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # worker-configuration.d.ts is generated (and gitignored), and tsconfig
+      # references it, so a fresh clone fails to typecheck until it exists.
+      # Generating from the test config is deliberate: the real wrangler.jsonc
+      # is gitignored too, so CI cannot rely on it being present.
+      - name: Generate Cloudflare types
+        run: npm run cf-typegen:test
+
       - name: Typecheck
         run: npx tsc --noEmit
 
