@@ -85,7 +85,17 @@
     "ROUTING_PROVIDER": "ors",
     "PUBLIC_PROFILE_SLUG": "rider",
     "PUBLIC_PROFILE_NAME": "Gaspool Rider",
-    "PUBLIC_PROFILE_AVATAR": "/assets/profile.webp"
+    "PUBLIC_PROFILE_AVATAR": "/assets/profile.webp",
+
+    // Set this to your own R2 bucket's public domain (R2 > your bucket >
+    // Settings > Public access). Route JSON files and peleton radio audio are
+    // served from it, and it is also added to the Content-Security-Policy
+    // media-src list so the browser will play the recordings.
+    //
+    // If you leave it out you inherit the original author's bucket address,
+    // which means your saved routes will link to someone else's bucket.
+    // Example: "https://pub-xxxxxxxxxxxxxxxxxxxxxxxxxxxx.r2.dev"
+    "R2_PUBLIC_BASE_URL": "YOUR_R2_PUBLIC_BUCKET_URL"
   }
 
   // Required production secrets.

@@ -113,11 +113,103 @@ auth.get("/login", (c) => {
   `);
 });
 
+// ==========================================
+// PEMBATAS PERCOBAAN LOGIN (BRUTE-FORCE)
+// ==========================================
+// Tabel `login_logs` sudah ada di schema sejak awal tetapi tidak pernah dipakai,
+// sehingga tidak ada yang membatasi percobaan password. Nilainya disimpan per
+// alamat IP dengan jendela waktu, bukan hitungan seumur hidup, supaya pemilik
+// yang salah mengetik tidak terkunci permanen.
+const LOGIN_WINDOW_MS = 15 * 60 * 1000;
+const LOGIN_MAX_ATTEMPTS = 8;
+
+const getClientIp = (c: any) => {
+  const header =
+    c.req.header("cf-connecting-ip") ||
+    c.req.header("x-forwarded-for") ||
+    c.req.header("x-real-ip") ||
+    "";
+  return String(header).split(",")[0].trim() || "unknown";
+};
+
+const countRecentAttempts = async (db: D1Database, ip: string) => {
+  try {
+    const row: any = await db
+      .prepare("SELECT attempts, last_attempt FROM login_logs WHERE ip_address = ?")
+      .bind(ip)
+      .first();
+
+    if (!row) return 0;
+
+    const lastAttempt = Number(row.last_attempt || 0);
+    // Jendela sudah lewat: hitungan lama tidak lagi relevan.
+    if (!lastAttempt || Date.now() - lastAttempt > LOGIN_WINDOW_MS) return 0;
+
+    return Number(row.attempts || 0);
+  } catch (error) {
+    // Kalau tabel tidak bisa dibaca, login tetap dilayani. Memblokir login
+    // karena gangguan database akan mengunci pemilik keluar dari aplikasinya.
+    console.warn("Login rate limit tidak bisa dibaca:", error);
+    return 0;
+  }
+};
+
+const recordFailedAttempt = async (db: D1Database, ip: string) => {
+  const now = Date.now();
+
+  try {
+    const row: any = await db
+      .prepare("SELECT attempts, last_attempt FROM login_logs WHERE ip_address = ?")
+      .bind(ip)
+      .first();
+
+    const lastAttempt = Number(row?.last_attempt || 0);
+    const withinWindow = lastAttempt && now - lastAttempt <= LOGIN_WINDOW_MS;
+    const attempts = withinWindow ? Number(row?.attempts || 0) + 1 : 1;
+
+    await db
+      .prepare(
+        `INSERT INTO login_logs (ip_address, attempts, last_attempt) VALUES (?, ?, ?)
+         ON CONFLICT(ip_address) DO UPDATE SET attempts = excluded.attempts, last_attempt = excluded.last_attempt`,
+      )
+      .bind(ip, attempts, now)
+      .run();
+  } catch (error) {
+    console.warn("Login rate limit tidak bisa dicatat:", error);
+  }
+};
+
+const clearAttempts = async (db: D1Database, ip: string) => {
+  try {
+    await db.prepare("DELETE FROM login_logs WHERE ip_address = ?").bind(ip).run();
+  } catch (error) {
+    console.warn("Login rate limit tidak bisa dibersihkan:", error);
+  }
+};
+
+const renderLockedPage = (remainingMinutes: number) => `
+          <div style="text-align:center; font-family: sans-serif; background: #0a0a12; color: white; height: 100vh; padding-top: 100px;">
+            <h3 style="color: #ff4444;">Terlalu banyak percobaan login.</h3>
+            <p style="color: #cbd5e1;">Coba lagi sekitar ${remainingMinutes} menit lagi.</p>
+            <a href="/login" style="color: #FF5F00; font-weight: bold; text-decoration: none;">&lt;&lt; KEMBALI</a>
+          </div>
+        `;
+
 auth.post("/login", async (c) => {
   const body = await c.req.parseBody();
   const email = ((body["email"] as string) || "").trim().toLowerCase();
   const password = body["password"] as string;
   const turnstileResponse = body["cf-turnstile-response"] as string;
+  const clientIp = getClientIp(c);
+
+  // Diperiksa sebelum Turnstile dan bcrypt: keduanya mahal, dan justru itu yang
+  // dicari penyerang. Penghitung lama tetap berlaku selama jendelanya belum
+  // lewat, jadi percobaan ke-9 dan seterusnya tidak menyentuh keduanya.
+  const previousAttempts = await countRecentAttempts(c.env.DB, clientIp);
+
+  if (previousAttempts >= LOGIN_MAX_ATTEMPTS) {
+    return c.html(renderLockedPage(Math.ceil(LOGIN_WINDOW_MS / 60000)), 429);
+  }
 
   // 🛡️ VERIFIKASI TURNSTILE KE SERVER CLOUDFLARE
   if (!turnstileResponse) {
@@ -184,8 +276,15 @@ auth.post("/login", async (c) => {
         maxAge: 60 * 60 * 24 * 7,
         path: "/",
       });
+      // Login yang sah mengosongkan hitungan: pemilik yang sempat salah ketik
+      // tidak membawa sisa kuota percobaan ke sesi berikutnya.
+      await clearAttempts(c.env.DB, clientIp);
       return c.redirect("/");
     } else {
+      // Hanya kegagalan kredensial yang dihitung. Kegagalan Turnstile sudah
+      // ditangani sebagai gerbang bot, dan menghitungnya bisa mengunci pemilik
+      // keluar hanya karena widget-nya gagal dimuat.
+      await recordFailedAttempt(c.env.DB, clientIp);
       return c.html(`
           <div style="text-align:center; font-family: sans-serif; background: #0a0a12; color: white; height: 100vh; padding-top: 100px;">
             <h3 style="color: #ff4444;">Akses Ditolak! Email atau Password salah.</h3>

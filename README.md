@@ -426,6 +426,7 @@ ROUTING_PROVIDER
 PUBLIC_PROFILE_SLUG
 PUBLIC_PROFILE_NAME
 PUBLIC_PROFILE_AVATAR
+R2_PUBLIC_BASE_URL
 ```
 
 These can be placed inside `wrangler.jsonc` under `vars`.
@@ -437,7 +438,17 @@ ROUTING_PROVIDER=ors
 PUBLIC_PROFILE_SLUG=rider
 PUBLIC_PROFILE_NAME=Gaspool Rider
 PUBLIC_PROFILE_AVATAR=/assets/profile.webp
+R2_PUBLIC_BASE_URL=https://pub-xxxxxxxxxxxxxxxxxxxxxxxxxxxx.r2.dev
 ```
+
+`R2_PUBLIC_BASE_URL` is your own bucket's public domain (R2 > your bucket >
+Settings > Public access). Route JSON files and peleton radio recordings are
+served from it, and it is added to the `media-src` Content-Security-Policy
+directive so the browser will play the recordings.
+
+Set it. If you leave it out, the Worker falls back to the original author's
+bucket address, which means the routes you save will link to a bucket you do
+not own.
 
 ### Secret variables
 
@@ -550,6 +561,33 @@ npm run cf-typegen
 This creates `worker-configuration.d.ts`.
 
 The file is generated automatically and should not be committed.
+
+---
+
+## Tests and CI
+
+```bash
+npm run typecheck   # tsc --noEmit
+npm test            # boots the Worker locally and runs the smoke test
+```
+
+`npm test` runs `tests/smoke.mjs`. It starts the real Worker with Wrangler in
+local mode using `tests/wrangler.test.jsonc`, seeds a throwaway D1 database in a
+temporary directory, and checks the behaviour that matters: private notes stay
+out of the public feed, the weather proxy validates its input, radar survives
+hostile room and user values, ids are validated before a write, protected
+endpoints reject anonymous callers, and login attempts get limited.
+
+It needs **no Cloudflare account, no API token and no network access**. D1, R2
+and KV are emulated on disk and the directory is deleted afterwards, so the
+suite leaves nothing behind.
+
+Because it uses its own config file, the test never reads or creates your real
+`wrangler.jsonc`, and it never touches `.dev.vars`.
+
+`.github/workflows/ci.yml` runs the same typecheck, a `--dry-run` build and this
+test suite on every push and pull request. It uses GitHub's runners only, so a
+fork gets a working pipeline without configuring a single secret.
 
 ---
 

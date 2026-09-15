@@ -3,10 +3,9 @@ import { getCookie } from "hono/cookie";
 import { csrf } from "hono/csrf";
 import { Bindings } from "../index";
 import { verify } from "hono/jwt";
+import { getR2PublicBaseUrl, getR2PublicHostname } from "../config";
 
 const api = new Hono<{ Bindings: Bindings }>();
-const R2_PUBLIC_BASE_URL =
-  "https://pub-13cc00374110455e9437c511bcbdf007.r2.dev";
 const DEFAULT_PUBLIC_PROFILE_SLUG = "rider";
 
 const normalizePublicProfileSlug = (value?: string) => {
@@ -807,14 +806,6 @@ const DOCTOR_TRUST_FIELDS = [
   "total_elevation_gain",
 ] as const;
 
-const getR2PublicHostname = () => {
-  try {
-    return new URL(R2_PUBLIC_BASE_URL).hostname;
-  } catch {
-    return "";
-  }
-};
-
 const normalizeActivityDoctorR2Key = (value: any) =>
   decodeURIComponent(String(value || "").trim())
     .replace(/^\/+/, "")
@@ -837,10 +828,14 @@ const isActivityDoctorR2ObjectKeyAllowed = (value: any) => {
   return /^gaspool_(ride|node)_[a-zA-Z0-9_-]+\.json$/.test(key);
 };
 
-const isActivityDoctorFetchUrlAllowed = (raw: string, objectKey = "") => {
+const isActivityDoctorFetchUrlAllowed = (
+  raw: string,
+  objectKey = "",
+  env?: { R2_PUBLIC_BASE_URL?: string },
+) => {
   try {
     const url = new URL(raw);
-    const allowedHost = getR2PublicHostname();
+    const allowedHost = getR2PublicHostname(env);
     const pathKey = normalizeActivityDoctorR2Key(url.pathname || "");
     const key = objectKey || pathKey;
 
@@ -876,7 +871,10 @@ const sameDoctorActionList = (left: string[], right: string[]) =>
   JSON.stringify(normalizeDoctorActionList(left)) ===
   JSON.stringify(normalizeDoctorActionList(right));
 
-const getRideObjectKeyFromPolyline = (value: any) => {
+const getRideObjectKeyFromPolyline = (
+  value: any,
+  env?: { R2_PUBLIC_BASE_URL?: string },
+) => {
   const raw = String(value || "").trim();
 
   if (!raw) return "";
@@ -886,7 +884,7 @@ const getRideObjectKeyFromPolyline = (value: any) => {
 
   try {
     const url = new URL(raw);
-    const allowedHost = getR2PublicHostname();
+    const allowedHost = getR2PublicHostname(env);
 
     if (url.protocol !== "https:" || !allowedHost || url.hostname !== allowedHost) {
       return "";
@@ -914,7 +912,7 @@ const loadActivityDoctorPayload = async (
     };
   }
 
-  const objectKey = getRideObjectKeyFromPolyline(raw);
+  const objectKey = getRideObjectKeyFromPolyline(raw, env);
 
   if (objectKey) {
     try {
@@ -972,7 +970,7 @@ const loadActivityDoctorPayload = async (
   }
 
   if (raw.startsWith("http")) {
-    if (!isActivityDoctorFetchUrlAllowed(raw, objectKey)) {
+    if (!isActivityDoctorFetchUrlAllowed(raw, objectKey, env)) {
       return {
         source: "fetch",
         object_key: objectKey,
@@ -3631,7 +3629,7 @@ api.post("/route_plan", protectAPI, async (c) => {
       },
     });
 
-    const publicUrl = `${R2_PUBLIC_BASE_URL}/${fileName}`;
+    const publicUrl = `${getR2PublicBaseUrl(c.env)}/${fileName}`;
     const inserted = await c.env.DB.prepare(
       `INSERT INTO planned_routes (
         name,
@@ -3696,7 +3694,7 @@ api.post("/route_plan_gpx", protectAPI, async (c) => {
       },
     });
 
-    const publicUrl = `${R2_PUBLIC_BASE_URL}/${fileName}`;
+    const publicUrl = `${getR2PublicBaseUrl(c.env)}/${fileName}`;
     const inserted = await c.env.DB.prepare(
       `INSERT INTO planned_routes (
         name,
@@ -4107,8 +4105,10 @@ api.delete("/route_plan/:id", protectAPI, async (c) => {
       );
     }
 
-    if (typeof route.route_url === "string" && route.route_url.startsWith(R2_PUBLIC_BASE_URL + "/")) {
-      const key = route.route_url.slice(R2_PUBLIC_BASE_URL.length + 1);
+    const routeBase = getR2PublicBaseUrl(c.env);
+
+    if (typeof route.route_url === "string" && route.route_url.startsWith(routeBase + "/")) {
+      const key = route.route_url.slice(routeBase.length + 1);
       if (key) await c.env.R2_BUCKET.delete(key);
     }
 
@@ -4289,7 +4289,7 @@ api.post("/save_ride", protectAPI, async (c) => {
         },
       });
 
-      const publicUrl = `${R2_PUBLIC_BASE_URL}/${fileName}`;
+      const publicUrl = `${getR2PublicBaseUrl(c.env)}/${fileName}`;
 
       const query = `INSERT INTO rides (
       name,
@@ -4511,7 +4511,7 @@ api.post("/activity_doctor/:id/apply", protectAPI, async (c) => {
     const repair = buildActivityDoctorRepair(ride, payloadInfo, doctor);
     const targetKey = getDoctorRepairTargetKey(id, payloadInfo);
     const backupKey = buildDoctorBackupKey(id);
-    const publicUrl = `${R2_PUBLIC_BASE_URL}/${targetKey}`;
+    const publicUrl = `${getR2PublicBaseUrl(c.env)}/${targetKey}`;
 
     // Simulasi dijalankan sebelum satu byte pun ditulis. Payload hasil repair
     // di-scan ulang di memori, lalu dibandingkan dengan kondisi awal.
@@ -5343,7 +5343,7 @@ api.delete("/delete_ride/:id", protectAPI, async (c) => {
     // string ".r2.dev/" yang kebetulan cocok. Domain publik bucket bisa
     // dikonfigurasi, dan pencocokan substring bisa tertipu URL seperti
     // "https://contoh.com/x.r2.dev/y".
-    const r2Hostname = getR2PublicHostname();
+    const r2Hostname = getR2PublicHostname(c.env);
     let objectKey = "";
 
     if (ride.polyline && r2Hostname) {
@@ -5514,7 +5514,7 @@ api.post("/radio", async (c) => {
     });
 
     // URL Publik file suara
-    const publicUrl = `${R2_PUBLIC_BASE_URL}/${objectKey}`;
+    const publicUrl = `${getR2PublicBaseUrl(c.env)}/${objectKey}`;
 
     // Catat link suara ke Radar KV agar teman di room bisa mendengarnya
     await c.env.GASPOOL_RADAR.put(

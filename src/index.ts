@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { logger } from "hono/logger";
 import { secureHeaders } from "hono/secure-headers";
+import { getR2PublicBaseUrl } from "./config";
 
 // Import semua modul/router
 import authRouter from "./routes/auth";
@@ -20,6 +21,8 @@ export type Bindings = {
   PUBLIC_PROFILE_SLUG?: string;
   PUBLIC_PROFILE_NAME?: string;
   PUBLIC_PROFILE_AVATAR?: string;
+  // Domain publik bucket R2 milik instance ini. Setel di wrangler.jsonc.
+  R2_PUBLIC_BASE_URL?: string;
   TURNSTILE_SITE_KEY: string;
   TURNSTILE_SECRET_KEY: string;
 };
@@ -43,9 +46,15 @@ app.use("*", async (c, next) => {
 });
 
 // 2. Secure Headers (Gembok XSS & Clickjacking) dengan Daftar Putih VIP
-app.use(
-  "*",
-  secureHeaders({
+//
+// CSP dibangun per-request karena `mediaSrc` harus memuat domain R2 milik
+// instance ini. Sebelumnya domain itu tertulis mati di sini, sehingga salinan
+// Gaspool yang di-deploy di akun Cloudflare lain akan memblokir audionya
+// sendiri.
+app.use("*", async (c, next) => {
+  const r2PublicUrl = getR2PublicBaseUrl(c.env);
+
+  return secureHeaders({
     contentSecurityPolicy: {
       defaultSrc: ["'self'"],
       scriptSrc: [
@@ -85,12 +94,12 @@ app.use(
       mediaSrc: [
         "'self'",
         "blob:",
-        "https://pub-13cc00374110455e9437c511bcbdf007.r2.dev", // Radio Suara dari Bucket R2
+        r2PublicUrl, // Radio Suara dari Bucket R2 instance ini
       ],
     },
     referrerPolicy: "strict-origin-when-cross-origin",
-  }),
-);
+  })(c, next);
+});
 
 // Pasang Router (Sub-Aplikasi) ke jalur masing-masing
 app.route("/", authRouter);

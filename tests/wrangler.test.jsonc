@@ -1,0 +1,66 @@
+/**
+ * Wrangler config used ONLY by the test harness and CI.
+ *
+ * It exists so `npm test` and CI can run without a real `wrangler.jsonc`,
+ * which is gitignored and holds per-deploy resource ids. Every value here is a
+ * throwaway placeholder: the harness runs wrangler in local mode, so D1, R2 and
+ * KV are emulated on disk and never touch anyone's Cloudflare account.
+ *
+ * Do not put real ids in this file.
+ */
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+
+  "name": "gaspool-test",
+  "main": "../src/index.ts",
+  "compatibility_date": "2026-05-16",
+  "compatibility_flags": ["nodejs_compat"],
+
+  "assets": {
+    "binding": "ASSETS",
+    "directory": "../public"
+  },
+
+  "observability": {
+    "enabled": false
+  },
+
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "gaspool-test-db",
+      "database_id": "00000000-0000-0000-0000-000000000000"
+    }
+  ],
+
+  "r2_buckets": [
+    {
+      "binding": "R2_BUCKET",
+      "bucket_name": "gaspool-test-bucket"
+    }
+  ],
+
+  "kv_namespaces": [
+    {
+      "binding": "GASPOOL_RADAR",
+      "id": "00000000000000000000000000000000"
+    }
+  ],
+
+  // Local mode never reaches the network, so the ids and keys are irrelevant.
+  // These only exist to satisfy the bindings the Worker expects.
+  //
+  // Secrets are declared here on purpose: it keeps the harness self-contained so
+  // it never has to create or touch a developer's .dev.vars.
+  "vars": {
+    "TURNSTILE_SITE_KEY": "1x00000000000000000000AA",
+    "TURNSTILE_SECRET_KEY": "1x0000000000000000000000000000000AA",
+    "JWT_SECRET": "test-only-jwt-secret-not-used-in-production",
+    "ORS_API_KEY": "test-only-ors-key",
+    "ROUTING_PROVIDER": "ors",
+    "PUBLIC_PROFILE_SLUG": "jeannesbryan",
+    "PUBLIC_PROFILE_NAME": "Gaspool Test Rider",
+    "PUBLIC_PROFILE_AVATAR": "/assets/profile.webp",
+    "R2_PUBLIC_BASE_URL": "https://pub-test.invalid"
+  }
+}
