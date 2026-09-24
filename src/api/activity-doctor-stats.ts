@@ -278,6 +278,82 @@ export const getDoctorStopRadiusMeters = (movementMinKmh: number) =>
     (movementMinKmh / 3.6) * DOCTOR_STOP_MIN_SECONDS,
   );
 
+/**
+ * Seberapa jauh moving time hasil hitung ulang boleh menyimpang dari D1 sebelum
+ * hasilnya ditolak.
+ *
+ * Kenapa toleransinya ketat (±15%) dan bukan longgar seperti dulu (0,35x-1,35x):
+ * doctor dan tracker mengukur hal yang sama, jadi keduanya memang seharusnya
+ * berdekatan. Regresi yang membuat 1:41:29 menjadi 1:00:35 hanya menyimpang
+ * sekitar 40% — cukup untuk lolos dari ambang lama sambil tetap menulis ulang
+ * riwayat seseorang dengan angka yang salah. Ambang longgar itu bukan pengaman,
+ * ia hanya memberi ruang bagi bug berikutnya untuk lewat.
+ *
+ * Arah penyimpangan tetap dibedakan di dalam pesannya, karena "lebih pendek"
+ * dan "lebih panjang" punya penyebab yang berbeda dan pemakainya perlu tahu
+ * yang mana.
+ */
+export const DOCTOR_MOVING_TIME_RATIO_TOLERANCE = 0.15;
+
+export type DoctorMovingTimeComparison = {
+  ratio: number | null;
+  withinTolerance: boolean;
+  direction: "shorter" | "longer" | "equal" | "unknown";
+  message: string;
+};
+
+/**
+ * Bandingkan moving time hasil hitung ulang dengan yang sudah ada di D1.
+ *
+ * Rasio null berarti salah satu sisi tidak punya nilai (misalnya aktivitas lama
+ * yang belum pernah punya statistik). Dalam keadaan itu tidak ada yang bisa
+ * dibandingkan, dan hasilnya TIDAK dianggap menyimpang — kalau D1 memang kosong,
+ * mengisinya adalah perbaikan, bukan risiko.
+ */
+export const compareDoctorMovingTime = (
+  currentSeconds: number,
+  proposedSeconds: number,
+  tolerance: number = DOCTOR_MOVING_TIME_RATIO_TOLERANCE,
+): DoctorMovingTimeComparison => {
+  const current = Number(currentSeconds) || 0;
+  const proposed = Number(proposedSeconds) || 0;
+
+  if (current <= 0 || proposed <= 0) {
+    return {
+      ratio: null,
+      withinTolerance: true,
+      direction: "unknown",
+      message: "Moving time D1 tidak ada, jadi tidak ada yang perlu dibandingkan.",
+    };
+  }
+
+  const ratio = proposed / current;
+  const percent = Math.round(Math.abs(1 - ratio) * 100);
+  const withinTolerance = Math.abs(1 - ratio) <= tolerance;
+
+  if (withinTolerance) {
+    return {
+      ratio,
+      withinTolerance,
+      direction: ratio === 1 ? "equal" : ratio < 1 ? "shorter" : "longer",
+      message: `Moving time hasil hitung ulang masih dalam toleransi (${ratio.toFixed(2)}x dari D1).`,
+    };
+  }
+
+  const direction = ratio < 1 ? "shorter" : "longer";
+  const limit = Math.round(tolerance * 100);
+
+  return {
+    ratio,
+    withinTolerance,
+    direction,
+    message:
+      direction === "shorter"
+        ? `Moving time hasil hitung ulang ${percent}% lebih pendek dari D1 (rasio ${ratio.toFixed(2)}), di luar toleransi ±${limit}%. D1 dipertahankan dan aktivitas ditandai MANUAL CHECK.`
+        : `Moving time hasil hitung ulang ${percent}% lebih panjang dari D1 (rasio ${ratio.toFixed(2)}), di luar toleransi ±${limit}%. D1 dipertahankan dan aktivitas ditandai MANUAL CHECK.`,
+  };
+};
+
 export type DoctorSegmentKind = "jump" | "stopped" | "moving";
 
 /**

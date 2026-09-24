@@ -10,6 +10,7 @@ import { getR2PublicBaseUrl, getR2PublicHostname } from "../config";
 // di sana dan dikunci oleh tests/activity-doctor.mjs.
 import {
   collectDoctorRestBlocks,
+  compareDoctorMovingTime,
   DOCTOR_DISCONTINUITY_METERS,
   DOCTOR_ELEVATION_SPIKE_METERS,
   DOCTOR_EXTREME_JUMP_METERS,
@@ -1218,8 +1219,15 @@ const buildDoctorStatTrust = (
   const jumpRatio = segmentCount > 0 ? rawStats.skipped_jump_count / segmentCount : 0;
   const distanceMismatchExtreme =
     distanceRatio !== null && (distanceRatio < 0.65 || distanceRatio > 1.35);
-  const movingMismatchExtreme =
-    movingRatio !== null && (movingRatio < 0.35 || movingRatio > 1.35);
+  // Fail-closed: kalau moving time hasil hitung ulang menyimpang jauh dari D1,
+  // itu justru tanda doctor-nya yang salah, bukan D1-nya. Nilai D1 dipertahankan
+  // dan aktivitasnya ditandai untuk diperiksa manusia.
+  const movingComparison = compareDoctorMovingTime(
+    current.moving_time,
+    rawStats.moving_time,
+  );
+  const movingTimeOutOfTolerance =
+    movingComparison.ratio !== null && !movingComparison.withinTolerance;
   const maxSpeedRatio =
     current.max_speed > 0 && rawStats.max_speed > 0
       ? rawStats.max_speed / current.max_speed
@@ -1240,7 +1248,7 @@ const buildDoctorStatTrust = (
     !isSparseRoute &&
     hasEnoughTimedPoints &&
     rawStats.moving_time > 0 &&
-    !movingMismatchExtreme;
+    !movingTimeOutOfTolerance;
   const averageTrusted = distanceTrusted && movingTrusted && rawStats.average_speed > 0;
   const maxSpeedTrusted =
     timelineSound &&
@@ -1279,7 +1287,7 @@ const buildDoctorStatTrust = (
     if (rawStats.moving_time <= 0 && current.moving_time > 0) {
       return "Hasil repair moving time menjadi 0; D1 dipertahankan.";
     }
-    if (movingMismatchExtreme) return "Selisih moving time terlalu ekstrem; D1 dipertahankan.";
+    if (movingTimeOutOfTolerance) return movingComparison.message;
     return "Moving time hasil hitung ulang belum cukup dipercaya.";
   })();
 

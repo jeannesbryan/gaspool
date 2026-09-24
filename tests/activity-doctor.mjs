@@ -27,6 +27,7 @@
 import { readFileSync } from "node:fs";
 import {
   collectDoctorRestBlocks,
+  compareDoctorMovingTime,
   recalculateDoctorStats,
 } from "../src/api/activity-doctor-stats.ts";
 
@@ -225,6 +226,54 @@ check(
 );
 
 // ---------------------------------------------------------------- fixture 6
+// Fail-closed: kalau moving time hasil hitung ulang menyimpang jauh dari D1,
+// doctor harus MENOLAK menimpa dan menyerahkan keputusan ke manusia.
+//
+// Angka di sini diambil dari kejadian nyata: D1 1:41:29, doctor lama
+// mengusulkan 1:00:35. Penyimpangan 40% itu dulu LOLOS karena ambang lamanya
+// 0,35x-1,35x, sehingga riwayat gowes ditulis ulang dengan angka yang salah.
+const d1Seconds = 6089; // 1:41:29
+const regressionSeconds = 3635; // 1:00:35 <- usulan doctor yang rusak
+
+const regressionComparison = compareDoctorMovingTime(d1Seconds, regressionSeconds);
+check(
+  "fail-closed: usulan 40% lebih pendek ditolak",
+  regressionComparison.withinTolerance === false &&
+    regressionComparison.direction === "shorter",
+  `withinTolerance=${regressionComparison.withinTolerance} direction=${regressionComparison.direction} ratio=${regressionComparison.ratio?.toFixed(2)}`,
+);
+check(
+  "fail-closed: alasan penolakan menyebut arah dan ambangnya",
+  /lebih pendek/.test(regressionComparison.message) &&
+    /15%/.test(regressionComparison.message),
+  regressionComparison.message,
+);
+
+// Hasil yang sudah diperbaiki memang berdekatan dengan D1, jadi harus diterima.
+const fixedComparison = compareDoctorMovingTime(d1Seconds, 6253);
+check(
+  "fail-closed: usulan yang berdekatan dengan D1 diterima",
+  fixedComparison.withinTolerance === true,
+  `ratio=${fixedComparison.ratio?.toFixed(3)} (harap diterima)`,
+);
+
+// Arah sebaliknya juga harus ditolak, dengan pesan yang membedakan arahnya.
+const longerComparison = compareDoctorMovingTime(d1Seconds, d1Seconds * 1.6);
+check(
+  "fail-closed: usulan 60% lebih panjang juga ditolak",
+  longerComparison.withinTolerance === false && longerComparison.direction === "longer",
+  longerComparison.message,
+);
+
+// D1 yang belum punya statistik bukan alasan untuk memblokir pengisian.
+const emptyComparison = compareDoctorMovingTime(0, 6253);
+check(
+  "fail-closed: D1 kosong tidak dianggap menyimpang",
+  emptyComparison.ratio === null && emptyComparison.withinTolerance === true,
+  `ratio=${emptyComparison.ratio} withinTolerance=${emptyComparison.withinTolerance}`,
+);
+
+// ---------------------------------------------------------------- fixture 7
 // average_speed harus selalu sama dengan jarak / moving time yang dilaporkan.
 for (const [label, stats] of [
   ["sampling rapat", denseStats],
