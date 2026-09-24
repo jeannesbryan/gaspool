@@ -366,6 +366,7 @@ tracker.get("/record", async (c) => {
 			<button id="btn-recenter" class="btn" style="background:rgba(52,152,219,0.2); border:1px solid #3498db; padding:10px; font-size:10px; color:#3498db; display:none; position:relative; z-index:101;" onclick="recenterMap()">📍 RECENTER</button>
             <button id="btn-stealth" class="btn" style="background:rgba(255,255,255,0.1); padding:10px; font-size:10px; color:#fff;" onclick="enableStealth()">🔒 STEALTH</button>
             <button id="btn-nav-voice" class="btn" style="background:rgba(52,152,219,0.2); border:1px solid #3498db; padding:10px; font-size:10px; color:#3498db;" onclick="toggleNavVoice()">🔊 SUARA</button>
+            <button id="btn-nav-voice-pick" class="btn btn-repeat-nav" onclick="cycleNavVoice()">GANTI SUARA</button>
             <button id="btn-repeat-nav" class="btn btn-repeat-nav" onclick="repeatLastRouteInstruction()" disabled>ULANGI</button>
                 ${isCaptain ? `<button id="btn-reroute" class="btn btn-reroute" onclick="rerouteToDestination()">↻ REROUTE</button>` : ""}
                 <button id="btn-live" class="btn" style="background:rgba(37, 211, 102, 0.2); border: 1px solid #25D366; padding:10px; font-size:10px; color:#2ecc71;" onclick="shareLive()">${isPeleton ? "📡 SHARE RADAR" : "📡 BAGIKAN LIVE"}</button>
@@ -2259,12 +2260,81 @@ function clearDB() {
 				setRerouteButtonVisible(false);
 			}
 
+			// --- Pemilihan suara ------------------------------------------------
+			// Suara TTS tidak disediakan aplikasi ini, melainkan oleh peramban dan
+			// sistem operasi, jadi yang bisa diperbaiki adalah cara MEMILIH di
+			// antara yang tersedia. Versi lama mengambil suara Indonesia pertama
+			// (bisa pria, bisa berkualitas rendah), dan kalau perangkat tidak punya
+			// suara Indonesia sama sekali, kata Indonesia tetap dilafalkan memakai
+			// suara bawaan peramban yang biasanya Inggris — itulah yang terdengar
+			// seperti "aksen jelek".
+			//
+			// Peringkat dan pemilihannya ada di /assets/voice-picker.js, berkas yang
+			// sama juga diuji oleh tests/voice-picker.mjs.
+			const navVoicePrefKey = 'gaspool_nav_voice';
+			let voicePickerMod = null, voicePickerTried = false, navVoiceChoice = '';
+
+			async function loadVoicePicker() {
+				if (voicePickerMod || voicePickerTried) return voicePickerMod;
+				voicePickerTried = true;
+				try { voicePickerMod = await import('/assets/voice-picker.js'); } catch (e) { voicePickerMod = null; }
+				return voicePickerMod;
+			}
+
+			function loadVoicePreference() {
+				try { navVoiceChoice = localStorage.getItem(navVoicePrefKey) || ''; } catch (e) { navVoiceChoice = ''; }
+				return navVoiceChoice;
+			}
+
+			function saveVoicePreference(name) {
+				navVoiceChoice = name || '';
+				try {
+					if (navVoiceChoice) localStorage.setItem(navVoicePrefKey, navVoiceChoice);
+					else localStorage.removeItem(navVoicePrefKey);
+				} catch (e) {}
+			}
+
+			function availableVoices() {
+				if (!('speechSynthesis' in window)) return [];
+				return window.speechSynthesis.getVoices ? window.speechSynthesis.getVoices() : [];
+			}
+
 			function pickIndonesianVoice() {
-				if (!('speechSynthesis' in window)) return null;
-				const voices = window.speechSynthesis.getVoices ? window.speechSynthesis.getVoices() : [];
-				return voices.find(v => (v.lang || '').toLowerCase().startsWith('id')) ||
-					voices.find(v => (v.lang || '').toLowerCase().startsWith('ms')) ||
-					null;
+				const voices = availableVoices();
+				if (!voicePickerMod) {
+					// Jaring pengaman sebelum modul selesai dimuat: tetap pilih yang
+					// berbahasa Indonesia, jangan yang kebetulan pertama.
+					return voices.find(v => (v.lang || '').toLowerCase().startsWith('id')) || null;
+				}
+				return voicePickerMod.pickBestVoice(voices, navVoiceChoice);
+			}
+
+			// Ganti ke suara berikutnya yang layak, lalu ucapkan contoh singkat
+			// supaya pemakainya bisa langsung mendengar perbedaannya. Tidak ada
+			// cara menilai "enak didengar" dari kode — telinga pemakainyalah yang
+			// menentukan, jadi pilihan diserahkan kepadanya.
+			async function cycleNavVoice() {
+				const mod = await loadVoicePicker();
+				if (!mod) { setNavVoiceStatus('PILIH SUARA TIDAK TERSEDIA', true); return; }
+
+				const candidates = mod.rankVoices(availableVoices()).filter(mod.isAcceptableVoice);
+				if (candidates.length === 0) {
+					setNavVoiceStatus('TIDAK ADA SUARA INDONESIA DI PERANGKAT INI', true);
+					return;
+				}
+
+				const current = mod.pickBestVoice(availableVoices(), navVoiceChoice);
+				const index = current ? candidates.findIndex(v => v.name === current.name) : -1;
+				const next = candidates[(index + 1) % candidates.length];
+
+				saveVoicePreference(next.name);
+				setNavVoiceStatus('SUARA: ' + mod.describeVoice(next));
+
+				// Contoh diucapkan supaya bisa langsung dibandingkan.
+				const wasEnabled = routeVoiceEnabled;
+				routeVoiceEnabled = true;
+				speakRouteNow('Belok kiri dalam tiga ratus meter');
+				routeVoiceEnabled = wasEnabled;
 			}
 
 			function setNavVoiceStatus(text, isError = false) {
@@ -2296,7 +2366,14 @@ function clearDB() {
 				} else if (routeSpeechQueue.length > 0) {
 					setNavVoiceStatus('SUARA NAV ANTRE ' + routeSpeechQueue.length);
 				} else {
-					setNavVoiceStatus(routeVoiceReady ? 'SUARA NAV AKTIF' : 'SUARA NAV SIAP');
+					// Suara yang sedang dipakai ikut ditampilkan supaya kalau
+					// terdengar aneh, pemakainya tahu itu suara mana dan bisa
+					// langsung menekan GANTI SUARA.
+					const activeVoice = pickIndonesianVoice();
+					const voiceNote = voicePickerMod
+						? (activeVoice ? ' · ' + voicePickerMod.describeVoice(activeVoice) : ' · TIDAK ADA SUARA INDONESIA')
+						: '';
+					setNavVoiceStatus((routeVoiceReady ? 'SUARA NAV AKTIF' : 'SUARA NAV SIAP') + voiceNote, Boolean(voicePickerMod) && !activeVoice);
 				}
 			}
 
@@ -2744,6 +2821,11 @@ function clearDB() {
 
 			bootRouteSharing();
 			bootLiveShare();
+			// Pilihan suara dimuat lebih dulu supaya pemanggilan pertama sudah
+			// menghormati preferensi pemakai, bukan mengambil suara pertama yang
+			// kebetulan ada. Kegagalan memuat tidak menghalangi navigasi.
+			loadVoicePreference();
+			loadVoicePicker().then(updateNavVoiceControls).catch(() => {});
 			updateNavVoiceControls();
 			updatePrivacyButton();
 			updateTrackingModeUI();

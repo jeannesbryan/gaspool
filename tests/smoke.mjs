@@ -298,6 +298,24 @@ const main = async () => {
     (await get("/assets/live-clock.js")).res.status === 200,
     "the browser would fail to import the module at runtime",
   );
+  check(
+    "B11 tracker page wires up the voice picker",
+    soloPage.text.includes("/assets/voice-picker.js") &&
+      soloPage.text.includes("cycleNavVoice") &&
+      soloPage.text.includes("GANTI SUARA") &&
+      soloPage.text.includes("loadVoicePreference"),
+    "the voice picker is not wired into the rendered page",
+  );
+  check(
+    "B11 the voice picker module is actually served",
+    (await get("/assets/voice-picker.js")).res.status === 200,
+    "the browser would fail to import the module at runtime",
+  );
+  check(
+    "B11 the old first-match voice lookup is gone",
+    !soloPage.text.includes("voices.find(v => (v.lang || '').toLowerCase().startsWith('ms'))"),
+    "the old picker that took the first match is still present",
+  );
 
   const peletonPage = await get("/record?type=ride&room=TESTROOM");
   check("B11 tracker page renders for a peleton room", peletonPage.res.status === 200, `status ${peletonPage.res.status}`);
