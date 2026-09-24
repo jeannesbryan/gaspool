@@ -57,7 +57,13 @@ tracker.get("/record", async (c) => {
             .val { font-size: 20px; font-weight: 900; color: #fff; }
             .val-main { font-size: 4rem; font-weight: 900; color: var(--primary); font-style: italic; text-align: center; margin: 5px 0; text-shadow: 0 0 20px rgba(255,95,0,0.4); }
             
-            .btn { padding: 20px; border-radius: 15px; border: none; font-weight: 900; cursor: pointer; text-transform: uppercase; font-style: italic; width: 100%; pointer-events: auto; transition: 0.3s; }
+            /* Ukuran minimum target sentuh.
+               Halaman ini dioperasikan sambil mengayuh, kadang dengan sarung
+               tangan dan layar berembun, jadi tombol yang nyaman untuk tetikus
+               belum tentu bisa ditekan dengan benar. 48px mengikuti panduan
+               Material; 44px adalah batas bawah yang masih diterima (WCAG
+               2.5.5). Sebelum ini tombol terkecil hanya 25px. */
+            .btn { padding: 20px; border-radius: 15px; border: none; font-weight: 900; cursor: pointer; text-transform: uppercase; font-style: italic; width: 100%; pointer-events: auto; transition: 0.3s; min-height: 48px; touch-action: manipulation; }
             .btn:active { transform: scale(0.95); }
             .btn-start { background: var(--primary); color: #fff; }
             .btn-stop { background: #e74c3c; color: #fff; display: none; }
@@ -66,7 +72,7 @@ tracker.get("/record", async (c) => {
             .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
             .tracker-distance { text-align:center; margin-bottom: 8px; }
             .action-row { display:grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap:8px; margin-bottom:8px; pointer-events:auto; }
-            .action-row .btn { padding:9px 6px !important; font-size:9px !important; min-height:38px; }
+            .action-row .btn { padding:10px 6px !important; font-size:11px !important; min-height:48px; }
             .btn-panel-toggle { display:none; margin:0 0 8px; padding:10px; font-size:10px; background:rgba(255,255,255,0.09); border:1px solid rgba(255,255,255,0.14); color:#fff; }
             .tracker-extra.is-collapsed { display:none; }
 
@@ -79,7 +85,7 @@ tracker.get("/record", async (c) => {
             .live-label { font-size:9px; font-weight:900; letter-spacing:1.2px; text-transform:uppercase; color:#2ecc71; }
             .live-link { font-size:10px; color:#cfe9d9; word-break:break-all; margin-bottom:8px; line-height:1.4; }
             .live-actions { display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px; }
-            .live-actions .btn { padding:9px 6px !important; font-size:9px !important; }
+            .live-actions .btn { padding:10px 6px !important; font-size:11px !important; min-height:48px; }
 
             #safeMode { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.95); z-index: 1000; flex-direction: column; justify-content: center; align-items: center; padding: 30px; text-align: center; }
             #guestFinish { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000; z-index: 999; flex-direction: column; align-items: center; justify-content: center; padding: 20px; }
@@ -98,7 +104,7 @@ tracker.get("/record", async (c) => {
             .btn-reroute { display:none; background:rgba(231,76,60,0.2); border:1px solid #e74c3c; padding:10px; font-size:10px; color:#e74c3c; }
             .btn-repeat-nav { background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.18); padding:10px; font-size:10px; color:#fff; }
             .btn-repeat-nav:disabled { opacity: 0.42; cursor: not-allowed; }
-            .nav-voice-status { margin-top:-4px; margin-bottom:10px; color:#94a3b8; font-size:9px; font-weight:900; letter-spacing:1px; text-transform:uppercase; pointer-events:none; }
+            .nav-voice-status { margin-top:-4px; margin-bottom:10px; color:#cbd5e1; font-size:11px; font-weight:900; letter-spacing:1px; text-transform:uppercase; pointer-events:none; }
             .tracking-mode-panel { margin-bottom: 10px; padding: 10px; border-radius: 14px; background: rgba(255,255,255,0.055); border: 1px solid rgba(255,255,255,0.1); pointer-events:auto; }
             .tracking-mode-head { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:8px; color:#94a3b8; font-size:9px; font-weight:900; letter-spacing:1px; text-transform:uppercase; }
             .tracking-mode-options { display:grid; grid-template-columns: repeat(3, 1fr); gap:8px; }
@@ -161,7 +167,7 @@ tracker.get("/record", async (c) => {
                 .top { padding: calc(env(safe-area-inset-top, 0px) + 10px) 10px 0; }
                 .top .stat-card { max-width: calc(100vw - 112px); padding: 9px 10px; border-radius: 14px; }
                 .route-status { max-width: 180px; font-size: 9px; margin-top: 5px; padding-top: 5px; }
-                .btn-cancel { top: calc(env(safe-area-inset-top, 0px) + 10px); right: 10px; padding: 9px 12px; font-size: 9px; border-radius: 999px; }
+                .btn-cancel { top: calc(env(safe-area-inset-top, 0px) + 10px); right: 10px; padding: 12px 16px; font-size: 11px; min-height: 44px; border-radius: 999px; }
                 .bottom { padding: 8px 10px calc(10px + env(safe-area-inset-bottom, 0px)); max-height: 54vh; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: none; }
                 .bottom::-webkit-scrollbar { display: none; }
                 .tracker-distance { margin-bottom: 5px; }
@@ -173,20 +179,24 @@ tracker.get("/record", async (c) => {
                 .label { font-size: 7px; letter-spacing: 1px; margin-bottom: 2px; }
                 .val { font-size: 15px; line-height: 1.05; }
                 .action-row { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin-bottom: 6px; }
-                .action-row .btn { padding: 8px 4px !important; min-height: 34px; border-radius: 10px; font-size: 8px !important; letter-spacing: 0.2px; }
-                .nav-voice-status { margin: -2px 0 6px; font-size: 7px; letter-spacing: 0.8px; }
+                /* Layar kecil TIDAK boleh mengecilkan tombol di bawah ukuran
+                   yang aman disentuh. Sebelumnya baris ini memaksa 34px, dan
+                   itulah sebab tombol terkecil hanya 25px. Ruang yang sempit
+                   diserap oleh panel bawah yang bisa digulir, bukan oleh jari. */
+                .action-row .btn { padding: 10px 4px !important; min-height: 48px; border-radius: 11px; font-size: 11px !important; letter-spacing: 0.2px; }
+                .nav-voice-status { margin: -2px 0 6px; font-size: 11px; letter-spacing: 0.6px; }
                 .btn-panel-toggle { display:block; }
                 .tracking-mode-panel, .stage-panel, .signal-panel, .nutrition-panel, .privacy-row { margin-bottom: 7px; padding: 8px; border-radius: 12px; }
                 .signal-panel, .nutrition-panel { grid-template-columns: 1fr auto; gap: 7px; }
                 .signal-title, .nutrition-title, .tracking-mode-head, .stage-title, .privacy-hint { font-size: 7px; letter-spacing: 0.7px; }
                 .signal-meta, .nutrition-meta, .stage-meta { font-size: 8px; line-height: 1.25; }
                 .signal-pill { font-size: 7px; padding: 4px 6px; }
-                .mode-btn { padding: 7px 4px; border-radius: 9px; font-size: 8px; letter-spacing: 0.2px; }
+                .mode-btn { padding: 10px 4px; border-radius: 10px; font-size: 10px; letter-spacing: 0.2px; min-height: 44px; }
                 .stage-panel { grid-template-columns: 1fr 102px; gap: 7px; }
                 .stage-actions { gap: 5px; }
-                .btn-stage, .btn-overnight, .btn-nutrition { padding: 8px 5px; font-size: 8px; border-radius: 10px; }
+                .btn-stage, .btn-overnight, .btn-nutrition { padding: 10px 5px; font-size: 10px; border-radius: 10px; min-height: 44px; }
                 .privacy-row { grid-template-columns: 112px 1fr; gap: 8px; }
-                .privacy-row .btn { padding: 8px 6px !important; font-size: 8px !important; border-radius: 10px; }
+                .privacy-row .btn { padding: 10px 6px !important; font-size: 10px !important; border-radius: 10px; min-height: 44px; }
                 .btn-start, .btn-stop { padding: 12px; border-radius: 13px; font-size: 11px; box-shadow: 0 12px 30px rgba(0,0,0,0.35); }
                 .radio-panel { bottom: calc(155px + env(safe-area-inset-bottom, 0px)); right: 10px; width: min(200px, calc(100vw - 20px)); max-height: 42vh; overflow-y: auto; }
             }

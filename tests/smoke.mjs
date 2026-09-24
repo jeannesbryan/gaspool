@@ -317,6 +317,37 @@ const main = async () => {
     "the old picker that took the first match is still present",
   );
 
+  // --- B16: touch targets on the page used while riding -------------------
+  // This page is operated while pedalling, sometimes with gloves on, so a
+  // control that is comfortable with a mouse can still be too small to hit.
+  // Measured in a real browser before this was fixed: fifteen visible buttons,
+  // every one of them under 44px, the smallest only 25px.
+  //
+  // The media query is what caused it — it forced 34px on small screens, where
+  // the space is tightest and the targets matter most. A text check cannot
+  // measure a rendered button, so it guards the declarations instead: if
+  // someone lowers them again, this fails. The rendered sizes were verified
+  // separately in a browser.
+  const declaredMinHeights = [...soloPage.text.matchAll(/min-height:\s*(\d+)px/g)].map((m) =>
+    Number(m[1]),
+  );
+  check(
+    "B16 every declared minimum touch target is at least 44px",
+    declaredMinHeights.length > 0 && Math.min(...declaredMinHeights) >= 44,
+    `terkecil=${declaredMinHeights.length ? Math.min(...declaredMinHeights) : "tidak ada"}px dari ${declaredMinHeights.length} deklarasi`,
+  );
+  check(
+    "B16 small screens no longer shrink the touch targets",
+    !/min-height:\s*(?:[1-3][0-9])px/.test(soloPage.text),
+    "ada aturan yang mengecilkan tombol di bawah 40px",
+  );
+  check(
+    "B16 tracker button labels are large enough to read",
+    soloPage.text.includes(".action-row .btn { padding:10px 6px !important; font-size:11px !important; min-height:48px; }") &&
+      soloPage.text.includes(".nav-voice-status { margin: -2px 0 6px; font-size: 11px;"),
+    "label tombol atau baris status suara masih terlalu kecil",
+  );
+
   const peletonPage = await get("/record?type=ride&room=TESTROOM");
   check("B11 tracker page renders for a peleton room", peletonPage.res.status === 200, `status ${peletonPage.res.status}`);
   check(
