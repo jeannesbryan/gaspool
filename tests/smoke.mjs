@@ -286,6 +286,18 @@ const main = async () => {
     !soloPage.text.includes("shareSpectator"),
     "shareSpectator() is still referenced somewhere in the page",
   );
+  check(
+    "B11 tracker page loads the live clock accounting module",
+    soloPage.text.includes("/assets/live-clock.js") &&
+      soloPage.text.includes("recordLiveClockSample") &&
+      soloPage.text.includes("live_clock"),
+    "the clock instrumentation is not wired into the rendered page",
+  );
+  check(
+    "B11 the clock module is actually served",
+    (await get("/assets/live-clock.js")).res.status === 200,
+    "the browser would fail to import the module at runtime",
+  );
 
   const peletonPage = await get("/record?type=ride&room=TESTROOM");
   check("B11 tracker page renders for a peleton room", peletonPage.res.status === 200, `status ${peletonPage.res.status}`);

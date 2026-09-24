@@ -436,6 +436,59 @@ tracker.get("/record", async (c) => {
 			let clockInt, movingTime = 0, lastTick = Date.now(), isPaused = false, lastAnnouncedKm = 0, lastSave = 0;
 			let skippedClockGapSeconds = 0;
 
+			// --- Akuntansi jam ---------------------------------------------
+			// Jam live dan jam hasil repair pernah berbeda 2:44 untuk gowes yang
+			// sama. Sebagian sebabnya sudah diketahui (auto-pause pakai kecepatan
+			// sesaat), tetapi sebagian lagi tidak terlihat sama sekali: setiap
+			// tick yang datang terlambat dipotong diam-diam oleh
+			// Math.min(delta, maxDelta), dan potongannya tidak pernah dijumlahkan
+			// di mana pun. Penghitung ini mencatatnya TANPA mengubah perilaku:
+			// moving time tetap dihitung seperti sebelumnya.
+			//
+			// Modulnya dimuat dari /assets/live-clock.js supaya berkas yang sama
+			// juga dipakai tests/live-clock.mjs. Kalau gagal dimuat, tracker tetap
+			// berjalan seperti biasa, hanya tanpa instrumentasi.
+			let liveClockMod = null, liveClockAcc = null, liveClockLoadTried = false;
+
+			async function loadLiveClock() {
+				if (liveClockMod || liveClockLoadTried) return liveClockMod;
+				liveClockLoadTried = true;
+				try { liveClockMod = await import('/assets/live-clock.js'); } catch (e) { liveClockMod = null; }
+				return liveClockMod;
+			}
+
+			function resetLiveClock() {
+				if (!liveClockMod) return;
+				const config = currentTrackingConfig();
+				const maxDelta = isStealthMode ? config.stealthMaxClockDelta : config.maxClockDelta;
+				liveClockAcc = liveClockMod.createLiveClockAccounting(maxDelta, REST_CLOCK_GAP_SECONDS);
+			}
+
+			function recordLiveClockSample(rawDelta, paused) {
+				if (!liveClockMod || !liveClockAcc) return;
+				const config = currentTrackingConfig();
+				const maxDelta = isStealthMode ? config.stealthMaxClockDelta : config.maxClockDelta;
+				liveClockMod.recordLiveClockTick(liveClockAcc, rawDelta, {
+					paused: paused,
+					maxDeltaSeconds: maxDelta,
+					restGapSeconds: REST_CLOCK_GAP_SECONDS,
+				});
+			}
+
+			// Ringkasan untuk layar: berapa detik yang lewat tetapi tidak dihitung
+			// sebagai bergerak, dan berapa banyak tick yang terlambat.
+			function liveClockSummary() {
+				if (!liveClockMod || !liveClockAcc) return null;
+				const a = liveClockAcc;
+				if (!a.tick_count) return null;
+				return {
+					uncounted: liveClockMod.liveClockUncountedSeconds(a),
+					clamped: Number(a.clamped_seconds.toFixed(1)),
+					dropped: Number(a.dropped_seconds.toFixed(1)),
+					lateTicks: a.clamped_tick_count,
+					balance: liveClockMod.liveClockBalance(a),
+				};
+			}
 			// Variabel Elevasi (Tanjakan)
 			let totalElevation = 0, lastAlt = null;
 
@@ -2976,6 +3029,9 @@ function gpsQuality(acc) {
 					startT = Date.now(); path = []; dist = 0; movingTime = 0; lastAnnouncedKm = 0; 
 					captureStartTimezone();
 					skippedClockGapSeconds = 0;
+					// Muat modul akuntansi lalu mulai dari nol. Kegagalan memuat
+					// tidak menghalangi gowes: instrumentasi sifatnya tambahan.
+					loadLiveClock().then(resetLiveClock).catch(() => {});
 					autoRerouteCount = 0;
 					lastAutoRerouteAt = 0;
 					lastPointSavedAt = 0;
@@ -3019,6 +3075,9 @@ function gpsQuality(acc) {
 					lastTick = now;
 
 					if (!Number.isFinite(delta) || delta < 0) delta = 0;
+					// Simpan nilai mentah sebelum dipotong: potongan itulah yang
+					// dicatat sebagai waktu yang lewat tetapi tidak dihitung.
+					const rawDelta = delta;
 					if (delta > REST_CLOCK_GAP_SECONDS) {
 						skippedClockGapSeconds += delta;
 						if (delta >= REST_BLOCK_MIN_SECONDS) {
@@ -3042,6 +3101,8 @@ function gpsQuality(acc) {
 						delta = Math.min(delta, maxDelta);
 					}
 					
+					recordLiveClockSample(rawDelta, !rec || isPaused);
+
 					if (rec && !isPaused) movingTime += delta;
 					
 					let s = Math.floor(movingTime);
@@ -3496,6 +3557,22 @@ if (!gpsStatus) return;
 				if (skippedClockGapSeconds > 0) {
 					issues.push({ severity: 'info', code: 'clock_gap', message: 'Ada ' + formatStageDuration(skippedClockGapSeconds) + ' system gap yang sudah diabaikan dari moving time.', autoFix: false });
 				}
+
+				// Ke mana perginya waktu selama gowes. Ditampilkan apa adanya supaya
+				// selisih antara jam di layar dan statistik setelah repair bisa
+				// dijelaskan dengan angka, bukan ditebak.
+				const clockSummary = liveClockSummary();
+				if (clockSummary && clockSummary.uncounted >= 1) {
+					const parts = [];
+					if (clockSummary.clamped >= 1) parts.push(formatStageDuration(clockSummary.clamped) + ' dari tick yang terlambat');
+					if (clockSummary.dropped >= 1) parts.push(formatStageDuration(clockSummary.dropped) + ' dari sistem berhenti');
+					issues.push({
+						severity: clockSummary.uncounted >= 60 ? 'warning' : 'info',
+						code: 'live_clock_gap',
+						message: formatStageDuration(clockSummary.uncounted) + ' waktu tidak dihitung sebagai bergerak (' + parts.join(', ') + ').',
+						autoFix: false
+					});
+				}
 				if (cleaned.length > 0 && currentDistance > 0 && repairedDistance > 0) {
 					const delta = Math.abs(repairedDistance - Number(currentDistance || 0));
 					if (delta > Math.max(0.25, Number(currentDistance || 0) * 0.08)) {
@@ -3647,6 +3724,17 @@ if (!gpsStatus) return;
 				closeSignalEvent('poor_accuracy', 'Aktivitas masuk Finish Review.');
 				const finalSignalLogs = serializeSignalLogs(true);
 				const finalNutritionSummary = serializeNutritionSummary();
+				// Ringkasan jam live, dikirim bersama aktivitas. Null berarti
+				// instrumentasi tidak sempat dimuat — dan itu dicatat apa adanya,
+				// bukan diganti angka nol yang bisa disalahartikan sebagai "tidak
+				// ada waktu yang hilang".
+				const liveClockFinalSummary = liveClockSummary();
+				const finalLiveClock = liveClockFinalSummary
+					? Object.assign(
+						{ uncounted_seconds: liveClockFinalSummary.uncounted, balance_seconds: liveClockFinalSummary.balance },
+						liveClockMod.serializeLiveClockAccounting(liveClockAcc),
+					)
+					: null;
 				const finalTimeContext = activityTimeContext(finishedAt);
 
 				if (path.length > 0) await recordTemperature(path[path.length - 1].lat, path[path.length - 1].lng);
@@ -3683,6 +3771,11 @@ if (!gpsStatus) return;
 						avg_temp: finalAvgTemp,
 						total_elevation: Math.round(totalElevation),
 						skipped_clock_gap_seconds: Math.floor(skippedClockGapSeconds || 0),
+						// Bukti ke mana waktu pergi selama gowes berjalan: potongan
+						// dari tick yang terlambat dan gap sistem. Disimpan apa adanya
+						// supaya selisih jam live vs hasil repair bisa dibuktikan
+						// dengan angka, bukan dugaan.
+						live_clock: finalLiveClock,
 						stages: finalTripStages,
 						rest_blocks: finalRestBlocks,
 						nutrition_summary: finalNutritionSummary,
