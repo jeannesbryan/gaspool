@@ -923,8 +923,9 @@ How Doctor derives moving time and average speed (`src/api/activity-doctor-stats
 - **Real time deltas.** Time is accumulated from the actual millisecond difference between points, not from a value already rounded with `Math.floor()`. Points recorded faster than once per second used to contribute distance but zero time; on a real 29.4 km ride that hid 45 minutes.
 - **Standstills are proven by displacement, not by gap length.** A point counts as stopped when it sits inside a stretch of at least `DOCTOR_STOP_MIN_SECONDS` that never leaves a small radius. GPS jitter while standing still is therefore neither counted as movement nor added to distance, and a stop is no longer invisible just because the recorder kept logging points during it.
 - **Nothing disappears silently.** Every second inside `time_integrity.span_seconds` ends up in `moving_time`, `stopped_time`, or `excluded_jump_seconds`. Whatever is left over is reported as `unaccounted_seconds` so callers can refuse the result instead of displaying it as if it were measured.
+- **One clock, everywhere.** Rest blocks report a cumulative `moving_time`, and they are built from the same segment table as the activity statistics. They used to keep a second copy of the arithmetic, so a rest block could show a clock that disagreed with the activity it belonged to.
 
-`tests/activity-doctor.mjs` locks all four rules in place.
+`tests/activity-doctor.mjs` locks all of these rules in place.
 
 The activity detail Studio page includes a **CEK & PERBAIKI AKTIVITAS INI** button for logged-in users. The modal shows Doctor status, a recommendation badge, source shape, point counts, timestamp/elevation sample counts, preview of D1 vs safe proposed stats, issues, planned changes, guardrails, and safe auto-repair actions. The recommendation badge summarizes the decision, for example **AMAN DIREPAIR**, **AMAN DENGAN BACKUP**, **AMAN SEBAGIAN**, **JANGAN REPAIR STATISTIK**, **MANUAL CHECK**, or **SEHAT**. Applying repair reloads the page after the backup and update complete so the refreshed D1 stats are visible.
 

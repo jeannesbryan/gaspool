@@ -25,7 +25,10 @@
  * Exit code 0 = semua assertion lewat.
  */
 import { readFileSync } from "node:fs";
-import { recalculateDoctorStats } from "../src/api/activity-doctor-stats.ts";
+import {
+  collectDoctorRestBlocks,
+  recalculateDoctorStats,
+} from "../src/api/activity-doctor-stats.ts";
 
 const results = [];
 
@@ -185,6 +188,43 @@ check(
 );
 
 // ---------------------------------------------------------------- fixture 5
+// Blok istirahat yang dilaporkan ke UI memakai jam yang SAMA dengan statistik
+// utama. `moving_time` di blok ini kumulatif sejak awal aktivitas, jadi ia harus
+// cocok dengan `recalculateDoctorStats()` pada titik yang sama.
+//
+// Regresi lama: nilai itu dijumlahkan dengan Math.floor(), sehingga pada
+// perekaman 2 Hz seluruh 20 menit kayuhan sebelum istirahat tercatat sebagai 0
+// detik — di layar tertulis "waktu bergerak sebelum istirahat: 0:00:00".
+const fixtureRestDense = buildTrack([
+  ...repeat(2400, { seconds: 0.5, speedKmh: 15 }), // 20 menit gowes, 2 Hz -> 5 km
+  { seconds: 30 * 60, speedKmh: 0 }, // istirahat 30 menit
+  ...repeat(2400, { seconds: 0.5, speedKmh: 15 }), // 20 menit gowes -> 5 km lagi
+]);
+
+const restDenseBlocks = collectDoctorRestBlocks(fixtureRestDense, "ride");
+check(
+  "rest block: istirahat 30 menit terdeteksi",
+  restDenseBlocks.length === 1 && near(restDenseBlocks[0].duration_s, 1800, 5),
+  `blocks=${restDenseBlocks.length}${
+    restDenseBlocks[0] ? ` duration_s=${restDenseBlocks[0].duration_s}` : ""
+  }`,
+);
+check(
+  "rest block: moving_time kumulatif memakai waktu nyata",
+  restDenseBlocks.length === 1 && near(restDenseBlocks[0].moving_time, 1200, 60),
+  restDenseBlocks.length
+    ? `moving_time=${fmtClock(restDenseBlocks[0].moving_time)} (harap ~0:20:00; regresi lama memberi 0:00:00)`
+    : "tidak ada blok untuk diperiksa",
+);
+check(
+  "rest block: jarak kumulatif cocok dengan statistik utama",
+  restDenseBlocks.length === 1 && near(restDenseBlocks[0].distance_km, 5, 0.3),
+  restDenseBlocks.length
+    ? `distance_km=${restDenseBlocks[0].distance_km} (harap ~5)`
+    : "tidak ada blok untuk diperiksa",
+);
+
+// ---------------------------------------------------------------- fixture 6
 // average_speed harus selalu sama dengan jarak / moving time yang dilaporkan.
 for (const [label, stats] of [
   ["sampling rapat", denseStats],

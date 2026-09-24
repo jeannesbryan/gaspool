@@ -9,6 +9,7 @@ import { getR2PublicBaseUrl, getR2PublicHostname } from "../config";
 // waktu, selisih waktu nyata, akuntansi detik yang tidak hilang) didokumentasikan
 // di sana dan dikunci oleh tests/activity-doctor.mjs.
 import {
+  collectDoctorRestBlocks,
   DOCTOR_DISCONTINUITY_METERS,
   DOCTOR_ELEVATION_SPIKE_METERS,
   DOCTOR_EXTREME_JUMP_METERS,
@@ -1137,43 +1138,12 @@ const dedupeDoctorPoints = (points: ActivityDoctorPoint[]) => {
   return { points: clean, removed };
 };
 
-const detectDoctorRestBlocks = (points: ActivityDoctorPoint[]) => {
-  const blocks: ReturnType<typeof normalizeRestBlocks> = [];
-  let progressKm = 0;
-  let movingTime = 0;
-
-  for (let i = 1; i < points.length; i++) {
-    const prev = points[i - 1];
-    const point = points[i];
-    const distanceKm = getDistanceMeters(prev, point) / 1000;
-    const prevMs = prev.time ? Date.parse(prev.time) : 0;
-    const pointMs = point.time ? Date.parse(point.time) : 0;
-    const gapSec = prevMs && pointMs ? Math.floor((pointMs - prevMs) / 1000) : 0;
-
-    if (distanceKm > 0 && distanceKm < DOCTOR_EXTREME_JUMP_METERS / 1000) {
-      progressKm += distanceKm;
-    }
-
-    if (gapSec > 0 && gapSec <= DOCTOR_MOVING_GAP_SECONDS) {
-      movingTime += gapSec;
-    }
-
-    if (gapSec >= DOCTOR_LONG_GAP_SECONDS) {
-      blocks.push({
-        type: "detected_gap",
-        label: "Rest gap terdeteksi",
-        start: prevMs,
-        end: pointMs,
-        duration_s: gapSec,
-        distance_km: Number(progressKm.toFixed(3)),
-        moving_time: movingTime,
-        note: "Ditemukan dari jeda timestamp antar titik GPS.",
-      });
-    }
-  }
-
-  return normalizeRestBlocks(blocks);
-};
+// Deteksi blok istirahat ada di modul statistik supaya "bergerak" hanya punya
+// satu arti di seluruh aplikasi. Sebelumnya di sini ada salinan sendiri yang
+// memakai Math.floor(), sehingga jam yang dilaporkan untuk satu istirahat bisa
+// berbeda dari jam yang dilaporkan untuk aktivitasnya.
+const detectDoctorRestBlocks = (points: ActivityDoctorPoint[], activityType: string) =>
+  normalizeRestBlocks(collectDoctorRestBlocks(points, activityType));
 
 const getDoctorCurrentStats = (ride: any) => ({
   distance_km: Number(Number(ride?.distance || 0).toFixed(3)),
@@ -1544,7 +1514,7 @@ const buildActivityDoctorRepair = (
   const safeStats = scan?.stats?.recalculated || rawRecalculated;
   const existingRestBlocks = normalizeRestBlocks(payloadObject.rest_blocks);
   const detectedRestBlocks = scan?.stats?.trust?.moving_time?.trusted
-    ? detectDoctorRestBlocks(points)
+    ? detectDoctorRestBlocks(points, activityType)
     : existingRestBlocks;
   const restBlocks = mergeDoctorRestBlocks(existingRestBlocks, detectedRestBlocks);
   const restSummary = summarizeRestBlocks(restBlocks);
@@ -1691,7 +1661,7 @@ const buildActivityDoctorScan = (
   const timestampCount = statTrust.quality.timestamp_points;
   const existingRestBlocks = normalizeRestBlocks(payloadObject.rest_blocks);
   const detectedRestBlocks = statTrust.trust.moving_time.trusted
-    ? detectDoctorRestBlocks(points)
+    ? detectDoctorRestBlocks(points, activityType)
     : existingRestBlocks;
   const timeContext = metadata?.time_context || {};
   const rawShape = Array.isArray(payload)

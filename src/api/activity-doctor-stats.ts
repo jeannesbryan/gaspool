@@ -278,13 +278,150 @@ export const getDoctorStopRadiusMeters = (movementMinKmh: number) =>
     (movementMinKmh / 3.6) * DOCTOR_STOP_MIN_SECONDS,
   );
 
+export type DoctorSegmentKind = "jump" | "stopped" | "moving";
+
+/**
+ * Satu tabel segmen, dipakai oleh SEMUA perhitungan di modul ini.
+ *
+ * Ini bukan sekadar kerapian. Regresi aslinya lahir justru karena jarak dan
+ * waktu dijumlahkan di dua tempat berbeda dengan aturan berbeda. Selama masih
+ * ada dua tempat, bug yang sama bisa lahir lagi; dengan satu tabel, "bergerak"
+ * hanya punya satu arti.
+ */
+export type DoctorSegments = {
+  count: number;
+  distanceM: number[];
+  seconds: number[];
+  gapSeconds: number[];
+  cumTime: number[];
+  kind: DoctorSegmentKind[];
+  inStay: boolean[];
+};
+
+export const buildDoctorSegments = (
+  points: DoctorStatPoint[],
+  activityType: string,
+): DoctorSegments => {
+  const limits = getDoctorSpeedLimits(activityType);
+  const count = Math.max(0, points.length - 1);
+
+  const distanceM = new Array<number>(count).fill(0);
+  const seconds = new Array<number>(count).fill(0);
+  const gapSeconds = new Array<number>(count).fill(0);
+  const cumTime = new Array<number>(count + 1).fill(0);
+
+  for (let i = 1; i < points.length; i++) {
+    const k = i - 1;
+    const prev = points[i - 1];
+    const point = points[i];
+
+    distanceM[k] = getDistanceMeters(prev, point);
+
+    const prevMs = prev.time ? Date.parse(prev.time) : 0;
+    const pointMs = point.time ? Date.parse(point.time) : 0;
+
+    // Selisih waktu NYATA, bukan hasil pembulatan. Ini yang dulu hilang.
+    const exactSeconds =
+      Number.isFinite(prevMs) && Number.isFinite(pointMs) ? (pointMs - prevMs) / 1000 : 0;
+    seconds[k] = exactSeconds > 0 ? exactSeconds : 0;
+
+    // Nilai bulat tetap ada karena ambang anomali didefinisikan dalam detik utuh.
+    gapSeconds[k] = Math.floor(seconds[k]);
+    cumTime[k + 1] = cumTime[k] + seconds[k];
+  }
+
+  const inStay = classifyDoctorPointStays(
+    points,
+    cumTime,
+    getDoctorStopRadiusMeters(limits.movement_min_kmh),
+  );
+
+  const kind: DoctorSegmentKind[] = new Array<DoctorSegmentKind>(count).fill("moving");
+
+  for (let k = 0; k < count; k++) {
+    // Urutan ini penting: lompatan GPS mengalahkan segalanya, lalu pemberhentian,
+    // sisanya baru dianggap bergerak.
+    if (distanceM[k] >= DOCTOR_EXTREME_JUMP_METERS && (!gapSeconds[k] || gapSeconds[k] < DOCTOR_LONG_GAP_SECONDS)) {
+      kind[k] = "jump";
+    } else if (inStay[k] && inStay[k + 1]) {
+      kind[k] = "stopped";
+    }
+  }
+
+  return { count, distanceM, seconds, gapSeconds, cumTime, kind, inStay };
+};
+
+export type DoctorRestBlock = {
+  type: string;
+  label: string;
+  start: number;
+  end: number;
+  duration_s: number;
+  distance_km: number;
+  moving_time: number;
+  note: string;
+};
+
+/**
+ * Blok istirahat panjang, dipakai untuk analisis bahan bakar (nutrition) dan
+ * ringkasan istirahat. Sama seperti statistik utama, blok ini melaporkan
+ * `moving_time` KUMULATIF sampai istirahat itu mulai.
+ *
+ * Ambangnya sengaja tetap DOCTOR_LONG_GAP_SECONDS: ini memang daftar istirahat
+ * panjang, bukan setiap lampu merah.
+ */
+export const collectDoctorRestBlocks = (
+  points: DoctorStatPoint[],
+  activityType: string,
+): DoctorRestBlock[] => {
+  const segments = buildDoctorSegments(points, activityType);
+  const blocks: DoctorRestBlock[] = [];
+
+  let progressKm = 0;
+  let movingSeconds = 0;
+
+  for (let i = 1; i < points.length; i++) {
+    const k = i - 1;
+    const point = points[i];
+
+    if (segments.kind[k] === "moving") {
+      const distanceM = segments.distanceM[k];
+      if (distanceM >= 1 && distanceM < DOCTOR_EXTREME_JUMP_METERS) {
+        progressKm += distanceM / 1000;
+      }
+      movingSeconds += segments.seconds[k];
+    }
+
+    if (segments.gapSeconds[k] >= DOCTOR_LONG_GAP_SECONDS) {
+      // Variabel lokal dipakai supaya TypeScript bisa menyempitkan tipe:
+      // penyempitan tidak berlaku pada akses elemen berulang (points[i - 1]).
+      const prevTime = points[i - 1].time;
+      const pointTime = point.time;
+      const prevMs = prevTime ? Date.parse(prevTime) : 0;
+      const pointMs = pointTime ? Date.parse(pointTime) : 0;
+
+      blocks.push({
+        type: "detected_gap",
+        label: "Rest gap terdeteksi",
+        start: prevMs,
+        end: pointMs,
+        duration_s: segments.gapSeconds[k],
+        distance_km: Number(progressKm.toFixed(3)),
+        moving_time: Math.max(0, Math.floor(movingSeconds)),
+        note: "Ditemukan dari jeda timestamp antar titik GPS.",
+      });
+    }
+  }
+
+  return blocks;
+};
+
 export const recalculateDoctorStats = (
   points: DoctorStatPoint[],
   activityType: string,
 ) => {
   const limits = getDoctorSpeedLimits(activityType);
   const plausibleMaxSpeed = limits.calculation_max_kmh;
-  const segmentCount = Math.max(0, points.length - 1);
 
   let maxSpeed = 0;
   let elevationGain = 0;
@@ -302,42 +439,12 @@ export const recalculateDoctorStats = (
     span_seconds: 0,
   };
 
-  // ---- Langkah 1: bangun tabel segmen sekali, lalu pakai tabel itu untuk
-  // SEMUA perhitungan. Tidak ada lagi nilai yang dihitung ulang secara
-  // berbeda-beda di dalam loop.
-  const segmentDistanceM = new Array<number>(segmentCount).fill(0);
-  const segmentSeconds = new Array<number>(segmentCount).fill(0);
-  const segmentGapSeconds = new Array<number>(segmentCount).fill(0);
-  const cumTime = new Array<number>(segmentCount + 1).fill(0);
-
-  for (let i = 1; i < points.length; i++) {
-    const k = i - 1;
-    const prev = points[i - 1];
-    const point = points[i];
-
-    segmentDistanceM[k] = getDistanceMeters(prev, point);
-
-    const prevMs = prev.time ? Date.parse(prev.time) : 0;
-    const pointMs = point.time ? Date.parse(point.time) : 0;
-
-    // Selisih waktu NYATA. Nilai inilah yang dipakai untuk menghitung waktu,
-    // bukan versi yang sudah dibulatkan ke bawah.
-    const exactSeconds =
-      Number.isFinite(prevMs) && Number.isFinite(pointMs) ? (pointMs - prevMs) / 1000 : 0;
-    segmentSeconds[k] = exactSeconds > 0 ? exactSeconds : 0;
-
-    // Nilai bulat tetap disimpan karena ambang anomali (long gap / istirahat)
-    // memang didefinisikan dalam detik utuh.
-    segmentGapSeconds[k] = Math.floor(segmentSeconds[k]);
-
-    cumTime[k + 1] = cumTime[k] + segmentSeconds[k];
-  }
-
-  const inStay = classifyDoctorPointStays(
-    points,
-    cumTime,
-    getDoctorStopRadiusMeters(limits.movement_min_kmh),
-  );
+  // ---- Langkah 1: satukan tabel segmen lewat buildDoctorSegments(). Tabel yang
+  // sama juga dipakai collectDoctorRestBlocks(), jadi blok istirahat tidak bisa
+  // lagi melaporkan jam yang berbeda dari statistik utama.
+  const segments = buildDoctorSegments(points, activityType);
+  const { distanceM: segmentDistanceM, seconds: segmentSeconds, gapSeconds: segmentGapSeconds, cumTime } =
+    segments;
 
   const pushAnomaly = (
     code: DoctorAnomalyCode,
@@ -476,9 +583,10 @@ export const recalculateDoctorStats = (
       );
     }
 
-    // Segmen dianggap berhenti kalau KEDUA ujungnya ada di dalam rentetan diam.
-    // Memakai kedua ujung (bukan hanya salah satu) menjaga batasnya tetap tajam.
-    if (inStay[k] && inStay[k + 1]) {
+    // Klasifikasi dari tabel bersama (lihat buildDoctorSegments): "jump" sudah
+    // ditangani di atas, "stopped" berarti jitter GPS di tempat, sisanya
+    // "moving". Jarak dan waktu diambil dari cabang yang sama persis.
+    if (segments.kind[k] === "stopped") {
       // Berhenti: tidak menambah jarak (jitter GPS saat diam bukan rute) dan
       // tidak menambah moving time. Waktunya tetap tercatat, bukan dibuang.
       stoppedSeconds += deltaSec;
