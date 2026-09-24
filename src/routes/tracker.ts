@@ -4291,6 +4291,9 @@ tracker.get("/radar/:room", async (c) => {
             map.locate({setView: true, maxZoom: 14});
             
             const markers = {};
+            // Garis jejak per peserta, dipisah dari marker supaya posisi bisa
+            // diperbarui tanpa menggambar ulang seluruh garis.
+            const trails = {};
             let bounds = L.latLngBounds();
 
             function shareWa() {
@@ -4317,6 +4320,27 @@ tracker.get("/radar/:room", async (c) => {
                             } else {
                                 markers[p.user].setLatLng(latlng);
                                 markers[p.user].setTooltipContent(p.user + ' (' + Math.round(p.speed) + ' km/h)');
+                            }
+
+                            // Jejak perjalanan. Titik terakhir saja tidak cukup:
+                            // penonton yang membuka tautan belakangan tidak tahu
+                            // pemiliknya sudah lewat mana. Tanpa jejak, layar
+                            // hanya menampilkan satu titik tanpa arah.
+                            const trail = Array.isArray(p.trail) ? p.trail : [];
+                            if(trail.length >= 2) {
+                                const points = trail
+                                    .filter(q => Number.isFinite(q && q.lat) && Number.isFinite(q && q.lng))
+                                    .map(q => [q.lat, q.lng]);
+                                if(points.length >= 2) {
+                                    if(trails[p.user]) {
+                                        trails[p.user].setLatLngs(points);
+                                    } else {
+                                        trails[p.user] = L.polyline(points, {color: '#FF5F00', weight: 3, opacity: 0.55}).addTo(map);
+                                    }
+                                    // Ikut menentukan area peta supaya seluruh
+                                    // jejak terlihat, bukan hanya posisi terkini.
+                                    points.forEach(pt => bounds.extend(pt));
+                                }
                             }
                         });
                         // Pusatkan peta dinamis mengikuti sebaran pesepeda

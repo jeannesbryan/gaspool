@@ -7,11 +7,12 @@
     "cf-typegen": "wrangler types --env-interface CloudflareBindings",
     "cf-typegen:test": "wrangler types --config tests/wrangler.test.jsonc",
     "typecheck": "tsc --noEmit",
-    "test": "node tests/activity-doctor.mjs && node tests/live-share.mjs && node tests/live-clock.mjs && node tests/milestones.mjs && node tests/smoke.mjs",
+    "test": "node tests/activity-doctor.mjs && node tests/live-share.mjs && node tests/live-clock.mjs && node tests/milestones.mjs && node tests/radar-trail.mjs && node tests/smoke.mjs",
     "test:doctor": "node tests/activity-doctor.mjs",
     "test:live": "node tests/live-share.mjs",
     "test:clock": "node tests/live-clock.mjs",
-    "test:milestones": "node tests/milestones.mjs"
+    "test:milestones": "node tests/milestones.mjs",
+    "test:radar": "node tests/radar-trail.mjs"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

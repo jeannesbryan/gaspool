@@ -14,6 +14,7 @@ import {
   saveLiveSession,
 } from "./live-share";
 import { computeMilestoneProgress } from "../milestones";
+import { appendRadarTrailPoint } from "./radar-trail";
 import {
   collectDoctorRestBlocks,
   compareDoctorMovingTime,
@@ -5156,10 +5157,32 @@ api.post("/radar_sync", async (c) => {
     if (!safeRoom || safeRoom === "SINGLE_MODE")
       return c.json({ success: true, participants: [], radios: [] });
 
-    // Simpan koordinat lokasi ke Radar
+    // Simpan koordinat lokasi ke Radar, sekaligus menyambung jejaknya.
+    //
+    // Jejak dititipkan di nilai yang sama, bukan di kunci terpisah, karena
+    // daftar peserta dibaca lewat prefix `room:` dan nama pengguna diambil dari
+    // potongan setelah titik dua pertama — kunci seperti `ROOM:user:trail` akan
+    // terbaca sebagai peserta kedua.
+    const radarKey = `${safeRoom}:${safeUser}`;
+    const previousEntry = parseRadarEntry(await c.env.GASPOOL_RADAR.get(radarKey));
+    const trail = appendRadarTrailPoint(previousEntry.trail, {
+      lat,
+      lng,
+      t: Date.now(),
+    });
+
     await c.env.GASPOOL_RADAR.put(
-      `${safeRoom}:${safeUser}`,
-      JSON.stringify({ lat, lng, speed, time: Date.now() }),
+      radarKey,
+      JSON.stringify({
+        lat,
+        lng,
+        speed,
+        time: Date.now(),
+        trail,
+        // Titik awal perjalanan disimpan sekali dan tidak ikut bergeser, supaya
+        // penonton tahu dari mana perjalanan ini dimulai.
+        trail_start: previousEntry.trail_start || trail[0] || null,
+      }),
       { expirationTtl: 60 },
     );
 

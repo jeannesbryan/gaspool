@@ -334,6 +334,47 @@ const main = async () => {
     `status ${peletonRadar.res.status}`,
   );
 
+  // --- B14: the radar keeps a trail, not just the last position ------------
+  // A spectator who opens the link late should be able to see where the rider
+  // came from. The trail has to travel inside the participant entry: a separate
+  // key would show up in the participant list as a second rider.
+  const trailRoom = "TRAILROOM";
+  await postJson("/api/radar_sync", { room: trailRoom, user: "rider", lat: -7.25, lng: 112.75, speed: 20 });
+  await postJson("/api/radar_sync", { room: trailRoom, user: "rider", lat: -7.26, lng: 112.76, speed: 21 });
+  await postJson("/api/radar_sync", { room: trailRoom, user: "rider", lat: -7.27, lng: 112.77, speed: 22 });
+
+  const trailView = JSON.parse((await get(`/api/radar_view/${trailRoom}`)).text);
+  const rider = (trailView.participants || []).find((p) => p.user === "rider");
+
+  check(
+    "B14 participant entry carries a trail",
+    Boolean(rider) && Array.isArray(rider.trail) && rider.trail.length >= 3,
+    JSON.stringify(rider ? rider.trail : trailView),
+  );
+  check(
+    "B14 the trail does not appear as a second participant",
+    (trailView.participants || []).filter((p) => p.user === "rider").length === 1 &&
+      (trailView.participants || []).length === 1,
+    `participants=${JSON.stringify((trailView.participants || []).map((p) => p.user))}`,
+  );
+  check(
+    "B14 the trail records the starting point once",
+    Boolean(rider && rider.trail_start) &&
+      Math.abs(Number(rider.trail_start.lat) - -7.25) < 0.001,
+    JSON.stringify(rider ? rider.trail_start : null),
+  );
+
+  // A rider who does not move must not stretch the trail with GPS jitter.
+  const before = rider ? rider.trail.length : 0;
+  await postJson("/api/radar_sync", { room: trailRoom, user: "rider", lat: -7.27, lng: 112.77, speed: 0 });
+  const afterView = JSON.parse((await get(`/api/radar_view/${trailRoom}`)).text);
+  const afterRider = (afterView.participants || []).find((p) => p.user === "rider");
+  check(
+    "B14 standing still does not extend the trail",
+    afterRider && afterRider.trail.length === before,
+    `${before} -> ${afterRider ? afterRider.trail.length : "?"}`,
+  );
+
   // --- B13: lifetime milestones (every 1000 km) ---------------------------
   // The dashboard cards follow the active filter, so "this month" would make a
   // lifetime achievement look like it had shrunk. Milestones therefore read
