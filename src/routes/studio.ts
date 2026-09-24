@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { getCookie } from "hono/cookie";
 import { Bindings } from "../index";
+import { FAVICON_LINKS } from "../favicon";
 
 const studio = new Hono<{ Bindings: Bindings }>();
 
@@ -91,6 +92,7 @@ studio.get("/detail/:id", async (c) => {
       <!DOCTYPE html>
       <html lang="id">
       <head>
+      ${FAVICON_LINKS}
           <meta charset="UTF-8">
           <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
           <title>Detail Aktivitas - Gaspool</title>
@@ -2792,6 +2794,7 @@ studio.get("/video_flex/:id", async (c) => {
       <!DOCTYPE html>
       <html lang="id">
       <head>
+      ${FAVICON_LINKS}
           <meta charset="UTF-8">
           <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
           <title>Gaspool Cinema: ${safeRideName}</title>

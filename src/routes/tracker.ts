@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { getCookie } from "hono/cookie";
 import { verify } from "hono/jwt";
 import { Bindings } from "../index";
+import { FAVICON_LINKS } from "../favicon";
 import { readLiveSession } from "../api/live-share";
 
 const tracker = new Hono<{ Bindings: Bindings }>();
@@ -34,6 +35,7 @@ tracker.get("/record", async (c) => {
     <!DOCTYPE html>
     <html lang="id">
     <head>
+      ${FAVICON_LINKS}
         <title>Gaspool Record: ${type.toUpperCase()}</title>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -4252,6 +4254,7 @@ tracker.get("/radar/:room", async (c) => {
     <!DOCTYPE html>
     <html lang="id">
     <head>
+      ${FAVICON_LINKS}
         <title>${pageTitle}</title>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">

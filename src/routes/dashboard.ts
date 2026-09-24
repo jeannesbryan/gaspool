@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { getCookie, setCookie, deleteCookie } from "hono/cookie";
 import { verify } from "hono/jwt";
 import { Bindings } from "../index";
+import { FAVICON_LINKS } from "../favicon";
 
 const dashboard = new Hono<{ Bindings: Bindings }>();
 const DEFAULT_PUBLIC_PROFILE_SLUG = "rider";
@@ -65,6 +66,7 @@ dashboard.get("/", async (c) => {
       <!DOCTYPE html>
       <html lang="id">
       <head>
+      ${FAVICON_LINKS}
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
         <title>Markas Gaspool</title>
@@ -1481,6 +1483,7 @@ dashboard.get("/route_plan", async (c) => {
     <!DOCTYPE html>
     <html lang="id">
     <head>
+      ${FAVICON_LINKS}
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
         <title>Route Plan - Gaspool</title>
@@ -2440,6 +2443,7 @@ dashboard.get("/routes", async (c) => {
     <!DOCTYPE html>
     <html lang="id">
     <head>
+      ${FAVICON_LINKS}
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Rute Tersimpan - Gaspool</title>
@@ -2892,6 +2896,7 @@ dashboard.get("/segments", async (c) => {
     <!DOCTYPE html>
     <html lang="id">
     <head>
+      ${FAVICON_LINKS}
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Personal Segments - Gaspool</title>
@@ -3214,6 +3219,7 @@ dashboard.get("/route_import", async (c) => {
     <!DOCTYPE html>
     <html lang="id">
     <head>
+      ${FAVICON_LINKS}
       <meta charset="UTF-8" />
       <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
       <title>Import GPX Route - Gaspool</title>
@@ -3543,6 +3549,7 @@ dashboard.get("/heatmap", async (c) => {
       <!DOCTYPE html>
       <html lang="id">
       <head>
+      ${FAVICON_LINKS}
           <meta charset="UTF-8">
           <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
           <title>Heatmap - Gaspool</title>
@@ -3701,6 +3708,7 @@ dashboard.get("/gpx_import", async (c) => {
     <!DOCTYPE html>
     <html lang="id">
     <head>
+      ${FAVICON_LINKS}
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
         <title>GPX Importer - Gaspool</title>
@@ -3902,6 +3910,7 @@ dashboard.get("/sync_strava", async (c) => {
     <!DOCTYPE html>
     <html lang="id">
     <head>
+      ${FAVICON_LINKS}
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Strava Sync - Gaspool</title>
@@ -4110,12 +4119,10 @@ dashboard.get("/:username", async (c, next) => {
       <!DOCTYPE html>
       <html lang="id">
       <head>
+      ${FAVICON_LINKS}
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>${publicProfile.name} on Gaspool</title>
-        <link rel="icon" type="image/png" sizes="192x192" href="/assets/android-chrome-192x192.png">
-        <link rel="icon" type="image/png" sizes="512x512" href="/assets/android-chrome-512x512.png">
-        <link rel="apple-touch-icon" href="/assets/apple-touch-icon.png">
         <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
         <style>
           :root { --primary: #FF5F00; --bg: #0a0a12; --card: rgba(255,255,255,0.05); }

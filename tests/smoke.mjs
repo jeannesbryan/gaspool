@@ -446,6 +446,30 @@ const main = async () => {
     "the header still says UNIT",
   );
 
+  // --- B15: favicon is declared, and served where browsers look for it ----
+  // Only one page used to declare an icon at all, and the sizes it declared
+  // were 192 and 512 — not the 16/32 that a browser picks for a tab. On top of
+  // that, nothing answered /favicon.ico, which browsers request on their own.
+  const iconRes = await get("/favicon.ico");
+  check(
+    "B15 /favicon.ico is served from the site root",
+    iconRes.res.status === 200,
+    `status ${iconRes.res.status} — browsers request this path without being told to`,
+  );
+
+  for (const [label, path] of [
+    ["login", "/login"],
+    ["tracker", "/record?type=ride"],
+    ["dashboard", "/"],
+  ]) {
+    const page = await get(path, { headers: { cookie: `gaspool_session=${token}` } });
+    check(
+      `B15 ${label} page declares the tab icon`,
+      page.text.includes('sizes="16x16"') && page.text.includes('sizes="32x32"'),
+      `${label} page is missing the small icons a browser uses for a tab`,
+    );
+  }
+
   // --- B6: delete_ride id validation -------------------------------------
   const badDelete = await get("/api/delete_ride/abc", {
     method: "DELETE",

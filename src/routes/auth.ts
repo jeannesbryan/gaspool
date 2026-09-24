@@ -3,6 +3,7 @@ import { setCookie, deleteCookie } from "hono/cookie";
 import { sign } from "hono/jwt";
 import * as bcrypt from "bcryptjs";
 import { Bindings } from "../index";
+import { FAVICON_LINKS } from "../favicon";
 
 const auth = new Hono<{ Bindings: Bindings }>();
 
@@ -11,6 +12,7 @@ auth.get("/login", (c) => {
     <!DOCTYPE html>
     <html lang="id">
     <head>
+      ${FAVICON_LINKS}
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Login - Gaspool</title>
