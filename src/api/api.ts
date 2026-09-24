@@ -13,6 +13,7 @@ import {
   readLiveSession,
   saveLiveSession,
 } from "./live-share";
+import { computeMilestoneProgress } from "../milestones";
 import {
   collectDoctorRestBlocks,
   compareDoctorMovingTime,
@@ -3007,6 +3008,38 @@ api.get("/rides", protectAPI, async (c) => {
       calendar_month: safeCalendarMonth,
       calendar: calendar.results || [],
       rides: rides.results || [],
+    });
+  } catch (e) {
+    return c.json({ success: false, error: "Database error" }, 500);
+  }
+});
+
+// 9b. MILESTONE JARAK SEUMUR HIDUP (kelipatan 1000 km)
+//
+// Sengaja terpisah dari /api/rides: statistik di sana mengikuti filter yang
+// sedang aktif (bulan, tahun, pencarian), sedangkan pencapaian seumur hidup
+// tidak boleh berubah hanya karena layar sedang difilter ke bulan ini.
+api.get("/milestones", protectAPI, async (c) => {
+  try {
+    const lifetime: any = await c.env.DB.prepare(
+      `SELECT COUNT(*) as total_count,
+              COALESCE(SUM(distance),0) as total_dist,
+              COALESCE(SUM(moving_time),0) as total_time,
+              COALESCE(SUM(total_elevation_gain),0) as total_elev
+       FROM rides`,
+    ).first();
+
+    const totalKm = Number(lifetime?.total_dist || 0);
+
+    return c.json({
+      success: true,
+      lifetime: {
+        distance_km: Number(totalKm.toFixed(3)),
+        activities: Number(lifetime?.total_count || 0),
+        moving_time_seconds: Number(lifetime?.total_time || 0),
+        elevation_gain_m: Number(lifetime?.total_elev || 0),
+      },
+      milestone: computeMilestoneProgress(totalKm),
     });
   } catch (e) {
     return c.json({ success: false, error: "Database error" }, 500);

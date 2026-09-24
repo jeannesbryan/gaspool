@@ -93,6 +93,35 @@ dashboard.get("/", async (c) => {
           .stat-value { font-size: 26px; font-weight: 900; color: var(--primary); margin: 5px 0; font-style: italic; }
           .stat-label { font-size: 9px; color: #94a3b8; font-weight: 900; letter-spacing: 1.5px; text-transform: uppercase; }
 
+          /* --- Milestone seumur hidup (kelipatan 1000 km) --- */
+          .milestone-card { background: var(--card); border: 1px solid rgba(255,255,255,0.08); border-radius: 20px; padding: 18px 16px; margin-bottom: 25px; backdrop-filter: blur(15px); position: relative; overflow: hidden; }
+          .milestone-card::after { content: ''; position: absolute; top: 0; left: 0; width: 4px; height: 100%; background: var(--primary); }
+          .milestone-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 12px; }
+          .milestone-title { font-size: 9px; color: #94a3b8; font-weight: 900; letter-spacing: 1.5px; text-transform: uppercase; }
+          .milestone-badge { font-size: 10px; font-weight: 900; letter-spacing: 1px; color: var(--primary); background: rgba(255,95,0,0.12); border: 1px solid rgba(255,95,0,0.35); border-radius: 999px; padding: 4px 10px; white-space: nowrap; }
+          .milestone-figure { font-size: 28px; font-weight: 900; font-style: italic; color: var(--primary); line-height: 1.1; }
+          .milestone-sub { font-size: 10px; color: #94a3b8; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; margin-top: 4px; }
+          .milestone-track { margin-top: 14px; height: 8px; border-radius: 999px; background: rgba(255,255,255,0.08); overflow: hidden; }
+          .milestone-fill { height: 100%; width: 0%; border-radius: 999px; background: var(--primary); transition: width 0.6s ease; }
+          .milestone-note { display: flex; justify-content: space-between; gap: 10px; font-size: 9px; color: #94a3b8; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; margin-top: 8px; }
+          .milestone-actions { margin-top: 14px; }
+          .milestone-actions .btn { width: 100%; padding: 12px; font-size: 10px; background: var(--primary); }
+
+          /* Kartu yang dirender jadi PNG. Disimpan di luar layar supaya bisa
+              digambar html2canvas tanpa terlihat mengganggu. */
+          .share-stage { position: fixed; left: -10000px; top: 0; pointer-events: none; }
+          .share-card { width: 644px; background: #12162b; padding: 22px; border-radius: 22px; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; }
+          .share-card-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 18px; }
+          .share-card-brand { font-size: 15px; font-weight: 900; letter-spacing: 4px; color: #ff5f00; }
+          .share-card-tag { font-size: 11px; font-weight: 900; letter-spacing: 2px; color: #94a3b8; text-transform: uppercase; }
+          .share-card-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+          .share-cell { position: relative; overflow: hidden; background: #1b2038; border: 1px solid rgba(255,255,255,0.07); border-radius: 16px; padding: 18px 14px; text-align: center; }
+          .share-cell::after { content: ''; position: absolute; top: 0; left: 0; width: 4px; height: 100%; background: #ff5f00; }
+          .share-cell-label { font-size: 10px; font-weight: 900; letter-spacing: 2px; color: #94a3b8; text-transform: uppercase; }
+          .share-cell-value { font-size: 34px; font-weight: 900; font-style: italic; color: #ff5f00; margin: 6px 0; }
+          .share-cell-unit { font-size: 10px; font-weight: 900; letter-spacing: 2px; color: #94a3b8; text-transform: uppercase; }
+          .share-card-foot { display: flex; justify-content: space-between; margin-top: 16px; font-size: 10px; font-weight: 800; letter-spacing: 1.5px; color: #64748b; text-transform: uppercase; }
+
           .best-section { margin-bottom: 25px; }
           .section-title { color: #fff; font-size: 0.85rem; font-weight: 950; letter-spacing: 1px; text-transform: uppercase; margin: 0 0 12px 0; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
           .section-title span { color: #94a3b8; font-size: 0.62rem; font-weight: 900; letter-spacing: 0.8px; }
@@ -195,7 +224,7 @@ dashboard.get("/", async (c) => {
         <div class="container">
           <div class="header">
              <h1>GASPOOL</h1>
-             <p>UNIT: ${captainName} | <a href="/logout" style="color:#ff4444; text-decoration:none;">TERMINATE SESSION</a></p>
+             <p>USER: ${captainName} | <a href="/logout" style="color:#ff4444; text-decoration:none;">TERMINATE SESSION</a></p>
           </div>
 
           <div class="btn-grid">
@@ -230,6 +259,23 @@ dashboard.get("/", async (c) => {
                 <div class="stat-label">ELEVATION GAIN</div>
                 <div class="stat-value" id="stat-elev">0</div>
                 <div class="stat-label">METERS</div>
+            </div>
+          </div>
+
+          <div class="milestone-card" id="milestoneCard" style="display:none;">
+            <div class="milestone-head">
+              <div class="milestone-title">MILESTONE SEUMUR HIDUP</div>
+              <div class="milestone-badge" id="milestoneBadge">-</div>
+            </div>
+            <div class="milestone-figure" id="milestoneFigure">-</div>
+            <div class="milestone-sub" id="milestoneSub">-</div>
+            <div class="milestone-track"><div class="milestone-fill" id="milestoneFill"></div></div>
+            <div class="milestone-note">
+              <span id="milestoneNoteLeft">-</span>
+              <span id="milestoneNoteRight">-</span>
+            </div>
+            <div class="milestone-actions">
+              <button class="btn" id="btnShareMilestone" onclick="shareMilestoneCard()">📤 BAGIKAN KARTU MILESTONE</button>
             </div>
           </div>
 
@@ -369,6 +415,45 @@ dashboard.get("/", async (c) => {
             </div>
         </div>
 
+        <!-- Kartu yang dirender jadi PNG. Disimpan di luar layar: html2canvas
+             butuh elemen yang benar-benar ada di DOM, tetapi kartunya tidak
+             boleh terlihat sebagai bagian halaman. -->
+        <div class="share-stage" aria-hidden="true">
+          <div class="share-card" id="milestoneShareCard">
+            <div class="share-card-head">
+              <div class="share-card-brand">GASPOOL</div>
+              <div class="share-card-tag" id="shareCardTag">MILESTONE</div>
+            </div>
+            <div class="share-card-grid">
+              <div class="share-cell">
+                <div class="share-cell-label">TOTAL DISTANCE</div>
+                <div class="share-cell-value" id="shareCardDist">0.0</div>
+                <div class="share-cell-unit">KILOMETERS</div>
+              </div>
+              <div class="share-cell">
+                <div class="share-cell-label">TOTAL ACTIVITIES</div>
+                <div class="share-cell-value" id="shareCardCount">0</div>
+                <div class="share-cell-unit">SESSIONS</div>
+              </div>
+              <div class="share-cell">
+                <div class="share-cell-label">MOVING TIME</div>
+                <div class="share-cell-value" id="shareCardTime">0</div>
+                <div class="share-cell-unit">HOURS</div>
+              </div>
+              <div class="share-cell">
+                <div class="share-cell-label">ELEVATION GAIN</div>
+                <div class="share-cell-value" id="shareCardElev">0</div>
+                <div class="share-cell-unit">METERS</div>
+              </div>
+            </div>
+            <div class="share-card-foot">
+              <span id="shareCardUser">-</span>
+              <span id="shareCardDate">-</span>
+            </div>
+          </div>
+        </div>
+
+        <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
         <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
         <script>
           let modalMap = null;
@@ -1022,12 +1107,184 @@ function escapeHTML(str) {
             } catch(e) { console.error("Gagal load peta:", e); }
           }
           
+          // --- MILESTONE SEUMUR HIDUP (kelipatan 1000 km) ---
+          //
+          // Diambil dari /api/milestones, bukan dari angka di kartu statistik,
+          // karena kartu statistik itu mengikuti filter yang sedang aktif:
+          // begitu layar difilter ke bulan ini, angkanya bukan lagi seumur hidup.
+          const MILESTONE_STEP_KM = 1000;
+          let milestoneState = null;
+
+          const formatKm = (value, decimals) => {
+            const n = Number(value);
+            const safe = Number.isFinite(n) && n > 0 ? n : 0;
+            return safe.toLocaleString('id-ID', {
+              minimumFractionDigits: decimals === undefined ? 1 : decimals,
+              maximumFractionDigits: decimals === undefined ? 1 : decimals
+            });
+          };
+
+          const milestoneProgressRatio = (totalKm, step) => {
+            const total = Number(totalKm) || 0;
+            const within = total - Math.floor(total / step) * step;
+            return Math.min(0.999999, Math.max(0, within / step));
+          };
+
+          async function fetchMilestones() {
+            try {
+              const res = await fetch('/api/milestones');
+              const data = await res.json();
+              if (!res.ok || !data.success) throw new Error(data.error || 'Gagal memuat milestone.');
+              renderMilestone(data);
+            } catch (err) {
+              console.error(err);
+              // Kartu milestone bersifat tambahan: kalau gagal dimuat, dashboard
+              // tetap berguna tanpa bagian ini.
+            }
+          }
+
+          function renderMilestone(data) {
+            const lifetime = data.lifetime || {};
+            const progress = data.milestone || {};
+            const step = Number(progress.step_km) || MILESTONE_STEP_KM;
+            const totalKm = Number(lifetime.distance_km) || 0;
+            const reachedCount = Number(progress.reached_count) || 0;
+            const lastReached = Number(progress.last_reached_km) || 0;
+            const nextKm = Number(progress.next_km) || step;
+            const remaining = Number(progress.remaining_km) || 0;
+            const ratio = milestoneProgressRatio(totalKm, step);
+
+            milestoneState = {
+              totalKm: totalKm,
+              activities: Number(lifetime.activities) || 0,
+              movingHours: Math.floor((Number(lifetime.moving_time_seconds) || 0) / 3600),
+              elevation: Math.round(Number(lifetime.elevation_gain_m) || 0),
+              reachedCount: reachedCount,
+              lastReached: lastReached,
+              nextKm: nextKm,
+              step: step
+            };
+
+            const card = document.getElementById('milestoneCard');
+            if (!card) return;
+            card.style.display = 'block';
+
+            // Badge menyebut pencapaian terakhir kalau sudah ada, dan menyebut
+            // target berikutnya kalau belum. Menulis "0 KM" akan terasa seperti
+            // kegagalan, padahal artinya baru mulai.
+            const badge = document.getElementById('milestoneBadge');
+            if (badge) {
+              badge.innerText = reachedCount > 0
+                ? '✓ ' + formatKm(lastReached === 0 ? 0 : lastReached, 0) + ' KM'
+                : 'MENUJU ' + formatKm(nextKm, 0) + ' KM';
+            }
+
+            const figure = document.getElementById('milestoneFigure');
+            if (figure) figure.innerText = formatKm(totalKm) + ' KM';
+
+            const sub = document.getElementById('milestoneSub');
+            if (sub) {
+              sub.innerText = reachedCount > 0
+                ? reachedCount + ' MILESTONE TERCAPAI · BERIKUTNYA ' + formatKm(nextKm, 0) + ' KM'
+                : 'MILESTONE PERTAMA DI ' + formatKm(step, 0) + ' KM';
+            }
+
+            const fill = document.getElementById('milestoneFill');
+            if (fill) fill.style.width = (ratio * 100).toFixed(1) + '%';
+
+            const left = document.getElementById('milestoneNoteLeft');
+            if (left) left.innerText = 'SISA ' + formatKm(remaining) + ' KM';
+
+            const right = document.getElementById('milestoneNoteRight');
+            if (right) right.innerText = Math.round(ratio * 100) + '% MENUJU ' + formatKm(nextKm, 0) + ' KM';
+
+            fillShareCard();
+          }
+
+          // Isi kartu yang akan dirender jadi PNG. Dipisah dari renderMilestone
+          // supaya kartu selalu memakai angka terbaru, termasuk saat dibagikan
+          // lama setelah halaman dibuka.
+          function fillShareCard() {
+            if (!milestoneState) return;
+
+            const set = (id, value) => {
+              const el = document.getElementById(id);
+              if (el) el.innerText = value;
+            };
+
+            set('shareCardDist', formatKm(milestoneState.totalKm));
+            set('shareCardCount', String(milestoneState.activities));
+            set('shareCardTime', String(milestoneState.movingHours));
+            set('shareCardElev', formatKm(milestoneState.elevation, 0));
+
+            // Judul kartu menyebut milestone yang baru dicapai. Kalau belum ada,
+            // kartunya tetap jujur menyebut sedang menuju angka berapa.
+            set(
+              'shareCardTag',
+              milestoneState.reachedCount > 0
+                ? 'MILESTONE ' + formatKm(milestoneState.lastReached, 0) + ' KM'
+                : 'MENUJU ' + formatKm(milestoneState.nextKm, 0) + ' KM'
+            );
+
+            set('shareCardUser', '${captainName}');
+            set('shareCardDate', new Date().toLocaleDateString('id-ID', {
+              day: '2-digit', month: 'long', year: 'numeric'
+            }));
+          }
+
+          async function shareMilestoneCard() {
+            const target = document.getElementById('milestoneShareCard');
+            const button = document.getElementById('btnShareMilestone');
+            if (!target || !milestoneState) return;
+
+            const originalLabel = button ? button.innerText : '';
+            if (button) { button.innerText = '⏳ MENYIAPKAN KARTU...'; button.disabled = true; }
+
+            try {
+              fillShareCard();
+              const canvas = await html2canvas(target, {
+                backgroundColor: '#12162b',
+                scale: 2,
+                useCORS: true,
+                scrollX: 0,
+                scrollY: 0
+              });
+
+              const fileName = 'Gaspool_Milestone_' + Date.now() + '.png';
+              const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+
+              // Di ponsel, cara paling wajar membagikan gambar adalah lewat menu
+              // berbagi bawaan sistem — dari sana WhatsApp tinggal dipilih.
+              const file = blob ? new File([blob], fileName, { type: 'image/png' }) : null;
+              if (file && navigator.canShare && navigator.canShare({ files: [file] })) {
+                await navigator.share({
+                  files: [file],
+                  title: 'Gaspool Milestone',
+                  text: 'Pencapaian gowes saya di Gaspool'
+                });
+              } else {
+                // Peramban tanpa berbagi berkas: unduh saja, pemakainya bisa
+                // mengirim sendiri.
+                const link = document.createElement('a');
+                link.download = fileName;
+                link.href = canvas.toDataURL('image/png');
+                link.click();
+              }
+            } catch (err) {
+              console.error('Gagal membuat kartu milestone:', err);
+              alert('Kartu milestone gagal dibuat. Coba lagi ya.');
+            } finally {
+              if (button) { button.innerText = originalLabel; button.disabled = false; }
+            }
+          }
+
           window.onload = () => {
             fetchRides(false).catch(function(err) {
               console.error(err);
               document.getElementById('rides-tbody').innerHTML = '<tr><td colspan="3" style="text-align:center; color:#e74c3c; font-weight:900; padding:24px;">' + escapeHTML(err.message || 'Gagal memuat aktivitas.') + '</td></tr>';
             });
             fetchPersonalBests();
+            fetchMilestones();
           };
 		  
 		  // --- BUNKER MODE SYNC ENGINE ---

@@ -582,7 +582,8 @@ your real bindings. `npm run cf-typegen:test` does the same from
 `tests/wrangler.test.jsonc`, which is the variant CI uses because your personal
 config is gitignored and therefore absent there.
 
-`npm test` runs the Activity Doctor regression first, then the smoke test.
+`npm test` runs the pure regressions first (`test:doctor`, `test:live`,
+`test:clock`, `test:milestones`), then the smoke test.
 
 `npm run test:doctor` (`node tests/activity-doctor.mjs`) tests the pure
 moving-time and average-speed mathematics in `src/api/activity-doctor-stats.ts`
@@ -895,6 +896,25 @@ No D1 migration is required. Rest blocks are stored inside the R2 activity JSON 
 The dashboard includes a monthly calendar view for scanning activity consistency.
 
 The calendar uses the existing `rides.start_date` data and follows the current dashboard filters where possible.
+
+### Milestones
+
+Lifetime milestones are counted every **1000 km**. `GET /api/milestones`
+returns the all-time totals and the progress towards the next milestone:
+
+- the totals come from every ride and deliberately ignore the dashboard
+  filters, because filtering the view to "this month" must not make a lifetime
+  achievement look smaller;
+- the milestone itself is computed by `src/milestones.ts`, a pure module, so
+  the numbers on a shared card can be tested without a Worker or a database;
+- the dashboard shows the progress bar and a **BAGIKAN KARTU MILESTONE**
+  button, which renders a PNG card (total distance, total activities, moving
+  time, elevation gain) through `html2canvas` and hands it to the system share
+  sheet on phones, or downloads it elsewhere.
+
+`tests/milestones.mjs` pins the boundaries — exactly on 1000 km, several
+milestones crossed by one imported ride, a ride that adds no distance, and the
+malformed values a database can return.
 
 ### Activity Doctor
 

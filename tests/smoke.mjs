@@ -334,6 +334,77 @@ const main = async () => {
     `status ${peletonRadar.res.status}`,
   );
 
+  // --- B13: lifetime milestones (every 1000 km) ---------------------------
+  // The dashboard cards follow the active filter, so "this month" would make a
+  // lifetime achievement look like it had shrunk. Milestones therefore read
+  // from their own endpoint that ignores filters entirely.
+  const milesAnonymous = await get("/api/milestones");
+  check(
+    "B13 milestones endpoint is protected",
+    milesAnonymous.res.status === 401 || milesAnonymous.res.status === 403,
+    `status ${milesAnonymous.res.status}`,
+  );
+
+  const milesRes = await get("/api/milestones", { headers: { cookie: `gaspool_session=${token}` } });
+  const milesBody = JSON.parse(milesRes.text);
+  const lifetime = milesBody.lifetime || {};
+  const milestone = milesBody.milestone || {};
+
+  check(
+    "B13 milestones endpoint responds with lifetime totals",
+    milesRes.res.status === 200 && milesBody.success === true,
+    milesRes.text.slice(0, 200),
+  );
+  // Seed holds exactly one ride: 12.34 km, 1800 s, 120 m.
+  check(
+    "B13 lifetime totals come from every ride, not a filtered subset",
+    Math.abs(Number(lifetime.distance_km) - 12.34) < 0.01 &&
+      Number(lifetime.activities) === 1 &&
+      Number(lifetime.moving_time_seconds) === 1800 &&
+      Math.abs(Number(lifetime.elevation_gain_m) - 120) < 0.01,
+    JSON.stringify(lifetime),
+  );
+  check(
+    "B13 milestone step is one thousand kilometres",
+    Number(milestone.step_km) === 1000,
+    `step=${milestone.step_km}`,
+  );
+  // 12.34 km means the first milestone has not been reached yet, which is the
+  // state that must not render as a broken or negative progress bar.
+  check(
+    "B13 below the first milestone is reported honestly",
+    Number(milestone.reached_count) === 0 &&
+      Number(milestone.last_reached_km) === 0 &&
+      Number(milestone.next_km) === 1000 &&
+      Math.abs(Number(milestone.remaining_km) - 987.66) < 0.05,
+    JSON.stringify(milestone),
+  );
+  check(
+    "B13 progress stays inside 0..1 so the bar cannot overflow",
+    Number(milestone.progress_ratio) >= 0 && Number(milestone.progress_ratio) < 1,
+    `ratio=${milestone.progress_ratio}`,
+  );
+
+  const dashPage = await get("/", { headers: { cookie: `gaspool_session=${token}` } });
+  check("B13 dashboard renders", dashPage.res.status === 200, `status ${dashPage.res.status}`);
+  check(
+    "B13 dashboard shows the milestone section and its share card",
+    ["milestoneCard", "milestoneFill", "btnShareMilestone", "milestoneShareCard", "shareCardDist"].every(
+      (needle) => dashPage.text.includes(needle),
+    ),
+    "a milestone element is missing from the rendered dashboard",
+  );
+  check(
+    "B13 dashboard loads the renderer needed to build the card",
+    dashPage.text.includes("html2canvas"),
+    "the share button would fail without html2canvas",
+  );
+  check(
+    "B13 dashboard labels the account as USER",
+    dashPage.text.includes("USER: ") && !dashPage.text.includes("UNIT: "),
+    "the header still says UNIT",
+  );
+
   // --- B6: delete_ride id validation -------------------------------------
   const badDelete = await get("/api/delete_ride/abc", {
     method: "DELETE",
