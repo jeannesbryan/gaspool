@@ -582,7 +582,24 @@ your real bindings. `npm run cf-typegen:test` does the same from
 `tests/wrangler.test.jsonc`, which is the variant CI uses because your personal
 config is gitignored and therefore absent there.
 
-`npm test` runs `tests/smoke.mjs`. It starts the real Worker with Wrangler in
+`npm test` runs the Activity Doctor regression first, then the smoke test.
+
+`npm run test:doctor` (`node tests/activity-doctor.mjs`) tests the pure
+moving-time and average-speed mathematics in `src/api/activity-doctor-stats.ts`
+directly: no Worker, no D1, no network. It pins the behaviour that once made
+Doctor report a 29.4 km ride at 29.1 km/h when the elapsed time was 1:47:58 —
+distance and moving time must come from the same segments, time must use real
+fractional deltas instead of `Math.floor()` output, a standstill must be
+recognised even while the recorder keeps logging points, and no second may
+vanish without being accounted for. The fixtures are synthetic, so the test
+carries no personal GPS data. Point it at a real export to also check your own
+ride:
+
+```bash
+GASPOOL_REAL_GPX=~/Downloads/Gaspool_Route.gpx node tests/activity-doctor.mjs
+```
+
+`tests/smoke.mjs` starts the real Worker with Wrangler in
 local mode using `tests/wrangler.test.jsonc`, seeds a throwaway D1 database in a
 temporary directory, and checks the behaviour that matters: private notes stay
 out of the public feed, the weather proxy validates its input, radar survives
@@ -900,11 +917,20 @@ Activity Doctor hardening rules:
 - Route payload loading uses the bound R2 object whenever possible. External arbitrary fetch is blocked; only the configured public R2 host, `gaspool/` object path, and recognized legacy root activity JSON names are accepted. If an old root URL points to a file now stored under `gaspool/`, Doctor tries the safe folder fallback first.
 - Repair writes backup first, repaired JSON second, and D1 stats last.
 
+How Doctor derives moving time and average speed (`src/api/activity-doctor-stats.ts`):
+
+- **One set of segments.** Distance and moving time are summed over the same segments, so average speed is always exactly the reported distance divided by the reported moving time. Earlier versions summed distance over every segment but time over only some of them, which inflated average speed without any GPS being wrong.
+- **Real time deltas.** Time is accumulated from the actual millisecond difference between points, not from a value already rounded with `Math.floor()`. Points recorded faster than once per second used to contribute distance but zero time; on a real 29.4 km ride that hid 45 minutes.
+- **Standstills are proven by displacement, not by gap length.** A point counts as stopped when it sits inside a stretch of at least `DOCTOR_STOP_MIN_SECONDS` that never leaves a small radius. GPS jitter while standing still is therefore neither counted as movement nor added to distance, and a stop is no longer invisible just because the recorder kept logging points during it.
+- **Nothing disappears silently.** Every second inside `time_integrity.span_seconds` ends up in `moving_time`, `stopped_time`, or `excluded_jump_seconds`. Whatever is left over is reported as `unaccounted_seconds` so callers can refuse the result instead of displaying it as if it were measured.
+
+`tests/activity-doctor.mjs` locks all four rules in place.
+
 The activity detail Studio page includes a **CEK & PERBAIKI AKTIVITAS INI** button for logged-in users. The modal shows Doctor status, a recommendation badge, source shape, point counts, timestamp/elevation sample counts, preview of D1 vs safe proposed stats, issues, planned changes, guardrails, and safe auto-repair actions. The recommendation badge summarizes the decision, for example **AMAN DIREPAIR**, **AMAN DENGAN BACKUP**, **AMAN SEBAGIAN**, **JANGAN REPAIR STATISTIK**, **MANUAL CHECK**, or **SEHAT**. Applying repair reloads the page after the backup and update complete so the refreshed D1 stats are visible.
 
 The tracker also includes a **Finish Review** screen before a new activity is uploaded. When the captain taps **TERMINATE & SAVE**, Gaspool pauses the live engines, scans the local GPS points, shows distance, moving time, GPS point count, stages, rest blocks, no-signal logs, privacy, and warning rows, then offers **SAVE FINAL** or **AUTO REPAIR & SAVE** when the issue is safe to fix automatically. Finish Review metadata is stored in the R2 activity JSON under `metadata.finish_review`.
 
-For Strava/Garmin-like moving-time statistics, choose **AUTO REPAIR & SAVE** from Finish Review when the review says the data is safe. This lets Gaspool ignore long rest gaps from moving time, clean safe GPS anomalies, and recalculate average speed or pace from repaired moving-time data. When Doctor shows **AMAN SEBAGIAN**, applying repair is still safe because untrusted fields are preserved. When Doctor shows **JANGAN REPAIR STATISTIK** or **MANUAL CHECK**, keep the existing D1 stats instead of applying repair.
+For Strava/Garmin-like moving-time statistics, choose **AUTO REPAIR & SAVE** from Finish Review when the review says the data is safe. This lets Gaspool exclude rest blocks and genuine standstills from moving time, clean safe GPS anomalies, and recalculate average speed or pace from a distance and a moving time that belong to the same set of segments. When Doctor shows **AMAN SEBAGIAN**, applying repair is still safe because untrusted fields are preserved. When Doctor shows **JANGAN REPAIR STATISTIK** or **MANUAL CHECK**, keep the existing D1 stats instead of applying repair.
 
 
 Manual trim, split, merge, and point-by-point editing are not part of Activity Doctor v1.

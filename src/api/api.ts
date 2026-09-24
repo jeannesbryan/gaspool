@@ -4,6 +4,21 @@ import { csrf } from "hono/csrf";
 import { Bindings } from "../index";
 import { verify } from "hono/jwt";
 import { getR2PublicBaseUrl, getR2PublicHostname } from "../config";
+// Statistik Activity Doctor tinggal di modulnya sendiri supaya bisa diuji tanpa
+// menyalakan Worker/D1/R2. Aturannya (satu himpunan segmen untuk jarak dan
+// waktu, selisih waktu nyata, akuntansi detik yang tidak hilang) didokumentasikan
+// di sana dan dikunci oleh tests/activity-doctor.mjs.
+import {
+  DOCTOR_DISCONTINUITY_METERS,
+  DOCTOR_ELEVATION_SPIKE_METERS,
+  DOCTOR_EXTREME_JUMP_METERS,
+  DOCTOR_LONG_GAP_SECONDS,
+  DOCTOR_MIN_CLUSTER_POINTS,
+  DOCTOR_MOVING_GAP_SECONDS,
+  getDistanceMeters,
+  getDoctorSpeedLimits,
+  recalculateDoctorStats,
+} from "./activity-doctor-stats";
 
 const api = new Hono<{ Bindings: Bindings }>();
 const DEFAULT_PUBLIC_PROFILE_SLUG = "rider";
@@ -226,25 +241,6 @@ const normalizeImportedRoutePoint = (point: any): RoutePoint | null => {
   }
 
   return normalized;
-};
-
-const degreesToRadians = (value: number) => (value * Math.PI) / 180;
-
-const getDistanceMeters = (from: RoutePoint, to: RoutePoint) => {
-  const earthRadiusM = 6371000;
-  const dLat = degreesToRadians(to.lat - from.lat);
-  const dLng = degreesToRadians(to.lng - from.lng);
-  const lat1 = degreesToRadians(from.lat);
-  const lat2 = degreesToRadians(to.lat);
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(lat1) *
-      Math.cos(lat2) *
-      Math.sin(dLng / 2) *
-      Math.sin(dLng / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-
-  return earthRadiusM * c;
 };
 
 const calculateRouteDistanceMeters = (coordinates: RoutePoint[]) =>
@@ -780,23 +776,11 @@ type ActivityDoctorCluster = {
   lng: number;
 };
 
-const DOCTOR_LONG_GAP_SECONDS = 20 * 60;
-const DOCTOR_MOVING_GAP_SECONDS = 5 * 60;
-const DOCTOR_EXTREME_JUMP_METERS = 1500;
 const DOCTOR_MAX_RAW_POINTS = 100000;
 const DOCTOR_SCAN_VERSION = 5;
 const DOCTOR_MIN_STATS_POINTS = 100;
 const DOCTOR_MIN_TIMED_POINT_RATIO = 0.55;
 const DOCTOR_MIN_ELEVATION_POINT_RATIO = 0.12;
-
-// Ambang diskontinuitas sengaja jauh di atas DOCTOR_EXTREME_JUMP_METERS: 1,5 km
-// masih bisa berupa GPS noise, sedangkan 20 km berarti track ini menempelkan
-// dua perjalanan yang berbeda.
-const DOCTOR_DISCONTINUITY_METERS = 20000;
-const DOCTOR_MIN_CLUSTER_POINTS = 5;
-const DOCTOR_MAX_CLUSTERS = 24;
-const DOCTOR_MAX_ANOMALIES = 200;
-const DOCTOR_ELEVATION_SPIKE_METERS = 50;
 
 const DOCTOR_TRUST_FIELDS = [
   "distance_km",
@@ -1191,32 +1175,6 @@ const detectDoctorRestBlocks = (points: ActivityDoctorPoint[]) => {
   return normalizeRestBlocks(blocks);
 };
 
-const getDoctorSpeedLimits = (activityType: string) => {
-  const type = String(activityType || "ride").toLowerCase();
-
-  if (type === "ride") {
-    return {
-      calculation_max_kmh: 120,
-      trusted_max_kmh: 65,
-      suspicious_ratio: 1.75,
-    };
-  }
-
-  if (type === "run") {
-    return {
-      calculation_max_kmh: 45,
-      trusted_max_kmh: 32,
-      suspicious_ratio: 1.65,
-    };
-  }
-
-  return {
-    calculation_max_kmh: 25,
-    trusted_max_kmh: 18,
-    suspicious_ratio: 1.6,
-  };
-};
-
 const getDoctorCurrentStats = (ride: any) => ({
   distance_km: Number(Number(ride?.distance || 0).toFixed(3)),
   moving_time: Math.max(0, Math.floor(Number(ride?.moving_time || 0))),
@@ -1450,269 +1408,6 @@ const buildDoctorStatTrust = (
       invalid_timestamp_count: timeIntegrity.invalid_timestamp_count,
     },
     untrusted_fields: untrustedFields,
-  };
-};
-
-// Memotong route pada lompatan antar titik BERURUTAN yang melebihi ambang.
-// Definisi ini yang benar untuk mencari track gabungan: rute 100 km yang
-// di-sample tiap 5 km tetap satu gugus karena tiap langkah kecil, sedangkan
-// track yang menempelkan dua perjalanan berbeda terbelah di jahitannya.
-// (Mengukur jarak ke centroid akan salah menandai rute panjang sebagai banyak
-// gugus, karena centroid menjauh dari titik-titik ujung.)
-const buildDoctorClusters = (points: ActivityDoctorPoint[]) => {
-  const runs: Array<{
-    count: number;
-    sumLat: number;
-    sumLng: number;
-    firstIndex: number;
-    lastIndex: number;
-  }> = [];
-
-  points.forEach((point, index) => {
-    const previous = index > 0 ? points[index - 1] : null;
-    const startsNewRun =
-      !previous || getDistanceMeters(previous, point) >= DOCTOR_DISCONTINUITY_METERS;
-
-    if (startsNewRun) {
-      runs.push({ count: 0, sumLat: 0, sumLng: 0, firstIndex: index, lastIndex: index });
-    }
-
-    const run = runs[runs.length - 1];
-    run.count += 1;
-    run.sumLat += point.lat;
-    run.sumLng += point.lng;
-    run.lastIndex = index;
-  });
-
-  return runs.slice(0, DOCTOR_MAX_CLUSTERS).map((run, index) => ({
-    cluster_index: index,
-    point_count: run.count,
-    first_point_index: run.firstIndex,
-    last_point_index: run.lastIndex,
-    lat: Number((run.sumLat / run.count).toFixed(6)),
-    lng: Number((run.sumLng / run.count).toFixed(6)),
-  }));
-};
-
-const recalculateDoctorStats = (
-  points: ActivityDoctorPoint[],
-  activityType: string,
-) => {
-  let distanceKm = 0;
-  let movingTime = 0;
-  let maxSpeed = 0;
-  let elevationGain = 0;
-  let skippedJumpCount = 0;
-  let longGapCount = 0;
-  let suspiciousSpeedCount = 0;
-  let lastEle: number | null = null;
-  const plausibleMaxSpeed = getDoctorSpeedLimits(activityType).calculation_max_kmh;
-  const anomalies: ActivityDoctorAnomaly[] = [];
-  const timeIntegrity: ActivityDoctorTimeIntegrity = {
-    invalid_timestamp_count: 0,
-    time_reversal_count: 0,
-    duplicate_timestamp_count: 0,
-    first_ms: 0,
-    last_ms: 0,
-    span_seconds: 0,
-  };
-
-  const pushAnomaly = (
-    code: ActivityDoctorAnomalyCode,
-    severity: ActivityDoctorSeverity,
-    segmentIndex: number,
-    point: ActivityDoctorPoint,
-    value: number,
-    threshold: number,
-    detail: string,
-  ) => {
-    if (anomalies.length >= DOCTOR_MAX_ANOMALIES) return;
-
-    anomalies.push({
-      code,
-      severity,
-      segment_index: segmentIndex,
-      point_index: segmentIndex,
-      source_index: Number.isFinite(Number(point._source_index))
-        ? Number(point._source_index)
-        : segmentIndex,
-      at: String(point.time || ""),
-      lat: Number(Number(point.lat).toFixed(6)),
-      lng: Number(Number(point.lng).toFixed(6)),
-      value: Number(Number(value).toFixed(3)),
-      threshold: Number(Number(threshold).toFixed(3)),
-      detail,
-    });
-  };
-
-  for (let i = 1; i < points.length; i++) {
-    const prev = points[i - 1];
-    const point = points[i];
-    const distanceM = getDistanceMeters(prev, point);
-    const distanceSegmentKm = distanceM / 1000;
-    const prevMs = prev.time ? Date.parse(prev.time) : 0;
-    const pointMs = point.time ? Date.parse(point.time) : 0;
-    const gapSec = prevMs && pointMs ? Math.floor((pointMs - prevMs) / 1000) : 0;
-    const segmentSpeed = gapSec > 0 ? distanceSegmentKm / (gapSec / 3600) : 0;
-
-    // Integritas waktu diperiksa terpisah dari gapSec: gapSec sengaja bernilai 0
-    // untuk timestamp yang tidak masuk akal, sehingga timeline yang mundur
-    // selama ini lolos tanpa catatan.
-    if (Number.isFinite(pointMs) && pointMs > 0) {
-      if (timeIntegrity.first_ms === 0 || pointMs < timeIntegrity.first_ms) {
-        timeIntegrity.first_ms = pointMs;
-      }
-      if (pointMs > timeIntegrity.last_ms) timeIntegrity.last_ms = pointMs;
-    }
-
-    if (point.time && !Number.isFinite(pointMs)) {
-      timeIntegrity.invalid_timestamp_count += 1;
-      pushAnomaly(
-        "invalid_timestamp",
-        "warning",
-        i,
-        point,
-        0,
-        0,
-        "Timestamp titik ini tidak bisa dibaca sehingga ikut merusak moving time.",
-      );
-    } else if (Number.isFinite(prevMs) && Number.isFinite(pointMs) && prevMs > 0 && pointMs > 0) {
-      if (pointMs < prevMs) {
-        timeIntegrity.time_reversal_count += 1;
-        pushAnomaly(
-          "time_reversal",
-          "warning",
-          i,
-          point,
-          (prevMs - pointMs) / 1000,
-          0,
-          `Waktu mundur ${Math.round((prevMs - pointMs) / 1000)} detik dibanding titik sebelumnya.`,
-        );
-      } else if (pointMs === prevMs) {
-        timeIntegrity.duplicate_timestamp_count += 1;
-        pushAnomaly(
-          "duplicate_timestamp",
-          "info",
-          i,
-          point,
-          0,
-          0,
-          "Timestamp sama persis dengan titik sebelumnya; kecepatan segmen ini tidak bisa dihitung.",
-        );
-      }
-    }
-
-    if (distanceM >= DOCTOR_EXTREME_JUMP_METERS && (!gapSec || gapSec < DOCTOR_LONG_GAP_SECONDS)) {
-      skippedJumpCount += 1;
-      pushAnomaly(
-        "extreme_jump",
-        "warning",
-        i,
-        point,
-        distanceM,
-        DOCTOR_EXTREME_JUMP_METERS,
-        `Lompatan ${(distanceM / 1000).toFixed(2)} km tanpa jeda waktu yang menjelaskannya.`,
-      );
-      continue;
-    }
-
-    if (gapSec >= DOCTOR_LONG_GAP_SECONDS) {
-      longGapCount += 1;
-      pushAnomaly(
-        "long_gap",
-        "info",
-        i,
-        point,
-        gapSec,
-        DOCTOR_LONG_GAP_SECONDS,
-        `Jeda ${Math.round(gapSec / 60)} menit antar titik; wajar untuk istirahat, bukan kerusakan data.`,
-      );
-    }
-
-    if (segmentSpeed > plausibleMaxSpeed && gapSec > 0) {
-      suspiciousSpeedCount += 1;
-      pushAnomaly(
-        "suspicious_speed",
-        "warning",
-        i,
-        point,
-        segmentSpeed,
-        plausibleMaxSpeed,
-        `Kecepatan segmen ${segmentSpeed.toFixed(1)} km/h melewati batas wajar ${plausibleMaxSpeed} km/h.`,
-      );
-    }
-
-    if (distanceM >= 1 && distanceM < DOCTOR_EXTREME_JUMP_METERS) {
-      distanceKm += distanceSegmentKm;
-    }
-
-    if (gapSec > 0 && gapSec <= DOCTOR_MOVING_GAP_SECONDS && segmentSpeed <= plausibleMaxSpeed) {
-      movingTime += gapSec;
-    }
-
-    if (Number.isFinite(point.speed || NaN)) {
-      maxSpeed = Math.max(maxSpeed, Number(point.speed || 0));
-    } else if (segmentSpeed > 0 && segmentSpeed <= plausibleMaxSpeed) {
-      maxSpeed = Math.max(maxSpeed, segmentSpeed);
-    }
-
-    const ele = Number(point.ele);
-
-    if (Number.isFinite(ele)) {
-      if (lastEle !== null) {
-        const diff = ele - lastEle;
-        if (diff > 3 && diff < 50) elevationGain += diff;
-        if (Math.abs(diff) >= DOCTOR_ELEVATION_SPIKE_METERS) {
-          pushAnomaly(
-            "elevation_spike",
-            "info",
-            i,
-            point,
-            diff,
-            DOCTOR_ELEVATION_SPIKE_METERS,
-            `Elevasi berubah ${diff.toFixed(0)} m dalam satu segmen; kemungkinan nilai rusak.`,
-          );
-        }
-      }
-
-      lastEle = ele;
-    }
-  }
-
-  const averageSpeed = movingTime > 0 ? distanceKm / (movingTime / 3600) : 0;
-  const clusters = buildDoctorClusters(points);
-  const spanSeconds =
-    timeIntegrity.first_ms > 0 && timeIntegrity.last_ms >= timeIntegrity.first_ms
-      ? Math.floor((timeIntegrity.last_ms - timeIntegrity.first_ms) / 1000)
-      : 0;
-  const anomalyCounts = {
-    extreme_jump: anomalies.filter((item) => item.code === "extreme_jump").length,
-    suspicious_speed: anomalies.filter((item) => item.code === "suspicious_speed").length,
-    elevation_spike: anomalies.filter((item) => item.code === "elevation_spike").length,
-    long_gap: anomalies.filter((item) => item.code === "long_gap").length,
-    time_reversal: timeIntegrity.time_reversal_count,
-    duplicate_timestamp: timeIntegrity.duplicate_timestamp_count,
-    invalid_timestamp: timeIntegrity.invalid_timestamp_count,
-  };
-
-  return {
-    distance_km: Number(distanceKm.toFixed(3)),
-    moving_time: Math.max(0, Math.floor(movingTime)),
-    average_speed: Number(averageSpeed.toFixed(2)),
-    max_speed: Number(maxSpeed.toFixed(2)),
-    total_elevation_gain: Number(elevationGain.toFixed(1)),
-    skipped_jump_count: skippedJumpCount,
-    long_gap_count: longGapCount,
-    suspicious_speed_count: suspiciousSpeedCount,
-    time_reversal_count: timeIntegrity.time_reversal_count,
-    duplicate_timestamp_count: timeIntegrity.duplicate_timestamp_count,
-    invalid_timestamp_count: timeIntegrity.invalid_timestamp_count,
-    timeline_sound:
-      timeIntegrity.time_reversal_count === 0 && timeIntegrity.invalid_timestamp_count === 0,
-    anomalies,
-    anomaly_counts: anomalyCounts,
-    time_integrity: { ...timeIntegrity, span_seconds: spanSeconds },
-    clusters,
   };
 };
 
