@@ -205,6 +205,123 @@ const main = async () => {
   });
   check("B5 radar_sync survives a hostile room/user", radar.res.status === 200 && JSON.parse(radar.text).success === true, radar.text.slice(0, 200));
 
+  // --- B10: live share token for a solo ride ------------------------------
+  // Link /radar/<room> can be opened without logging in, and a Peleton room
+  // name is chosen by its owner, so a guessable name leaks live location. A
+  // solo broadcast therefore has to use an unguessable token.
+  const liveStart = await postJson("/api/live_start", { user: "captain" });
+  const livePayload = JSON.parse(liveStart.text);
+  const liveToken = String(livePayload.token || "");
+
+  check(
+    "B10 live_start issues a token",
+    liveStart.res.status === 200 && livePayload.success === true,
+    liveStart.text.slice(0, 200),
+  );
+  check(
+    "B10 token is the documented shape",
+    /^[A-Z0-9]{16}$/.test(liveToken),
+    `token=${liveToken}`,
+  );
+  check(
+    "B10 token avoids characters that are misread out loud",
+    !/[IO]/.test(liveToken),
+    `token=${liveToken}`,
+  );
+
+  const secondLive = await postJson("/api/live_start", { user: "captain" });
+  const secondToken = String(JSON.parse(secondLive.text).token || "");
+  check(
+    "B10 two broadcasts never share a token",
+    liveToken.length > 0 && secondToken.length > 0 && liveToken !== secondToken,
+    `${liveToken} vs ${secondToken}`,
+  );
+
+  // The token has to survive the same sanitising the radar path applies,
+  // otherwise the published link would point at a different room than the one
+  // the tracker actually syncs to.
+  const tokenSync = await postJson("/api/radar_sync", {
+    room: liveToken,
+    user: "captain",
+    lat: -6.2,
+    lng: 106.8,
+    speed: 18,
+  });
+  check(
+    "B10 the issued token works as a radar room",
+    tokenSync.res.status === 200 && JSON.parse(tokenSync.text).success === true,
+    tokenSync.text.slice(0, 200),
+  );
+
+  const tokenView = await get(`/api/radar_view/${liveToken}`);
+  const tokenViewBody = JSON.parse(tokenView.text);
+  check(
+    "B10 a spectator can read the broadcast by token",
+    tokenView.res.status === 200 &&
+      Array.isArray(tokenViewBody.participants) &&
+      tokenViewBody.participants.some((p) => p.user === "captain"),
+    tokenView.text.slice(0, 200),
+  );
+
+  // --- B11: the tracker page renders in both modes ------------------------
+  // This page is one enormous template literal, so a stray backtick or a
+  // mistyped interpolation can break the whole HTML without any TypeScript
+  // error. Checking the rendered output is the only way to catch that.
+  const soloPage = await get("/record?type=ride");
+  check("B11 tracker page renders for a solo ride", soloPage.res.status === 200, `status ${soloPage.res.status}`);
+  check(
+    "B11 solo page offers the live share button",
+    soloPage.text.includes('id="btn-live"') && soloPage.text.includes("BAGIKAN LIVE"),
+    soloPage.text.includes('id="btn-live"') ? "button present, label unexpected" : "button missing",
+  );
+  check(
+    "B11 solo page carries the live panel and its wiring",
+    ["live-panel", "live-link", "bootLiveShare", "/api/live_start", "stopLiveShare"].every((needle) =>
+      soloPage.text.includes(needle),
+    ),
+    "one of the live-share hooks is missing from the rendered page",
+  );
+  check(
+    "B11 tracker page no longer references the removed handler",
+    !soloPage.text.includes("shareSpectator"),
+    "shareSpectator() is still referenced somewhere in the page",
+  );
+
+  const peletonPage = await get("/record?type=ride&room=TESTROOM");
+  check("B11 tracker page renders for a peleton room", peletonPage.res.status === 200, `status ${peletonPage.res.status}`);
+  check(
+    "B11 peleton page keeps its own label",
+    peletonPage.text.includes("SHARE RADAR") && peletonPage.text.includes('const roomID = "TESTROOM"'),
+    "peleton mode lost its room identity or its label",
+  );
+
+  // --- B12: the spectator page distinguishes solo from peleton ------------
+  const soloRadar = await get(`/radar/${liveToken}`);
+  check(
+    "B12 solo broadcast page greets the spectator",
+    soloRadar.res.status === 200 && soloRadar.text.includes("GOWES LIVE"),
+    `status ${soloRadar.res.status}`,
+  );
+  check(
+    "B12 solo broadcast page names the rider",
+    soloRadar.text.includes("captain · lokasi langsung"),
+    "the rider name is missing from the solo page",
+  );
+  check(
+    "B12 solo broadcast page stops advertising the raw token",
+    !soloRadar.text.includes(`ROOM: ${liveToken}`),
+    "the solo page still prints the token as if it were a peleton room name",
+  );
+
+  const peletonRadar = await get("/radar/TESTROOM");
+  check(
+    "B12 peleton radar page keeps its room label",
+    peletonRadar.res.status === 200 &&
+      peletonRadar.text.includes("RADAR PELETON") &&
+      peletonRadar.text.includes("ROOM: TESTROOM"),
+    `status ${peletonRadar.res.status}`,
+  );
+
   // --- B6: delete_ride id validation -------------------------------------
   const badDelete = await get("/api/delete_ride/abc", {
     method: "DELETE",

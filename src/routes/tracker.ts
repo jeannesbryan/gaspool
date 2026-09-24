@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { getCookie } from "hono/cookie";
 import { verify } from "hono/jwt";
 import { Bindings } from "../index";
+import { readLiveSession } from "../api/live-share";
 
 const tracker = new Hono<{ Bindings: Bindings }>();
 
@@ -66,6 +67,17 @@ tracker.get("/record", async (c) => {
             .action-row .btn { padding:9px 6px !important; font-size:9px !important; min-height:38px; }
             .btn-panel-toggle { display:none; margin:0 0 8px; padding:10px; font-size:10px; background:rgba(255,255,255,0.09); border:1px solid rgba(255,255,255,0.14); color:#fff; }
             .tracker-extra.is-collapsed { display:none; }
+
+            /* Panel siaran live (gowes solo maupun peleton). */
+            .live-panel { display:none; margin:0 0 8px; padding:10px 12px; border-radius:14px; background:rgba(37,211,102,0.10); border:1px solid rgba(37,211,102,0.45); pointer-events:auto; }
+            .live-panel-head { display:flex; align-items:center; gap:7px; margin-bottom:6px; }
+            .live-dot { width:8px; height:8px; border-radius:50%; background:#2ecc71; box-shadow:0 0 8px #2ecc71; animation:livePulse 1.6s infinite; }
+            .live-dot.is-off { background:#e74c3c; box-shadow:none; animation:none; }
+            @keyframes livePulse { 0%,100% { opacity:1; } 50% { opacity:0.35; } }
+            .live-label { font-size:9px; font-weight:900; letter-spacing:1.2px; text-transform:uppercase; color:#2ecc71; }
+            .live-link { font-size:10px; color:#cfe9d9; word-break:break-all; margin-bottom:8px; line-height:1.4; }
+            .live-actions { display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px; }
+            .live-actions .btn { padding:9px 6px !important; font-size:9px !important; }
 
             #safeMode { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.95); z-index: 1000; flex-direction: column; justify-content: center; align-items: center; padding: 30px; text-align: center; }
             #guestFinish { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000; z-index: 999; flex-direction: column; align-items: center; justify-content: center; padding: 20px; }
@@ -354,7 +366,19 @@ tracker.get("/record", async (c) => {
             <button id="btn-nav-voice" class="btn" style="background:rgba(52,152,219,0.2); border:1px solid #3498db; padding:10px; font-size:10px; color:#3498db;" onclick="toggleNavVoice()">🔊 SUARA</button>
             <button id="btn-repeat-nav" class="btn btn-repeat-nav" onclick="repeatLastRouteInstruction()" disabled>ULANGI</button>
                 ${isCaptain ? `<button id="btn-reroute" class="btn btn-reroute" onclick="rerouteToDestination()">↻ REROUTE</button>` : ""}
-                ${isPeleton ? `<button class="btn" style="background:rgba(37, 211, 102, 0.2); border: 1px solid #25D366; padding:10px; font-size:10px; color:#2ecc71;" onclick="shareSpectator()">📡 SHARE RADAR</button>` : ""}
+                <button id="btn-live" class="btn" style="background:rgba(37, 211, 102, 0.2); border: 1px solid #25D366; padding:10px; font-size:10px; color:#2ecc71;" onclick="shareLive()">${isPeleton ? "📡 SHARE RADAR" : "📡 BAGIKAN LIVE"}</button>
+            </div>
+            <div id="live-panel" class="live-panel">
+                <div class="live-panel-head">
+                    <span id="live-dot" class="live-dot"></span>
+                    <span id="live-label" class="live-label">LIVE</span>
+                </div>
+                <div id="live-link" class="live-link">-</div>
+                <div class="live-actions">
+                    <button class="btn" style="background:rgba(255,255,255,0.12); color:#fff;" onclick="copyLiveLink()">SALIN</button>
+                    <button class="btn" style="background:rgba(37,211,102,0.25); color:#2ecc71;" onclick="shareLive()">KIRIM</button>
+                    <button class="btn" style="background:rgba(231,76,60,0.25); color:#e74c3c;" onclick="stopLiveShare()">HENTIKAN</button>
+                </div>
             </div>
             <div id="nav-voice-status" class="nav-voice-status">SUARA NAV SIAP</div>
             <button id="btn-panel-toggle" class="btn btn-panel-toggle" onclick="toggleTrackerPanel()" aria-expanded="true">⚙️ PANEL KONTROL</button>
@@ -467,6 +491,30 @@ tracker.get("/record", async (c) => {
 			let peletonRouteVersion = 0;
 			let lastPeletonRouteCheck = 0;
 			let userName = "${captainName}";
+			// Ruang siaran live dipisahkan dari roomID dengan sengaja.
+			//
+			// roomID menentukan identitas "gowes peleton" dan dipakai di banyak
+			// tempat untuk memutuskan apakah rute peleton, radio, dan audio
+			// peleton perlu dihidupkan. Mengisinya dengan token siaran solo akan
+			// membangunkan seluruh mesin peleton itu. Jadi siaran solo memakai
+			// variabelnya sendiri: Peleton mengisinya sejak awal, gowes solo
+			// mengisinya saat siaran dimulai.
+			//
+			// CATATAN untuk yang mengedit berkas ini: seluruh halaman ini adalah
+			// satu template literal TypeScript, jadi JANGAN memakai backtick di
+			// dalam komentar — backtick menutup template-nya dan merusak halaman.
+			// Halaman ini dirender di server, jadi peleton harus disimpulkan ulang
+			// di sisi klien: variabel isPeleton milik server tidak ada di browser.
+			const isPeletonMode = roomID !== "SINGLE_MODE";
+			let liveRoom = isPeletonMode ? roomID : "";
+			// Token siaran lama yang belum kedaluwarsa. Hanya disiapkan, tidak
+			// dipakai sampai kapten menekan tombol bagikan lagi.
+			let resumableLiveRoom = "";
+			const liveShareKey = 'gaspool_live_room';
+			// Link yang dibagikan tadi pagi masih masuk akal untuk dilanjutkan sore
+			// ini, tetapi tidak untuk minggu depan: lokasi lama tidak boleh menempel
+			// pada token yang sudah lama tidak dipakai.
+			const LIVE_RESUME_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 			let plannedRouteData = null;
 			let plannedRouteLine = null;
 			let plannedRouteInstructions = [];
@@ -2640,6 +2688,7 @@ function clearDB() {
 			}
 
 			bootRouteSharing();
+			bootLiveShare();
 			updateNavVoiceControls();
 			updatePrivacyButton();
 			updateTrackingModeUI();
@@ -3208,7 +3257,9 @@ if (!gpsStatus) return;
 					const config = currentTrackingConfig();
 					let threshold = isStealthMode ? config.stealthRadarSeconds : config.radarSeconds;
 					
-					if(radarTick >= threshold && roomID !== "SINGLE_MODE" && path.length > 0) {
+					// liveRoom kosong berarti tidak ada yang dibagikan: gowes solo
+					// sebelum kapten menekan BAGIKAN LIVE, atau setelah dihentikan.
+					if(radarTick >= threshold && liveRoom && path.length > 0) {
 						radarTick = 0;
 						const lastP = path[path.length-1];
 						fetch('/api/radar_sync', {
@@ -3899,10 +3950,126 @@ if (!gpsStatus) return;
 				}
 			}
 
-			function shareSpectator() {
-				const url = window.location.origin + '/radar/' + roomID;
-				const text = 'Pantau pergerakan gowes peleton secara live di sini:\\n' + url;
+			function liveShareUrl() {
+				return window.location.origin + '/radar/' + liveRoom;
+			}
+
+			function updateLiveShareUI() {
+				const panel = document.getElementById('live-panel');
+				if (!panel) return;
+
+				if (!liveRoom) {
+					panel.style.display = 'none';
+					return;
+				}
+
+				panel.style.display = 'block';
+				const label = document.getElementById('live-label');
+				const link = document.getElementById('live-link');
+				const dot = document.getElementById('live-dot');
+				if (label) label.textContent = isPeletonMode ? 'LIVE PELETON' : 'LIVE — LOKASI DIBAGIKAN';
+				if (link) link.textContent = liveShareUrl();
+				if (dot) dot.classList.remove('is-off');
+			}
+
+			// Ruang siaran dibuat saat tombol ditekan, bukan saat halaman dibuka.
+			// Menyiarkan lokasi harus selalu hasil tindakan yang disadari, bukan
+			// efek samping membuka halaman.
+			async function ensureLiveRoom() {
+				if (liveRoom) return liveRoom;
+
+				// Link yang tadinya sudah dibagikan dipakai kembali kalau masih segar,
+				// supaya reload halaman tidak mematikan link yang sudah dikirim ke rekan.
+				if (resumableLiveRoom) {
+					liveRoom = resumableLiveRoom;
+					resumableLiveRoom = '';
+					updateLiveShareUI();
+					return liveRoom;
+				}
+
+				// Nama ikut dikirim supaya halaman penonton bisa menyapa "sedang
+				// gowes siapa", bukan hanya menampilkan titik di peta.
+				const res = await fetch('/api/live_start', {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ user: userName })
+				});
+				const data = await res.json();
+				if (!data || !data.success || !data.token) throw new Error('live_start failed');
+
+				liveRoom = data.token;
+				rememberLiveRoom(liveRoom);
+				updateLiveShareUI();
+				return liveRoom;
+			}
+
+			function rememberLiveRoom(token) {
+				try { localStorage.setItem(liveShareKey, JSON.stringify({ token: token, at: Date.now() })); } catch (e) {}
+			}
+
+			function forgetLiveRoom() {
+				try { localStorage.removeItem(liveShareKey); } catch (e) {}
+			}
+
+			async function shareLive() {
+				try {
+					await ensureLiveRoom();
+				} catch (e) {
+					setRouteStatus('📡 LINK GAGAL DIBUAT', 'Siaran tidak dimulai. Cek koneksi lalu coba lagi.', true);
+					return;
+				}
+
+				const intro = isPeletonMode
+					? 'Pantau pergerakan gowes peleton secara live di sini:'
+					: 'Pantau pergerakan gowes saya secara live di sini:';
+				const text = intro + '\\n' + liveShareUrl();
 				window.open('https://api.whatsapp.com/send?text=' + encodeURIComponent(text), '_blank');
+			}
+
+			async function copyLiveLink() {
+				if (!liveRoom) return;
+
+				try {
+					await navigator.clipboard.writeText(liveShareUrl());
+					setRouteStatus('📡 LINK DISALIN', liveShareUrl());
+				} catch (e) {
+					// Clipboard butuh konteks aman dan izin; kalau ditolak, link
+					// ditampilkan supaya masih bisa disalin manual.
+					setRouteStatus('📡 SALIN MANUAL', liveShareUrl());
+				}
+			}
+
+			function stopLiveShare() {
+				liveRoom = '';
+				resumableLiveRoom = '';
+				forgetLiveRoom();
+				updateLiveShareUI();
+				setRouteStatus('📡 SIARAN DIHENTIKAN', 'Lokasi tidak lagi dibagikan.');
+			}
+
+			// Dipanggil sekali saat halaman siap. Sengaja TIDAK langsung menyiarkan:
+			// hanya menyiapkan token agar link lama bisa dipakai lagi kalau kapten
+			// menekan tombol bagikan.
+			function bootLiveShare() {
+				if (!isPeletonMode) {
+					try {
+						const raw = localStorage.getItem(liveShareKey);
+						if (raw) {
+							const saved = JSON.parse(raw);
+							const fresh = saved && Date.now() - Number(saved.at || 0) < LIVE_RESUME_MAX_AGE_MS;
+							if (fresh && /^[A-Z0-9]{16}$/.test(String(saved.token || ''))) {
+								resumableLiveRoom = String(saved.token);
+								setRouteStatus('📡 SIARAN SIAP DILANJUT', 'Tekan BAGIKAN LIVE untuk memakai link yang sama.');
+							} else {
+								forgetLiveRoom();
+							}
+						}
+					} catch (e) {
+						forgetLiveRoom();
+					}
+				}
+
+				updateLiveShareUI();
 			}
 
 			function exportStats() {
@@ -3967,11 +4134,32 @@ if (!gpsStatus) return;
 // ==========================================
 tracker.get("/radar/:room", async (c) => {
   const room = c.req.param("room").toUpperCase();
+
+  // Room Peleton dipilih sendiri oleh pemakainya dan berguna untuk ditampilkan
+  // (peserta perlu tahu room mana yang mereka ikuti). Siaran solo sebaliknya:
+  // namanya token acak, jadi menampilkan "ROOM: <token>" di layar penonton
+  // hanya membocorkan alamat siaran tanpa menjelaskan apa pun. Karena itu
+  // tampilannya dibedakan di sini, saat halaman dirender.
+  const liveSession = await readLiveSession(c.env.GASPOOL_RADAR, room);
+  const isLiveShare = liveSession !== null;
+  const pageTitle = isLiveShare ? "Gowes Live" : `Radar Peleton: ${room}`;
+  const headline = isLiveShare ? "GOWES LIVE" : "RADAR PELETON";
+  const subline = isLiveShare
+    ? `${liveSession.user ? liveSession.user : "Pesepeda"} · lokasi langsung`
+    : `ROOM: ${room}`;
+
+  // Teks ajakan dibangun di sini lalu dikirim sebagai literal JSON, bukan
+  // dirangkai di browser: variabel `room` hanya ada di server, dan
+  // JSON.stringify menjamin tanda kutip serta baris baru sampai utuh.
+  const shareIntro = isLiveShare
+    ? "Pantau pergerakan gowes saya secara live!"
+    : `Pantau pergerakan gowes peleton secara live!\nRoom: *${room}*`;
+
   return c.html(`
     <!DOCTYPE html>
     <html lang="id">
     <head>
-        <title>Radar Peleton: ${room}</title>
+        <title>${pageTitle}</title>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
@@ -3990,8 +4178,8 @@ tracker.get("/radar/:room", async (c) => {
     </head>
     <body>
         <div class="header">
-            <h1 class="title">RADAR PELETON</h1>
-            <div class="subtitle"><span class="status-dot"></span>ROOM: ${room}</div>
+            <h1 class="title">${headline}</h1>
+            <div class="subtitle"><span class="status-dot"></span>${subline}</div>
         </div>
         <div id="map"></div>
         <button class="btn-share" onclick="shareWa()">💬 BAGIKAN KE KELUARGA</button>
@@ -4014,7 +4202,7 @@ tracker.get("/radar/:room", async (c) => {
 
             function shareWa() {
                 const url = window.location.href;
-                const text = 'Pantau pergerakan gowes peleton secara live!\\nRoom: *' + '${room}' + '*\\n\\nBuka radar: \\n' + url;
+                const text = ${JSON.stringify(shareIntro)} + '\\n\\nBuka radar: \\n' + url;
                 window.open('https://api.whatsapp.com/send?text=' + encodeURIComponent(text), '_blank');
             }
 

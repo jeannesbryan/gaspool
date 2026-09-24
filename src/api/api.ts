@@ -9,6 +9,11 @@ import { getR2PublicBaseUrl, getR2PublicHostname } from "../config";
 // waktu, selisih waktu nyata, akuntansi detik yang tidak hilang) didokumentasikan
 // di sana dan dikunci oleh tests/activity-doctor.mjs.
 import {
+  createLiveShareToken,
+  readLiveSession,
+  saveLiveSession,
+} from "./live-share";
+import {
   collectDoctorRestBlocks,
   compareDoctorMovingTime,
   DOCTOR_DISCONTINUITY_METERS,
@@ -5077,6 +5082,36 @@ api.delete("/delete_ride/:id", protectAPI, async (c) => {
 });
 
 // 5. RADAR SYNC (Cloudflare KV) - Terbuka untuk Tamu (Bebas Token)
+// --- Live share untuk gowes SOLO -------------------------------------------
+//
+// Di mode Peleton, nama room berfungsi ganda: ia menyatukan peserta sekaligus
+// menjadi alamat link yang dibagikan. Untuk gowes solo tidak ada peserta lain
+// yang perlu disatukan, dan justru di situlah masalahnya: room Peleton dipilih
+// sendiri oleh pemakainya, jadi "JEANNES" atau "GOWESJUMAT" bisa ditebak siapa
+// saja. Karena /radar/<room> bisa dibuka tanpa login, nama yang mudah ditebak
+// berarti lokasi pemiliknya juga ikut terbaca orang asing.
+//
+// Karena itu siaran solo memakai token acak, bukan nama. Bentuk dan sifat token
+// ada di src/api/live-share.ts, dikunci oleh tests/live-share.mjs.
+//
+// Catatan sesinya juga disimpan, bukan hanya tokennya: halaman penonton perlu
+// tahu bahwa sebuah tautan adalah siaran solo (bukan room Peleton) supaya bisa
+// menyapa dengan benar, dan supaya token acak tidak dipamerkan di layar.
+api.post("/live_start", async (c) => {
+  try {
+    const body = await c.req.json().catch(() => ({}));
+    const user = sanitizeRadioUser(body?.user);
+    const token = createLiveShareToken();
+
+    await saveLiveSession(c.env.GASPOOL_RADAR, token, user);
+
+    return c.json({ success: true, token });
+  } catch (error) {
+    console.error("live_start failed", error);
+    return c.json({ success: false, token: "", error: "Gagal membuat link siaran." }, 500);
+  }
+});
+
 api.post("/radar_sync", async (c) => {
   try {
     const { room, user, lat, lng, speed } = await c.req.json();
@@ -5291,7 +5326,7 @@ api.get("/public_rides/:username", async (c) => {
 // 8. RADAR SPECTATOR (Hanya Membaca Data Peleton untuk Keluarga)
 api.get("/radar_view/:room", async (c) => {
   const room = sanitizeRoomId(c.req.param("room"));
-  if (!room) return c.json({ success: true, participants: [] });
+  if (!room) return c.json({ success: true, participants: [], live: null });
 
   try {
     const list = await c.env.GASPOOL_RADAR.list({ prefix: room + ":" });
@@ -5301,7 +5336,13 @@ api.get("/radar_view/:room", async (c) => {
         return { user: k.name.split(":")[1], ...parseRadarEntry(val) };
       }),
     );
-    return c.json({ success: true, participants });
+
+    // `live` bukan null berarti room ini adalah siaran solo, bukan room Peleton.
+    // Penonton memakainya untuk menyapa dengan benar dan untuk tahu ini gowes
+    // siapa, tanpa perlu menebak dari bentuk nama room.
+    const live = await readLiveSession(c.env.GASPOOL_RADAR, room);
+
+    return c.json({ success: true, participants, live });
   } catch (e) {
     return c.json({ success: false }, 500);
   }
