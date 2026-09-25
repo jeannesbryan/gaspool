@@ -1256,7 +1256,36 @@ const buildDoctorStatTrust = (
     hasEnoughTimedPoints &&
     rawStats.moving_time > 0 &&
     !movingTimeOutOfTolerance;
-  const averageTrusted = distanceTrusted && movingTrusted && rawStats.average_speed > 0;
+  // --- Aturan moving time: jam live menang (dibalik 2026-09-25) ------------
+  //
+  // Jam live adalah PENGUKURAN: ia berjalan di perangkat, tahu kapan pesepeda
+  // benar-benar berhenti (termasuk saat GPS tidak stabil), dan kehilangannya
+  // tercatat lewat live_clock. Angka hitung ulang adalah INFERENSI geometri:
+  // ia hanya melihat titik-titik yang tersimpan.
+  //
+  // Sebelumnya arahnya terbalik. Selama selisihnya masih di dalam toleransi
+  // plus-minus 15 persen, justru angka hitung ulang yang menimpa D1 — sehingga
+  // dua layar menampilkan dua moving time untuk gowes yang sama (4233 vs 4145),
+  // padahal doktor sendiri menyatakan selisih 2,1 persen itu masih wajar.
+  // Toleransi ada untuk MENOLAK angka yang tidak masuk akal, bukan untuk
+  // menggantikan sebuah pengukuran dengan sebuah inferensi.
+  //
+  // Sekarang: hitung ulang hanya menimpa kalau di LUAR toleransi, yaitu saat
+  // jamnya jelas rusak.
+  const finalDistanceKm = distanceTrusted ? rawStats.distance_km : current.distance_km;
+  const finalMovingTime = movingTimeOutOfTolerance ? rawStats.moving_time : current.moving_time;
+
+  // Average DIHITUNG dari pasangan yang benar-benar dipakai, bukan diambil dari
+  // rawStats. Kalau diambil mentah, average akan menggambarkan pasangan
+  // (jarak, waktu) yang tidak pernah disimpan — dan layar lain yang menghitung
+  // ulang dari angka tersimpan akan menampilkan average berbeda. Artinya
+  // "dua kebenaran" cuma pindah dari moving time ke average, bukan hilang.
+  const finalAverageSpeed =
+    finalDistanceKm > 0 && finalMovingTime > 0
+      ? finalDistanceKm / (finalMovingTime / 3600)
+      : current.average_speed;
+
+  const averageTrusted = finalAverageSpeed > 0;
   const maxSpeedTrusted =
     timelineSound &&
     !isSparseRoute &&
@@ -1268,9 +1297,9 @@ const buildDoctorStatTrust = (
     (rawStats.total_elevation_gain > 0 || current.total_elevation_gain <= 0);
 
   const safeStats = {
-    distance_km: distanceTrusted ? rawStats.distance_km : current.distance_km,
-    moving_time: movingTrusted ? rawStats.moving_time : current.moving_time,
-    average_speed: averageTrusted ? rawStats.average_speed : current.average_speed,
+    distance_km: finalDistanceKm,
+    moving_time: finalMovingTime,
+    average_speed: Number(finalAverageSpeed.toFixed(2)),
     max_speed: maxSpeedTrusted ? rawStats.max_speed : current.max_speed,
     total_elevation_gain: elevationTrusted
       ? rawStats.total_elevation_gain
@@ -1283,7 +1312,11 @@ const buildDoctorStatTrust = (
   // Rantai alasan ditulis sebagai if/else, bukan ternary bersarang, supaya tiap
   // kondisi baru tidak menambah satu tingkat lekukan yang salah baca.
   const movingTrustReason = (() => {
-    if (movingTrusted) return "Timestamp GPS cukup lengkap untuk moving-time oriented stats.";
+    if (movingTrusted) {
+      // Semua kondisi sehat. Jam live yang dipertahankan; angka hitung ulang
+      // hanya berperan sebagai pemeriksa silang.
+      return "Jam live dipertahankan sebagai sumber kebenaran; hitung ulang moving time masih di dalam toleransi.";
+    }
     if (!timelineSound) {
       return `Timeline tidak konsisten (${timeIntegrity.time_reversal_count} waktu mundur, ${timeIntegrity.invalid_timestamp_count} timestamp rusak); moving time D1 dipertahankan.`;
     }

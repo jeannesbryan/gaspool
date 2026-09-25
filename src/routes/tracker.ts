@@ -470,6 +470,16 @@ tracker.get("/record", async (c) => {
         </div>
 
         <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+        <!-- Tabel segmen yang SAMA dengan Activity Doctor di studio. Dimuat
+             sebagai modul supaya satu berkas dipakai halaman, server, dan test.
+             Modul dijalankan setelah halaman selesai di-parse, jadi
+             window.DoctorCore mungkin belum ada saat skrip utama berjalan —
+             pemakaiannya (Finish Review) terjadi jauh setelah itu, ketika
+             pemakainya menekan tombol selesai. -->
+        <script type="module">
+            import * as DoctorCore from '/assets/doctor-core.js';
+            window.DoctorCore = DoctorCore;
+        </script>
         <script>
             let map, path = [], dist = 0, startT = 0, rec = false, watchId, radarInt, peletonRoutePollInt, restartGpsWatch = null;
 			let clockInt, movingTime = 0, lastTick = Date.now(), isPaused = false, lastAnnouncedKm = 0, lastSave = 0;
@@ -3654,6 +3664,28 @@ if (!gpsStatus) return;
 					previous = point;
 				});
 
+				// Jarak dihitung ulang oleh tabel segmen yang SAMA dengan Activity
+				// Doctor di studio. Sebelumnya halaman ini punya aturannya sendiri
+				// (buang segmen >= 1,5 km dan segmen yang terlalu cepat), sehingga
+				// gowes yang sama menghasilkan dua jarak berbeda: 18,741 km di sini
+				// vs 18,506 km di studio. Aturan "bergerak" sekarang hidup di satu
+				// tempat saja (public/assets/doctor-core.js).
+				//
+				// Kalau modulnya belum termuat, angka dari perhitungan lama di atas
+				// tetap dipakai — lebih baik daripada menyimpan jarak kosong.
+				let sharedSegmentDistanceKm = null;
+				if (window.DoctorCore && typeof window.DoctorCore.doctorMovingDistanceMeters === 'function' && cleaned.length > 1) {
+					try {
+						const meters = window.DoctorCore.doctorMovingDistanceMeters(cleaned, '${type}');
+						if (Number.isFinite(meters) && meters > 0) {
+							sharedSegmentDistanceKm = meters / 1000;
+							repairedDistance = sharedSegmentDistanceKm;
+						}
+					} catch (err) {
+						console.warn('doctor-core gagal menghitung jarak, memakai hasil lama:', err);
+					}
+				}
+
 				if (raw.length === 0 || cleaned.length === 0) {
 					issues.push({ severity: 'danger', code: 'empty_route', message: 'Titik GPS kosong. Aktivitas belum bisa disimpan aman.', autoFix: false });
 				}
@@ -3731,6 +3763,11 @@ if (!gpsStatus) return;
 						suspicious_speed: suspiciousSpeed,
 						long_gaps: longGaps
 					},
+					// Bukti bahwa jarak benar-benar datang dari tabel segmen bersama,
+					// bukan dari perhitungan lama. Null berarti modul bersama tidak
+					// termuat dan angka lama yang dipakai — itu harus terlihat, bukan
+					// diam-diam.
+					shared_segment_distance_km: sharedSegmentDistanceKm,
 					currentStats: {
 						distance_km: Number(Number(currentDistance || 0).toFixed(3)),
 						moving_time: Math.floor(currentDuration || 0),

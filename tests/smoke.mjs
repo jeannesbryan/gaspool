@@ -12,7 +12,7 @@
  */
 import { spawn } from "node:child_process";
 import { createHmac } from "node:crypto";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -730,6 +730,58 @@ const main = async () => {
     cardPage.text.includes("text-shadow") && cardPage.text.includes(".share-cell-value"),
     "numbers need a shadow or they vanish on bright photos",
   );
+
+  // --- B23: satu tabel segmen untuk halaman dan server ---------------------
+  // Keluhan yang memicu ini: gowes yang sama menghasilkan 18,741 km di halaman
+  // dan 18,506 km di studio, karena halaman punya aturan "bergerak" sendiri.
+  // Sekarang keduanya memakai public/assets/doctor-core.js.
+  const coreRes = await get("/assets/doctor-core.js");
+  check(
+    "B23 the shared segment table is served to the browser",
+    coreRes.res.status === 200 && coreRes.text.includes("doctorMovingDistanceMeters"),
+    "the page cannot share arithmetic it cannot download",
+  );
+  check(
+    "B23 the shared module exports the one definition of moving",
+    coreRes.text.includes("export const buildDoctorSegments"),
+    "buildDoctorSegments must be reachable from the page",
+  );
+  check(
+    "B23 the tracker loads it as a module",
+    trackerHtml.includes("import * as DoctorCore from '/assets/doctor-core.js'") &&
+      trackerHtml.includes("window.DoctorCore = DoctorCore"),
+    "the module must be imported, not copied into the page",
+  );
+  check(
+    "B23 finish review takes its distance from the shared table",
+    trackerHtml.includes("window.DoctorCore.doctorMovingDistanceMeters(cleaned"),
+    "analyzeFinishActivity still computes distance with its own rules",
+  );
+  check(
+    "B23 a missing module is visible, not a silent fallback",
+    trackerHtml.includes("shared_segment_distance_km"),
+    "if the module fails to load the record must say so",
+  );
+
+  // Sisi server: aritmatikanya benar-benar sudah dipindah, bukan disalin.
+  const statsSource = readFileSync(`${ROOT}/src/api/activity-doctor-stats.ts`, "utf8");
+  check(
+    "B23 the server module imports the shared table instead of redefining it",
+    statsSource.includes('from "../../public/assets/doctor-core.js"'),
+    "activity-doctor-stats.ts must import doctor-core.js",
+  );
+  for (const gone of [
+    "const getDistanceMeters = (",
+    "const getDoctorSpeedLimits = (activityType: string)",
+    "const classifyDoctorPointStays = (",
+    "const getDoctorStopRadiusMeters = ",
+  ]) {
+    check(
+      `B23 the server module no longer defines its own ${gone.slice(6, gone.indexOf("=") - 1).trim()}`,
+      !statsSource.includes(gone),
+      "a second copy is exactly the twin bug this refactor removes",
+    );
+  }
 
   // --- B6: delete_ride id validation -------------------------------------
   const badDelete = await get("/api/delete_ride/abc", {

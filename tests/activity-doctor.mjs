@@ -310,10 +310,24 @@ if (realPath) {
   const real = recalculateDoctorStats(points, "ride");
   const span = real.time_integrity.span_seconds;
 
+  // Ambangnya 75%, bukan 90%.
+  //
+  // Sebelumnya 90% dan itu keliru sebagai INVARIAN: angka itu diam-diam
+  // mengandaikan gowes contoh hampir tidak pernah berhenti. Begitu berkas uji
+  // diganti dengan gowes yang benar-benar berhenti (lampu merah, istirahat),
+  // assertion ini gagal padahal doktornya benar — dan test yang merah padahal
+  // produknya sehat justru membuat orang berhenti mempercayai test.
+  //
+  // Yang diuji di sini adalah regresi penyusutan parah: bug Math.floor dulu
+  // menyisakan ~56% dari rentang. Invarian yang sesungguhnya (setiap detik
+  // masuk salah satu keranjang) diuji terpisah di bawah lewat
+  // unaccounted_seconds, jadi rasio ini hanya penjaga lapis kedua.
+  const movingRatio = span > 0 ? real.moving_time / span : 0;
   check(
-    "gowes nyata: moving time dekat dengan waktu tempuh sebenarnya",
-    real.moving_time > span * 0.9 && real.moving_time <= span,
-    `moving_time=${fmtClock(real.moving_time)} dari span=${fmtClock(span)}; regresi lama 1:00:35`,
+    "gowes nyata: moving time tidak menyusut karena segmen tanpa waktu",
+    real.moving_time > span * 0.75 && real.moving_time <= span,
+    `moving_time=${fmtClock(real.moving_time)} dari span=${fmtClock(span)}` +
+      ` (${(movingRatio * 100).toFixed(1)}%); regresi lama menyisakan ~56%`,
   );
   check(
     "gowes nyata: average speed wajar untuk pesepeda rekreasi",

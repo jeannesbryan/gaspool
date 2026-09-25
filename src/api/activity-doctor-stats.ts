@@ -30,6 +30,37 @@
  *      unaccounted_seconds supaya bisa ditolak, bukan disembunyikan.
  */
 
+import {
+  buildDoctorSegments as buildDoctorSegmentsImpl,
+  classifyDoctorPointStays,
+  DOCTOR_EXTREME_JUMP_METERS,
+  DOCTOR_LONG_GAP_SECONDS,
+  DOCTOR_STOP_MIN_SECONDS,
+  DOCTOR_STOP_RADIUS_FLOOR_METERS,
+  doctorMovingDistanceMeters,
+  doctorMovingSeconds,
+  getDistanceMeters,
+  getDoctorSpeedLimits,
+  getDoctorStopRadiusMeters,
+} from "../../public/assets/doctor-core.js";
+
+// Aritmatika inti TIDAK didefinisikan di sini lagi. Ia tinggal di
+// public/assets/doctor-core.js supaya halaman tracker, modul ini, dan test
+// memakai SATU tabel segmen. Simbol di bawah diteruskan apa adanya supaya
+// pemakai lama (api.ts, tests/activity-doctor.mjs) tidak perlu diubah.
+export {
+  classifyDoctorPointStays,
+  DOCTOR_EXTREME_JUMP_METERS,
+  DOCTOR_LONG_GAP_SECONDS,
+  DOCTOR_STOP_MIN_SECONDS,
+  DOCTOR_STOP_RADIUS_FLOOR_METERS,
+  doctorMovingDistanceMeters,
+  doctorMovingSeconds,
+  getDistanceMeters,
+  getDoctorSpeedLimits,
+  getDoctorStopRadiusMeters,
+};
+
 export type DoctorStatPoint = {
   lat: number;
   lng: number;
@@ -82,9 +113,7 @@ export type DoctorCluster = {
   lng: number;
 };
 
-export const DOCTOR_LONG_GAP_SECONDS = 20 * 60;
 export const DOCTOR_MOVING_GAP_SECONDS = 5 * 60;
-export const DOCTOR_EXTREME_JUMP_METERS = 1500;
 export const DOCTOR_MAX_ANOMALIES = 200;
 export const DOCTOR_ELEVATION_SPIKE_METERS = 50;
 
@@ -95,96 +124,10 @@ export const DOCTOR_DISCONTINUITY_METERS = 20000;
 export const DOCTOR_MIN_CLUSTER_POINTS = 5;
 export const DOCTOR_MAX_CLUSTERS = 24;
 
-// Bagaimana "berhenti" dibuktikan.
-//
-// Cara lama memakai panjang jeda antar titik, dan itu salah dua kali: jitter
-// GPS tidak pernah menghasilkan jeda panjang, sementara sampel rapat selalu
-// menghasilkan jeda nol.
-//
-// Cara di sini: sebuah titik dianggap bagian dari pemberhentian kalau ada
-// rentetan titik selama DOCTOR_STOP_MIN_SECONDS yang semuanya masih di dalam
-// radius tertentu dari titik itu. Artinya "orangnya benar-benar diam di satu
-// tempat", bukan "kecepatan satu segmen kebetulan rendah".
-//
-// Kenapa radius, bukan jendela bergulir: jendela yang mengelilingi satu segmen
-// ikut menyeret aktivitas di sebelahnya, sehingga ~30 detik pertama sebuah
-// istirahat masih terbaca "bergerak" dan jitter GPS di detik-detik itu ikut
-// terhitung sebagai jarak. Dengan radius, batasnya jatuh tepat di titik terakhir
-// yang masih diam, jadi tajam tanpa perlu dipangkas.
-//
-// Radiusnya diturunkan dari ambang auto-pause supaya tracker dan doctor memakai
-// definisi "bergerak" yang sama: radius = ambang_kmh x durasi. Lantainya ada
-// untuk menyerap jitter GPS alat konsumen (beberapa meter) pada aktivitas lambat
-// seperti jalan kaki, dan sengaja dipilih konservatif: kalau ragu, lebih baik
-// waktu dihitung bergerak (kecepatan tampak lebih rendah) daripada sebaliknya.
-export const DOCTOR_STOP_MIN_SECONDS = 60;
-export const DOCTOR_STOP_RADIUS_FLOOR_METERS = 25;
-
-const degreesToRadians = (value: number) => (value * Math.PI) / 180;
-
-export const getDistanceMeters = (
-  from: { lat: number; lng: number },
-  to: { lat: number; lng: number },
-) => {
-  const earthRadiusM = 6371000;
-  const dLat = degreesToRadians(to.lat - from.lat);
-  const dLng = degreesToRadians(to.lng - from.lng);
-  const lat1 = degreesToRadians(from.lat);
-  const lat2 = degreesToRadians(to.lat);
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(lat1) *
-      Math.cos(lat2) *
-      Math.sin(dLng / 2) *
-      Math.sin(dLng / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-
-  return earthRadiusM * c;
-};
-
-/**
- * `movement_min_kmh` sengaja disamakan dengan `activityAutoPauseSpeedKmh()` di
- * src/routes/tracker.ts. Kalau dua tempat ini berbeda, live tracker dan doctor
- * akan punya dua definisi "bergerak" yang berbeda pula — persis jenis
- * ketidakcocokan yang membuat moving time dulu menyusut 47 menit.
- */
-export const getDoctorSpeedLimits = (activityType: string) => {
-  const type = String(activityType || "ride").toLowerCase();
-
-  if (type === "ride") {
-    return {
-      calculation_max_kmh: 120,
-      trusted_max_kmh: 65,
-      suspicious_ratio: 1.75,
-      movement_min_kmh: 2.0,
-    };
-  }
-
-  if (type === "run") {
-    return {
-      calculation_max_kmh: 45,
-      trusted_max_kmh: 32,
-      suspicious_ratio: 1.65,
-      movement_min_kmh: 1.4,
-    };
-  }
-
-  if (type === "hike") {
-    return {
-      calculation_max_kmh: 25,
-      trusted_max_kmh: 18,
-      suspicious_ratio: 1.6,
-      movement_min_kmh: 0.7,
-    };
-  }
-
-  return {
-    calculation_max_kmh: 25,
-    trusted_max_kmh: 18,
-    suspicious_ratio: 1.6,
-    movement_min_kmh: 0.8,
-  };
-};
+// Aturan "berhenti", radius pemberhentian, jarak haversine, dan batas kecepatan
+// per jenis aktivitas semuanya tinggal di public/assets/doctor-core.js dan
+// diteruskan di bagian atas berkas ini. Jangan menyalinnya kembali ke sini:
+// salinan itulah yang dulu membuat halaman dan server menghitung jarak berbeda.
 
 // Memotong route pada lompatan antar titik BERURUTAN yang melebihi ambang.
 // Definisi ini yang benar untuk mencari track gabungan: rute 100 km yang
@@ -226,57 +169,6 @@ export const buildDoctorClusters = (points: DoctorStatPoint[]) => {
     lng: Number((run.sumLng / run.count).toFixed(6)),
   }));
 };
-
-/**
- * Tandai titik mana yang berada di dalam sebuah pemberhentian.
- *
- * Untuk tiap titik `a`, cari titik terjauh `b` yang masih di dalam radius dari
- * titik `a`. Kalau bentangan waktu a..b mencapai DOCTOR_STOP_MIN_SECONDS, seluruh
- * rentang itu berarti "diam di satu tempat" dan ditandai berhenti.
- *
- * `b` hanya bergerak maju seiring `a` bergerak maju (karena kendala jarak makin
- * longgar), sehingga totalnya O(n) — sama untuk berkas 100 titik maupun 100.000
- * titik. Penandaan rentang juga dijaga O(n) dengan hanya menandai bagian yang
- * belum pernah ditandai.
- */
-export const classifyDoctorPointStays = (
-  points: DoctorStatPoint[],
-  cumTime: number[],
-  radiusMeters: number,
-  minSeconds: number = DOCTOR_STOP_MIN_SECONDS,
-) => {
-  const total = points.length;
-  const inStay = new Array<boolean>(total).fill(false);
-  if (total < 2 || radiusMeters <= 0 || minSeconds <= 0) return inStay;
-
-  let furthest = 0;
-  let markedUntil = -1;
-
-  for (let a = 0; a < total; a++) {
-    if (furthest < a) furthest = a;
-    while (
-      furthest + 1 < total &&
-      getDistanceMeters(points[a], points[furthest + 1]) < radiusMeters
-    ) {
-      furthest += 1;
-    }
-
-    if (cumTime[furthest] - cumTime[a] < minSeconds) continue;
-
-    const from = Math.max(a, markedUntil + 1);
-    for (let k = from; k <= furthest; k++) inStay[k] = true;
-    if (furthest > markedUntil) markedUntil = furthest;
-  }
-
-  return inStay;
-};
-
-/** Radius pemberhentian untuk satu jenis aktivitas (lihat catatan di atas). */
-export const getDoctorStopRadiusMeters = (movementMinKmh: number) =>
-  Math.max(
-    DOCTOR_STOP_RADIUS_FLOOR_METERS,
-    (movementMinKmh / 3.6) * DOCTOR_STOP_MIN_SECONDS,
-  );
 
 /**
  * Seberapa jauh moving time hasil hitung ulang boleh menyimpang dari D1 sebelum
@@ -377,55 +269,7 @@ export type DoctorSegments = {
 export const buildDoctorSegments = (
   points: DoctorStatPoint[],
   activityType: string,
-): DoctorSegments => {
-  const limits = getDoctorSpeedLimits(activityType);
-  const count = Math.max(0, points.length - 1);
-
-  const distanceM = new Array<number>(count).fill(0);
-  const seconds = new Array<number>(count).fill(0);
-  const gapSeconds = new Array<number>(count).fill(0);
-  const cumTime = new Array<number>(count + 1).fill(0);
-
-  for (let i = 1; i < points.length; i++) {
-    const k = i - 1;
-    const prev = points[i - 1];
-    const point = points[i];
-
-    distanceM[k] = getDistanceMeters(prev, point);
-
-    const prevMs = prev.time ? Date.parse(prev.time) : 0;
-    const pointMs = point.time ? Date.parse(point.time) : 0;
-
-    // Selisih waktu NYATA, bukan hasil pembulatan. Ini yang dulu hilang.
-    const exactSeconds =
-      Number.isFinite(prevMs) && Number.isFinite(pointMs) ? (pointMs - prevMs) / 1000 : 0;
-    seconds[k] = exactSeconds > 0 ? exactSeconds : 0;
-
-    // Nilai bulat tetap ada karena ambang anomali didefinisikan dalam detik utuh.
-    gapSeconds[k] = Math.floor(seconds[k]);
-    cumTime[k + 1] = cumTime[k] + seconds[k];
-  }
-
-  const inStay = classifyDoctorPointStays(
-    points,
-    cumTime,
-    getDoctorStopRadiusMeters(limits.movement_min_kmh),
-  );
-
-  const kind: DoctorSegmentKind[] = new Array<DoctorSegmentKind>(count).fill("moving");
-
-  for (let k = 0; k < count; k++) {
-    // Urutan ini penting: lompatan GPS mengalahkan segalanya, lalu pemberhentian,
-    // sisanya baru dianggap bergerak.
-    if (distanceM[k] >= DOCTOR_EXTREME_JUMP_METERS && (!gapSeconds[k] || gapSeconds[k] < DOCTOR_LONG_GAP_SECONDS)) {
-      kind[k] = "jump";
-    } else if (inStay[k] && inStay[k + 1]) {
-      kind[k] = "stopped";
-    }
-  }
-
-  return { count, distanceM, seconds, gapSeconds, cumTime, kind, inStay };
-};
+): DoctorSegments => buildDoctorSegmentsImpl(points, activityType);
 
 export type DoctorRestBlock = {
   type: string;
