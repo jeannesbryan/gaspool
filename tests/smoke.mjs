@@ -519,6 +519,218 @@ const main = async () => {
     );
   }
 
+  // --- B17: Finish Review shows SEBELUM -> SESUDAH -------------------------
+  // Keputusan "simpan apa adanya" atau "perbaiki dulu" dulu diambil tanpa
+  // angka: modal hanya menampilkan statistik live dan daftar perubahan berupa
+  // teks. Sekarang perbandingannya harus ada di halaman, tepat di atas tombol.
+  const trackerPage = await get("/record?type=ride", {
+    headers: { cookie: `gaspool_session=${token}` },
+  });
+  const trackerHtml = trackerPage.text;
+
+  check(
+    "B17 finish review renders a Sebelum -> Sesudah section",
+    trackerHtml.includes("Sebelum → Sesudah") && trackerHtml.includes('id="finish-diff"'),
+    "the finish review modal has no before/after section",
+  );
+  check(
+    "B17 the comparison is rendered before the save buttons",
+    trackerHtml.indexOf('id="finish-diff"') > 0 &&
+      trackerHtml.indexOf('id="finish-diff"') < trackerHtml.indexOf('id="finish-save-btn"'),
+    "the comparison must sit above SAVE FINAL / AUTO REPAIR & SAVE",
+  );
+  for (const label of ["Jarak", "Moving Time", "Average Speed", "Max Speed"]) {
+    check(
+      `B17 the comparison covers ${label}`,
+      trackerHtml.includes(`label: '${label}'`),
+      `missing row for ${label}`,
+    );
+  }
+  check(
+    "B17 renderFinishDiff is wired into the modal renderer",
+    trackerHtml.includes("function renderFinishDiff(doctor)") &&
+      trackerHtml.includes("renderFinishDiff(doctor);"),
+    "renderFinishDiff exists but is never called",
+  );
+  check(
+    "B17 an unchanged repair is reported honestly",
+    trackerHtml.includes("Tidak ada angka yang berubah"),
+    "the modal must say so when the repair changes nothing",
+  );
+
+  // --- B18: max_speed is actually sent with the activity -------------------
+  // Before this, the finish payload had no max_speed key at all, so every saved
+  // ride landed in D1 and R2 with max_speed 0 while the modal was showing a
+  // real number.
+  check(
+    "B18 the finish payload carries max_speed",
+    /max_speed:\s*Number\(Number\(doctor\.currentStats\.max_speed/.test(trackerHtml),
+    "state.base has no max_speed, so saved activities lose it again",
+  );
+  check(
+    "B18 stats_after records the repair proposal, not the live stats",
+    trackerHtml.includes("stats_after: doctor.repairedStats") &&
+      !trackerHtml.includes("stats_after: repaired ? doctor.repairedStats"),
+    "stats_after must always describe the proposal; auto_repair_applied says if it was used",
+  );
+
+  // --- B19: the login form can reveal the password -------------------------
+  const loginPage = await get("/login");
+  check(
+    "B19 login has a password field with an id for the toggle",
+    loginPage.text.includes('id="login-password"') && loginPage.text.includes('type="password"'),
+    "password input is not addressable by the toggle",
+  );
+  check(
+    "B19 login has a show/hide button",
+    loginPage.text.includes('id="password-toggle"') &&
+      loginPage.text.includes("Tampilkan kata sandi"),
+    "no toggle button next to the password field",
+  );
+  check(
+    "B19 the toggle switches the input type",
+    loginPage.text.includes("input.setAttribute('type', show ? 'text' : 'password')"),
+    "the toggle exists but does not change the input type",
+  );
+  check(
+    "B19 the toggle is a real button, not a submit",
+    /<button type="button" class="password-toggle"/.test(loginPage.text),
+    "a submit button here would send the form",
+  );
+
+  // --- B20: siaran solo benar-benar mengirim posisi ------------------------
+  // Bug yang pernah lolos: gate siaran sudah memakai liveRoom, tapi payload
+  // /radar_sync masih mengirim roomID. Di gowes solo roomID = "SINGLE_MODE" dan
+  // server menolak room itu, sehingga tidak ada satu pun posisi yang tersimpan
+  // dan penonton cuma melihat peta kosong. Test lama tidak menangkapnya karena
+  // tidak ada yang memeriksa isi payload.
+  check(
+    "B20 solo broadcast posts to the live room, not to roomID",
+    trackerHtml.includes("room: liveRoom, user: userName, lat: lastP.lat"),
+    "payload /radar_sync must carry liveRoom; roomID is 'SINGLE_MODE' in solo mode and is rejected by the server",
+  );
+  check(
+    "B20 the broadcast still only runs while a live room is active",
+    trackerHtml.includes("radarTick >= threshold && liveRoom && path.length > 0"),
+    "radar must stay silent until the rider presses BAGIKAN LIVE",
+  );
+
+  // Endpoint yang benar-benar menerima room itu, diuji terhadap Worker.
+  const readJson = (result) => {
+    try {
+      return JSON.parse(result.text);
+    } catch (err) {
+      return {};
+    }
+  };
+
+  // Nama sengaja tanpa spasi: sanitizeRadioUser membuang karakter di luar
+  // [A-Za-z0-9_-], jadi "Smoke Rider" tersimpan sebagai "SmokeRider" dan
+  // perbandingan yang memakai spasi akan gagal karena alasan yang salah.
+  const soloUser = "SmokeRider";
+  const soloStart = readJson(await postJson("/api/live_start", { user: soloUser }));
+  const soloToken = String(soloStart.token || "");
+  check("B20 live_start returns a token used as the radar room", Boolean(soloToken));
+
+  if (soloToken) {
+    // roomID gowes solo: server harus menolaknya (inilah sebab peta kosong dulu).
+    const rejected = readJson(
+      await postJson("/api/radar_sync", {
+        room: "SINGLE_MODE",
+        user: soloUser,
+        lat: -7.25,
+        lng: 112.76,
+        speed: 18,
+      }),
+    );
+    check(
+      "B20 SINGLE_MODE is refused, so roomID can never be the broadcast room",
+      Array.isArray(rejected.participants) && rejected.participants.length === 0,
+      "SINGLE_MODE should never store a position",
+    );
+
+    await postJson("/api/radar_sync", {
+      room: soloToken,
+      user: soloUser,
+      lat: -7.25,
+      lng: 112.76,
+      speed: 21,
+    });
+    const soloView = readJson(await get("/api/radar_view/" + soloToken));
+    const soloParticipants = Array.isArray(soloView.participants) ? soloView.participants : [];
+    check(
+      "B20 a solo broadcast does reach the viewer endpoint",
+      soloParticipants.length === 1 && soloParticipants[0].user === soloUser,
+      "radar_view returned no participant for a freshly synced solo ride",
+    );
+    check(
+      "B20 the viewer page is told this is a live share",
+      Boolean(soloView.live) && soloView.live.user === soloUser,
+      "live session marker is missing on the viewer endpoint",
+    );
+  }
+
+  // --- B21: halaman penonton menampilkan dua titik -------------------------
+  const radarPage = await get("/radar/" + (soloToken || "SMOKEROOM"));
+  const radarHtml = radarPage.text;
+
+  check(
+    "B21 the viewer page draws its own position",
+    radarHtml.includes("fillColor: '#2ecc71'") &&
+      radarHtml.includes("map.on('locationfound'"),
+    "no green marker for the viewer",
+  );
+  check(
+    "B21 the rider marker is red, not the old orange",
+    radarHtml.includes("fillColor: '#e74c3c'") && !radarHtml.includes("fillColor: '#FF5F00'"),
+    "rider trail and marker must share one colour so the legend is truthful",
+  );
+  check(
+    "B21 the viewer position follows movement instead of a single fix",
+    radarHtml.includes("watch: true"),
+    "locate() must watch; one-shot locate leaves the viewer dot frozen",
+  );
+  check(
+    "B21 the legend explains the colours",
+    radarHtml.includes('id="legend"') &&
+      radarHtml.includes("dot-rider") &&
+      radarHtml.includes("dot-me"),
+    "without a legend the two dots are ambiguous",
+  );
+  check(
+    "B21 the viewer position is never uploaded",
+    !/radar_sync[\s\S]{0,200}viewerMarker/.test(radarHtml),
+    "the viewer's own coordinates must stay on their device",
+  );
+  check(
+    "B21 an empty map explains itself",
+    radarHtml.includes("Belum ada posisi terkirim"),
+    "an empty map with no message is exactly the confusion this fixes",
+  );
+  check(
+    "B21 denied geolocation says so instead of failing silently",
+    radarHtml.includes("Izin lokasi ditolak browser"),
+    "permission errors must be visible to the viewer",
+  );
+
+  // --- B22: kartu milestone transparan ------------------------------------
+  const cardPage = await get("/", { headers: { cookie: `gaspool_session=${token}` } });
+  check(
+    "B22 the milestone card is rendered with a transparent background",
+    /\.share-card \{[^}]*background: transparent/.test(cardPage.text),
+    "a solid background would cover the photo it is meant to sit on",
+  );
+  check(
+    "B22 html2canvas is told not to paint a background",
+    /backgroundColor: null,\s*\n\s*scale: 2/.test(cardPage.text),
+    "backgroundColor '#12162b' produces an opaque rectangle",
+  );
+  check(
+    "B22 the card text stays readable over a photo",
+    cardPage.text.includes("text-shadow") && cardPage.text.includes(".share-cell-value"),
+    "numbers need a shadow or they vanish on bright photos",
+  );
+
   // --- B6: delete_ride id validation -------------------------------------
   const badDelete = await get("/api/delete_ride/abc", {
     method: "DELETE",

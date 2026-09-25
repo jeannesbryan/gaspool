@@ -88,6 +88,31 @@ auth.get("/login", (c) => {
             }
             .btn:active { transform: scale(0.98); }
             .turnstile-box { margin-bottom: 20px; display: flex; justify-content: center; }
+            /* Pembungkus password: input dan tombol mata berbagi satu baris. */
+            .password-wrap { position: relative; display: block; }
+            .password-wrap input { padding-right: 54px; }
+            .password-toggle {
+                position: absolute;
+                top: 50%;
+                right: 8px;
+                transform: translateY(-50%);
+                /* 44px: sama dengan standar sasaran sentuh tombol tracker. */
+                width: 44px;
+                height: 44px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                padding: 0;
+                border: 0;
+                border-radius: 10px;
+                background: transparent;
+                color: var(--primary);
+                cursor: pointer;
+                line-height: 1;
+            }
+            .password-toggle:hover { background: rgba(255,95,0,0.12); }
+            .password-toggle:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+            .password-toggle svg { width: 22px; height: 22px; display: block; }
         </style>
     </head>
     <body>
@@ -100,7 +125,14 @@ auth.get("/login", (c) => {
                 </div>
                 <div class="form-group">
                     <label>KATA SANDI</label>
-                    <input type="password" name="password" required>
+                    <span class="password-wrap">
+                        <input type="password" name="password" id="login-password" required autocomplete="current-password">
+                        <button type="button" class="password-toggle" id="password-toggle"
+                                aria-controls="login-password" aria-pressed="false"
+                                aria-label="Tampilkan kata sandi" title="Tampilkan kata sandi">
+                            <span id="password-toggle-icon" aria-hidden="true"></span>
+                        </button>
+                    </span>
                 </div>
                 
                 <div class="turnstile-box">
@@ -110,6 +142,39 @@ auth.get("/login", (c) => {
                 <button type="submit" class="btn">MASUK MARKAS</button>
             </form>
         </div>
+        <script>
+            // Tombol mata: menampilkan / menyembunyikan kata sandi.
+            // Ikon digambar lewat SVG inline supaya tidak perlu berkas tambahan,
+            // dan aria-pressed diubah supaya pembaca layar ikut tahu keadaannya.
+            (function () {
+                var input = document.getElementById('login-password');
+                var toggle = document.getElementById('password-toggle');
+                var icon = document.getElementById('password-toggle-icon');
+                if (!input || !toggle || !icon) return;
+
+                var EYE_OPEN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg>';
+                var EYE_OFF = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a19.8 19.8 0 0 1 5.06-5.94"/><path d="M9.9 4.24A10.94 10.94 0 0 1 12 4c7 0 11 8 11 8a19.9 19.9 0 0 1-3.17 4.19"/><path d="M9.88 9.88A3 3 0 0 0 12 15a3 3 0 0 0 2.12-.88"/><line x1="1" y1="1" x2="23" y2="23"/></svg>';
+
+                function render(visible) {
+                    icon.innerHTML = visible ? EYE_OFF : EYE_OPEN;
+                    toggle.setAttribute('aria-pressed', visible ? 'true' : 'false');
+                    var label = visible ? 'Sembunyikan kata sandi' : 'Tampilkan kata sandi';
+                    toggle.setAttribute('aria-label', label);
+                    toggle.setAttribute('title', label);
+                }
+
+                render(false);
+
+                toggle.addEventListener('click', function () {
+                    var show = input.type === 'password';
+                    // Fokus tetap di kolom sandi sesudah diklik supaya kursor
+                    // tidak melompat ke mana-mana saat sedang mengetik.
+                    input.setAttribute('type', show ? 'text' : 'password');
+                    render(show);
+                    input.focus();
+                });
+            })();
+        </script>
     </body>
     </html>
   `);

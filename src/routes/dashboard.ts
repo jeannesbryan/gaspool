@@ -112,17 +112,26 @@ dashboard.get("/", async (c) => {
           /* Kartu yang dirender jadi PNG. Disimpan di luar layar supaya bisa
               digambar html2canvas tanpa terlihat mengganggu. */
           .share-stage { position: fixed; left: -10000px; top: 0; pointer-events: none; }
-          .share-card { width: 644px; background: #12162b; padding: 22px; border-radius: 22px; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; }
+          /* Kartu dibagikan sebagai PNG TRANSPARAN supaya bisa ditempel di atas
+             foto sebelum diunggah ke media sosial. Karena itu latar kartunya
+             dibuat tembus pandang, dan supaya angkanya tetap terbaca di atas
+             foto apa pun (langit terang, aspal gelap) setiap teks diberi
+             bayangan tipis. Tanpa bayangan, angka oranye akan lenyap di foto
+             yang terang. */
+          .share-card { width: 644px; background: transparent; padding: 22px; border-radius: 22px; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; }
           .share-card-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 18px; }
-          .share-card-brand { font-size: 15px; font-weight: 900; letter-spacing: 4px; color: #ff5f00; }
-          .share-card-tag { font-size: 11px; font-weight: 900; letter-spacing: 2px; color: #94a3b8; text-transform: uppercase; }
+          .share-card-brand { font-size: 15px; font-weight: 900; letter-spacing: 4px; color: #ff5f00; text-shadow: 0 2px 8px rgba(0,0,0,0.85); }
+          .share-card-tag { font-size: 11px; font-weight: 900; letter-spacing: 2px; color: #cbd5e1; text-transform: uppercase; text-shadow: 0 2px 8px rgba(0,0,0,0.85); }
           .share-card-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
-          .share-cell { position: relative; overflow: hidden; background: #1b2038; border: 1px solid rgba(255,255,255,0.07); border-radius: 16px; padding: 18px 14px; text-align: center; }
+          /* Sel tetap punya latar tipis: kartu yang seluruhnya tembus pandang
+             akan menyulitkan angka dibaca di atas foto yang ramai. Kepekatan
+             0.55 membuat foto masih terlihat, tapi angkanya tetap menonjol. */
+          .share-cell { position: relative; overflow: hidden; background: rgba(8,12,26,0.55); border: 1px solid rgba(255,255,255,0.22); border-radius: 16px; padding: 18px 14px; text-align: center; }
           .share-cell::after { content: ''; position: absolute; top: 0; left: 0; width: 4px; height: 100%; background: #ff5f00; }
-          .share-cell-label { font-size: 10px; font-weight: 900; letter-spacing: 2px; color: #94a3b8; text-transform: uppercase; }
-          .share-cell-value { font-size: 34px; font-weight: 900; font-style: italic; color: #ff5f00; margin: 6px 0; }
-          .share-cell-unit { font-size: 10px; font-weight: 900; letter-spacing: 2px; color: #94a3b8; text-transform: uppercase; }
-          .share-card-foot { display: flex; justify-content: space-between; margin-top: 16px; font-size: 10px; font-weight: 800; letter-spacing: 1.5px; color: #64748b; text-transform: uppercase; }
+          .share-cell-label { font-size: 10px; font-weight: 900; letter-spacing: 2px; color: #dbe3ee; text-transform: uppercase; text-shadow: 0 1px 6px rgba(0,0,0,0.9); }
+          .share-cell-value { font-size: 34px; font-weight: 900; font-style: italic; color: #ff7a2f; margin: 6px 0; text-shadow: 0 2px 10px rgba(0,0,0,0.95); }
+          .share-cell-unit { font-size: 10px; font-weight: 900; letter-spacing: 2px; color: #dbe3ee; text-transform: uppercase; text-shadow: 0 1px 6px rgba(0,0,0,0.9); }
+          .share-card-foot { display: flex; justify-content: space-between; margin-top: 16px; font-size: 10px; font-weight: 800; letter-spacing: 1.5px; color: #dbe3ee; text-transform: uppercase; text-shadow: 0 1px 6px rgba(0,0,0,0.9); }
 
           .best-section { margin-bottom: 25px; }
           .section-title { color: #fff; font-size: 0.85rem; font-weight: 950; letter-spacing: 1px; text-transform: uppercase; margin: 0 0 12px 0; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
@@ -1245,7 +1254,10 @@ function escapeHTML(str) {
             try {
               fillShareCard();
               const canvas = await html2canvas(target, {
-                backgroundColor: '#12162b',
+                // null = tidak mengisi latar, sehingga PNG-nya benar-benar
+                // transparan dan bisa ditempel di atas foto. Kalau diisi warna,
+                // hasilnya kotak berwarna yang menutupi foto di belakangnya.
+                backgroundColor: null,
                 scale: 2,
                 useCORS: true,
                 scrollX: 0,

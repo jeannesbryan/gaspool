@@ -152,6 +152,27 @@ tracker.get("/record", async (c) => {
             .finish-row.warning { border-left-color:#f1c40f; }
             .finish-row.danger { border-left-color:#e74c3c; }
             .finish-row.info { border-left-color:#3498db; }
+            /* Tabel SEBELUM -> SESUDAH. Tujuannya supaya keputusan "simpan apa
+               adanya" atau "perbaiki dulu" diambil dengan angka di depan mata,
+               bukan tebak-tebakan. */
+            .finish-diff { display:grid; gap:7px; }
+            .finish-diff-head,
+            .finish-diff-row { display:grid; grid-template-columns: 1.15fr 1fr 1fr; gap:6px; align-items:center; }
+            .finish-diff-head { color:#94a3b8; font-size:8px; font-weight:950; letter-spacing:0.9px; text-transform:uppercase; padding:0 2px 2px; }
+            .finish-diff-head span:nth-child(2),
+            .finish-diff-head span:nth-child(3) { text-align:right; }
+            .finish-diff-row { padding:9px; border-radius:12px; background:rgba(0,0,0,0.26); border-left:3px solid rgba(255,255,255,0.16); }
+            .finish-diff-row.changed { border-left-color: var(--primary); background: rgba(255,95,0,0.09); }
+            .finish-diff-row.same { opacity: 0.72; }
+            .finish-diff-name { color:#dce3ee; font-size:9px; font-weight:950; letter-spacing:0.6px; text-transform:uppercase; }
+            .finish-diff-from { color:#94a3b8; font-size:11px; font-weight:900; text-align:right; text-decoration: line-through; text-decoration-color: rgba(148,163,184,0.55); }
+            .finish-diff-row.same .finish-diff-from { text-decoration:none; color:#cbd5e1; }
+            .finish-diff-to { color:#fff; font-size:11px; font-weight:950; text-align:right; }
+            .finish-diff-row.changed .finish-diff-to { color: var(--primary); }
+            .finish-diff-delta { color:#94a3b8; font-size:8px; font-weight:900; text-align:right; margin-top:2px; }
+            .finish-diff-row.changed .finish-diff-delta { color:#f1c40f; }
+            .finish-diff-note { margin-top:8px; color:#94a3b8; font-size:9px; font-weight:850; line-height:1.45; }
+            .finish-diff-note b { color:#dce3ee; }
             .finish-actions { display:grid; gap:10px; margin-top: 14px; }
             .finish-actions .btn { font-size: 11px; padding: 15px; }
             .finish-small-actions { display:grid; grid-template-columns: 1fr 1fr; gap:10px; }
@@ -260,6 +281,11 @@ tracker.get("/record", async (c) => {
                 <div class="finish-section">
                     <div class="finish-section-title"><span>Auto Repair Plan</span><span id="finish-repair-status" class="doctor-pill warn">OPTIONAL</span></div>
                     <div id="finish-changes" class="finish-list"></div>
+                </div>
+                <div class="finish-section">
+                    <div class="finish-section-title"><span>Sebelum → Sesudah</span><span id="finish-diff-status" class="doctor-pill">-</span></div>
+                    <div id="finish-diff" class="finish-diff"></div>
+                    <div id="finish-diff-note" class="finish-diff-note"></div>
                 </div>
                 <div class="finish-actions">
                     <button id="finish-save-btn" class="btn btn-finish-save" onclick="saveFinishReview(false)">SAVE FINAL</button>
@@ -3414,12 +3440,19 @@ if (!gpsStatus) return;
 					
 					// liveRoom kosong berarti tidak ada yang dibagikan: gowes solo
 					// sebelum kapten menekan BAGIKAN LIVE, atau setelah dihentikan.
+					//
+					// Yang dikirim ke server adalah liveRoom, BUKAN roomID. Di gowes
+					// solo roomID bernilai tetap "SINGLE_MODE" dan server menolak
+					// room itu, jadi mengirim roomID berarti posisi tidak pernah
+					// tersimpan dan penonton hanya melihat peta kosong. Di mode
+					// Peleton keduanya sama, sehingga satu nilai ini berlaku untuk
+					// kedua mode.
 					if(radarTick >= threshold && liveRoom && path.length > 0) {
 						radarTick = 0;
 						const lastP = path[path.length-1];
 						fetch('/api/radar_sync', {
 							method: 'POST',
-							body: JSON.stringify({ room: roomID, user: userName, lat: lastP.lat, lng: lastP.lng, speed: lastP.speed || 0 })
+							body: JSON.stringify({ room: liveRoom, user: userName, lat: lastP.lat, lng: lastP.lng, speed: lastP.speed || 0 })
 						}).then(r => r.json()).then(res => { 
 							if(res.participants) syncRadar(res.participants, res.radios); 
 							if(!isCap && res.peleton_route && Number(res.peleton_route.version || 0) !== peletonRouteVersion) {
@@ -3738,6 +3771,117 @@ if (!gpsStatus) return;
 				}).join('');
 			}
 
+			// Jam ringkas untuk tabel perbandingan: 1:09:05, bukan "1 jam 9 menit".
+			// Detik ikut ditampilkan karena justru detik yang dipertanyakan
+			// ketika moving time live dan hasil hitung ulang berbeda.
+			function formatDiffClock(seconds) {
+				const total = Math.max(0, Math.floor(Number(seconds || 0)));
+				const hours = Math.floor(total / 3600);
+				const minutes = Math.floor((total % 3600) / 60);
+				const secs = total % 60;
+				return hours + ':' + String(minutes).padStart(2, '0') + ':' + String(secs).padStart(2, '0');
+			}
+
+			// Tabel SEBELUM -> SESUDAH. Semua angka yang dipakai tombol
+			// "AUTO REPAIR & SAVE" ditampilkan lebih dulu, supaya keputusan
+			// diambil dengan angka, bukan tebakan. Baris yang tidak berubah
+			// tetap ditampilkan (redup) — kalau disembunyikan, orang akan
+			// mengira angkanya tidak pernah diperiksa.
+			function renderFinishDiff(doctor) {
+				const box = document.getElementById('finish-diff');
+				if (!box) return;
+				const before = doctor.currentStats || {};
+				const after = doctor.repairedStats || {};
+
+				const rows = [
+					{
+						label: 'Jarak',
+						before: Number(before.distance_km || 0).toFixed(3) + ' km',
+						after: Number(after.distance_km || 0).toFixed(3) + ' km',
+						delta: (Number(after.distance_km || 0) - Number(before.distance_km || 0)).toFixed(3) + ' km'
+					},
+					{
+						label: 'Moving Time',
+						before: formatDiffClock(before.moving_time),
+						after: formatDiffClock(after.moving_time),
+						delta: (Number(after.moving_time || 0) - Number(before.moving_time || 0)) + ' detik'
+					},
+					{
+						label: 'Average Speed',
+						before: Number(before.avg_speed || 0).toFixed(2) + ' km/h',
+						after: Number(after.avg_speed || 0).toFixed(2) + ' km/h',
+						delta: (Number(after.avg_speed || 0) - Number(before.avg_speed || 0)).toFixed(2) + ' km/h'
+					},
+					{
+						label: 'Max Speed',
+						before: Number(before.max_speed || 0).toFixed(2) + ' km/h',
+						after: Number(after.max_speed || 0).toFixed(2) + ' km/h',
+						delta: (Number(after.max_speed || 0) - Number(before.max_speed || 0)).toFixed(2) + ' km/h'
+					}
+				];
+
+				let changed = 0;
+				// Dibandingkan lewat teks yang benar-benar tampil, bukan lewat
+				// angka mentah, supaya selisih yang tidak terlihat mata tidak
+				// ikut menyalakan tanda "berubah".
+				const body = rows.map(function(row) {
+					const isChanged = row.before !== row.after;
+					if (isChanged) changed++;
+					const deltaText = isChanged
+						? '<div class="finish-diff-delta">' + escapeFinishHTML(row.delta) + '</div>'
+						: '';
+					return '<div class="finish-diff-row ' + (isChanged ? 'changed' : 'same') + '">' +
+						'<div class="finish-diff-name">' + escapeFinishHTML(row.label) + '</div>' +
+						'<div class="finish-diff-from">' + escapeFinishHTML(row.before) + '</div>' +
+						'<div><div class="finish-diff-to">' + escapeFinishHTML(row.after) + '</div>' + deltaText + '</div>' +
+					'</div>';
+				}).join('');
+
+				box.innerHTML =
+					'<div class="finish-diff-head"><span>Aspek</span><span>Live</span><span>Setelah diperbaiki</span></div>' +
+					body;
+
+				const movingRow = rows[1];
+				const movingUntouched = movingRow.before === movingRow.after;
+				const applicable = Boolean(doctor.canAutoRepair);
+				const parts = [];
+
+				if (!applicable) {
+					// Jangan pernah bilang "akan berubah" untuk usulan yang tidak
+					// bisa diterapkan: tombolnya memang akan menyimpan angka live.
+					// Kolom kanan tetap ditampilkan, tetapi sebagai informasi saja.
+					parts.push('Perbaikan otomatis tidak tersedia untuk aktivitas ini, jadi tombol apa pun akan menyimpan angka live (kolom kiri).');
+					if (changed > 0) {
+						parts.push('Kolom kanan hanya usulan Activity Doctor, bukan yang akan tersimpan.');
+					}
+				} else if (changed > 0) {
+					parts.push('<b>' + changed + '</b> dari ' + rows.length + ' angka akan berubah kalau kamu pilih AUTO REPAIR & SAVE.');
+				} else {
+					parts.push('Tidak ada angka yang berubah. SAVE FINAL dan AUTO REPAIR & SAVE akan menghasilkan statistik yang sama.');
+				}
+
+				if (movingUntouched) {
+					parts.push('Moving Time belum dihitung ulang oleh perbaikan ini — nilainya masih jam live yang berjalan di layar.');
+				}
+
+				const note = document.getElementById('finish-diff-note');
+				if (note) note.innerHTML = parts.join(' ');
+
+				const pill = document.getElementById('finish-diff-status');
+				if (pill) {
+					if (!applicable) {
+						pill.className = 'doctor-pill warn';
+						pill.innerText = 'USULAN SAJA';
+					} else if (changed > 0) {
+						pill.className = 'doctor-pill warn';
+						pill.innerText = changed + ' BERUBAH';
+					} else {
+						pill.className = 'doctor-pill';
+						pill.innerText = 'TIDAK BERUBAH';
+					}
+				}
+			}
+
 			function renderFinishReview(state) {
 				const doctor = state.doctor;
 				const finalRest = state.base.rest_blocks || [];
@@ -3777,6 +3921,7 @@ if (!gpsStatus) return;
 
 				renderFinishRows('finish-issues', doctor.issues, 'Tidak ada masalah besar.');
 				renderFinishRows('finish-changes', doctor.changes.map(function(change) { return { severity: 'info', message: change }; }), 'Tidak perlu auto repair.');
+				renderFinishDiff(doctor);
 				setFinishReviewButtons(false);
 			}
 
@@ -3852,6 +3997,11 @@ if (!gpsStatus) return;
 						name: '${type.toUpperCase()} ' + formatDateWithTimezoneOffset(startT, finalTimeContext.start_timezone_offset_min),
 						distance: Number(dist || 0),
 						duration: dur,
+						// Max speed dari titik yang benar-benar disimpan. Sebelum
+						// ini nilainya tidak pernah ikut dikirim, sehingga setiap
+						// aktivitas tersimpan punya max_speed 0 di D1 dan di R2,
+						// padahal Finish Review sudah menghitungnya.
+						max_speed: Number(Number(doctor.currentStats.max_speed || 0).toFixed(2)),
 						activity_type: '${type}',
 						start_date: finalTimeContext.start_date,
 						finish_date: finalTimeContext.finish_date,
@@ -3905,8 +4055,14 @@ if (!gpsStatus) return;
 						};
 					}),
 					changes: doctor.changes.slice(0, 30),
+					// Kontrak yang jelas: stats_before = angka live, stats_after =
+					// USULAN perbaikan. Dulu stats_after diisi angka live ketika
+					// tombol "SAVE FINAL" yang dipilih, sehingga catatan aktivitas
+					// selalu tampak "tidak ada yang berubah" dan usulan perbaikan
+					// yang ditolak hilang tanpa jejak. Apakah usulan itu dipakai
+					// dijawab oleh auto_repair_applied.
 					stats_before: doctor.currentStats,
-					stats_after: repaired ? doctor.repairedStats : doctor.currentStats
+					stats_after: doctor.repairedStats
 				};
 
 				const CHUNK_SIZE = 500;
@@ -4361,7 +4517,21 @@ tracker.get("/radar/:room", async (c) => {
             .status-dot { display: inline-block; width: 8px; height: 8px; background: #2ecc71; border-radius: 50%; margin-right: 5px; box-shadow: 0 0 10px #2ecc71; animation: pulse 2s infinite; }
             @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.4; } 100% { opacity: 1; } }
             .peleton-label { background: rgba(142, 68, 173, 0.9); color: white; padding: 4px 10px; border-radius: 8px; font-size: 12px; font-weight: bold; border: 1px solid #fff; white-space: nowrap; box-shadow: 0 4px 10px rgba(0,0,0,0.5); }
+            /* Warna label mengikuti warna titiknya, supaya legenda di atas
+               benar-benar cocok dengan yang terlihat di peta. Label ungu lama
+               membuat titik merah terbaca seperti milik orang lain. */
+            .label-rider { background: rgba(231, 76, 60, 0.94) !important; }
+            .label-me { background: rgba(46, 204, 113, 0.94) !important; color: #06170d !important; }
             .btn-share { position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); z-index: 1000; background: #25D366; color: white; border: none; padding: 12px 25px; border-radius: 12px; font-weight: bold; font-size: 12px; cursor: pointer; box-shadow: 0 5px 15px rgba(0,0,0,0.5); text-decoration: none;}
+            /* Keterangan warna titik. Tanpa ini penonton tidak tahu titik mana
+               dirinya dan titik mana pesepeda yang dipantau. */
+            .legend { position: absolute; top: 108px; left: 50%; transform: translateX(-50%); z-index: 1000; display: flex; gap: 14px; align-items: center; background: rgba(10,10,18,0.85); backdrop-filter: blur(10px); padding: 8px 14px; border-radius: 14px; border: 1px solid rgba(255,255,255,0.12); font-size: 11px; font-weight: 800; letter-spacing: 0.4px; white-space: nowrap; }
+            .legend .lg { display: flex; align-items: center; gap: 6px; color: #cbd5e1; }
+            .legend i.dot { width: 11px; height: 11px; border-radius: 50%; display: inline-block; border: 2px solid #fff; }
+            .dot-rider { background: #e74c3c; }
+            .dot-me { background: #2ecc71; }
+            #legend-distance { color: #f1c40f; }
+            .radar-note { position: absolute; bottom: 92px; left: 50%; transform: translateX(-50%); z-index: 1000; background: rgba(10,10,18,0.92); border: 1px solid rgba(241,196,15,0.45); color: #f1c40f; font-size: 11px; font-weight: 800; line-height: 1.45; padding: 9px 14px; border-radius: 12px; max-width: 320px; text-align: center; display: none; }
         </style>
     </head>
     <body>
@@ -4370,21 +4540,98 @@ tracker.get("/radar/:room", async (c) => {
             <div class="subtitle"><span class="status-dot"></span>${subline}</div>
         </div>
         <div id="map"></div>
+        <div class="legend" id="legend">
+            <span class="lg"><i class="dot dot-rider"></i><span id="legend-rider">PESEPEDA</span></span>
+            <span class="lg"><i class="dot dot-me"></i>KAMU</span>
+            <span class="lg" id="legend-distance"></span>
+        </div>
+        <div class="radar-note" id="radar-note"></div>
         <button class="btn-share" onclick="shareWa()">💬 BAGIKAN KE KELUARGA</button>
 
         <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
         <script>
             const map = L.map('map', { zoomControl: false }).setView([-7.25, 112.76], 13);
+
+            // Nama pesepeda untuk legenda. Dikirim sebagai literal JSON karena
+            // variabel server tidak ada di browser.
+            const riderName = ${JSON.stringify(liveSession && liveSession.user ? liveSession.user : "")};
+            (function () {
+                const el = document.getElementById('legend-rider');
+                if (el && riderName) el.textContent = 'GOWES ' + String(riderName).toUpperCase();
+            })();
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 maxZoom: 19,
                 attribution: '&copy; OpenStreetMap contributors'
             }).addTo(map);
             
             // ==============================================================
-            // TAMBAHAN: AUTO-CENTER PENONTON SAAT PERTAMA KALI DIBUKA
+            // POSISI PENONTON SENDIRI (titik hijau)
             // ==============================================================
-            map.locate({setView: true, maxZoom: 14});
-            
+            // watch:true membuat browser terus memperbarui posisi, jadi titik
+            // ini ikut bergeser saat penonton berpindah, bukan hanya sekali
+            // saat halaman dibuka.
+            //
+            // Posisi penonton TIDAK dikirim ke server mana pun. Titik hijau ini
+            // hanya digambar di layar orang yang membukanya sendiri, supaya
+            // pembagian lokasi tetap satu arah: yang dibagikan hanya posisi
+            // pesepeda, bukan posisi siapa pun yang menonton.
+            let viewerPos = null;
+            let viewerMarker = null;
+            let viewerAccuracy = 0;
+
+            const noteBox = document.getElementById('radar-note');
+            // Dua hal bisa membuat layar tampak "kosong": posisi pesepeda belum
+            // sampai, atau izin lokasi penonton ditolak. Dulu keduanya diam saja
+            // sehingga penonton mengira aplikasinya rusak. Sekarang masing-masing
+            // punya kalimatnya sendiri.
+            let viewerBlocked = false;
+            let waitingNotice = '';
+
+            function radarNote(message) {
+                if (!noteBox) return;
+                if (!message) { noteBox.style.display = 'none'; noteBox.textContent = ''; return; }
+                noteBox.textContent = message;
+                noteBox.style.display = 'block';
+            }
+
+            function refreshNote() {
+                if (viewerBlocked) {
+                    radarNote(viewerBlocked + ' Titik merah pesepeda tetap diperbarui.');
+                } else if (waitingNotice) {
+                    radarNote(waitingNotice);
+                } else {
+                    radarNote('');
+                }
+            }
+
+            map.locate({setView: true, maxZoom: 14, watch: true, enableHighAccuracy: true});
+
+            map.on('locationfound', function(e) {
+                viewerPos = e.latlng;
+                viewerAccuracy = Number(e.accuracy || 0);
+                if (!viewerMarker) {
+                    viewerMarker = L.circleMarker(e.latlng, {
+                        radius: 8, color: '#fff', weight: 2, fillColor: '#2ecc71', fillOpacity: 1
+                    }).addTo(map)
+                      .bindTooltip('KAMU', {permanent: true, className: 'peleton-label label-me', direction: 'top', offset: [0, -10]});
+                } else {
+                    viewerMarker.setLatLng(e.latlng);
+                }
+                viewerBlocked = false;
+                refreshNote();
+                updateLegendDistance();
+            });
+
+            map.on('locationerror', function(e) {
+                // Izin lokasi ditolak atau tidak tersedia. Katakan apa adanya:
+                // tanpa pesan, penonton mengira aplikasinya rusak, padahal
+                // halaman tetap bekerja dan titik pesepeda tetap tampil.
+                viewerBlocked = e && e.code === 1
+                    ? 'Izin lokasi ditolak browser, jadi titik hijau (kamu) tidak ditampilkan.'
+                    : 'Posisi kamu belum bisa dibaca browser, jadi titik hijau (kamu) belum tampil.';
+                refreshNote();
+            });
+
             const markers = {};
             // Garis jejak per peserta, dipisah dari marker supaya posisi bisa
             // diperbarui tanpa menggambar ulang seluruh garis.
@@ -4409,9 +4656,13 @@ tracker.get("/radar/:room", async (c) => {
                             hasUpdate = true;
                             const latlng = [p.lat, p.lng];
                             bounds.extend(latlng);
+                            // Merah = pesepeda yang dipantau, hijau = penonton
+                            // sendiri. Warnanya sengaja dibedakan supaya tidak
+                            // tertukar, dan legenda di bawah judul menjelaskan
+                            // artinya tanpa perlu menebak.
                             if(!markers[p.user]) {
-                                markers[p.user] = L.circleMarker(latlng, {radius: 8, color: '#fff', fillColor: '#FF5F00', fillOpacity: 1}).addTo(map)
-                                    .bindTooltip(p.user + ' (' + Math.round(p.speed) + ' km/h)', {permanent: true, className: 'peleton-label', direction: 'top', offset: [0, -10]}).openTooltip();
+                                markers[p.user] = L.circleMarker(latlng, {radius: 8, color: '#fff', weight: 2, fillColor: '#e74c3c', fillOpacity: 1}).addTo(map)
+                                    .bindTooltip(p.user + ' (' + Math.round(p.speed) + ' km/h)', {permanent: true, className: 'peleton-label label-rider', direction: 'top', offset: [0, -10]}).openTooltip();
                             } else {
                                 markers[p.user].setLatLng(latlng);
                                 markers[p.user].setTooltipContent(p.user + ' (' + Math.round(p.speed) + ' km/h)');
@@ -4430,7 +4681,7 @@ tracker.get("/radar/:room", async (c) => {
                                     if(trails[p.user]) {
                                         trails[p.user].setLatLngs(points);
                                     } else {
-                                        trails[p.user] = L.polyline(points, {color: '#FF5F00', weight: 3, opacity: 0.55}).addTo(map);
+                                        trails[p.user] = L.polyline(points, {color: '#e74c3c', weight: 3, opacity: 0.55}).addTo(map);
                                     }
                                     // Ikut menentukan area peta supaya seluruh
                                     // jejak terlihat, bukan hanya posisi terkini.
@@ -4438,12 +4689,47 @@ tracker.get("/radar/:room", async (c) => {
                                 }
                             }
                         });
-                        // Pusatkan peta dinamis mengikuti sebaran pesepeda
+
+                        // Kalau tidak ada satu pun posisi yang segar, katakan
+                        // sedang menunggu. Peta kosong tanpa penjelasan adalah
+                        // persis pengalaman yang membingungkan: penonton tidak
+                        // tahu apakah tautannya salah atau siarannya mati.
+                        waitingNotice = hasUpdate
+                            ? ''
+                            : 'Belum ada posisi terkirim. Kalau siaran sempat berhenti, minta pesepeda menekan BAGIKAN LIVE lagi — titik merah akan muncul di sini.';
+                        refreshNote();
+
+                        // Pusatkan peta dinamis mengikuti sebaran pesepeda.
+                        //
+                        // Titik penonton ikut diperhitungkan hanya kalau jaraknya
+                        // dekat (di bawah 5 km). Kalau penonton berada di kota
+                        // lain, memasukkan posisinya akan memaksa peta men-zoom
+                        // keluar sampai titik pesepeda tinggal sebesar debu —
+                        // justru menghilangkan hal yang ingin dilihat. Jaraknya
+                        // tetap ditampilkan di legenda.
                         if(hasUpdate) {
+                            if(viewerPos && map.distance(viewerPos, bounds.getCenter()) < 5000) {
+                                bounds.extend(viewerPos);
+                            }
                             map.fitBounds(bounds, { padding: [50, 50], maxZoom: 16, animate: true });
                         }
                     }
+                    updateLegendDistance();
                 } catch(e) {}
+            }
+
+            // Jarak penonton ke pesepeda, dibulatkan. Ini yang biasanya paling
+            // ingin diketahui penonton: "dia masih jauh atau sudah dekat?".
+            function updateLegendDistance() {
+                const label = document.getElementById('legend-distance');
+                if (!label) return;
+                const first = Object.keys(markers)[0];
+                if (!viewerPos || !first) { label.textContent = ''; return; }
+                const d = map.distance(viewerPos, markers[first].getLatLng());
+                const acc = viewerAccuracy > 0 ? ' ±' + Math.round(viewerAccuracy) + 'm' : '';
+                label.textContent = d < 1000
+                    ? Math.round(d) + ' m' + acc
+                    : (d / 1000).toFixed(1) + ' km' + acc;
             }
 
             fetchRadar();
