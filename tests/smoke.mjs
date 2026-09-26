@@ -12,10 +12,14 @@
  */
 import { spawn } from "node:child_process";
 import { createHmac } from "node:crypto";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
+// Modul yang sama yang dipakai halaman tracker. Dipakai di sini supaya payload
+// jam live yang diuji benar-benar dibangun oleh satu sumber, bukan disalin.
+import * as LiveClock from "../public/assets/live-clock.js";
 
 const ROOT = join(import.meta.dirname, "..");
 const CONFIG = "tests/wrangler.test.jsonc";
@@ -112,6 +116,40 @@ const signJwt = (payload) => {
 const get = async (path, init = {}) => {
   const res = await fetch(`${BASE}${path}`, { redirect: "manual", ...init });
   return { res, text: await res.text() };
+};
+
+/**
+ * Cari teks di berkas yang ditulis penyimpanan emulasi (R2 lokal) pada
+ * `persistDir`. Dipakai untuk MEMBUKA apa yang benar-benar tersimpan, bukan
+ * menebak dari respons endpoint: field yang dikirim tetapi tidak pernah dibaca
+ * server lolos dari uji yang cuma memeriksa balasan HTTP.
+ */
+const findPersistedText = (fragment) => {
+  const stack = [persistDir];
+  while (stack.length > 0) {
+    const current = stack.pop();
+    let entries = [];
+    try {
+      entries = readdirSync(current, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const entry of entries) {
+      const full = join(current, entry.name);
+      if (entry.isDirectory()) {
+        stack.push(full);
+        continue;
+      }
+      let text = "";
+      try {
+        text = readFileSync(full, "utf8");
+      } catch {
+        continue;
+      }
+      if (text.includes(fragment)) return text;
+    }
+  }
+  return null;
 };
 
 const postJson = (path, body, token) =>
@@ -780,6 +818,129 @@ const main = async () => {
       `B23 the server module no longer defines its own ${gone.slice(6, gone.indexOf("=") - 1).trim()}`,
       !statsSource.includes(gone),
       "a second copy is exactly the twin bug this refactor removes",
+    );
+  }
+
+  // --- B24: catatan jam live ikut TERSIMPAN di berkas aktivitas -----------
+  // Halaman tracker sudah mengirim `live_clock` sejak lama, tetapi server tidak
+  // pernah membacanya, jadi pertanyaan "jamnya hilang berapa detik?" hanya bisa
+  // dijawab dari absennya sebuah peringatan. Uji ini menyimpan aktivitas
+  // sungguhan lalu MEMBUKA berkas tersimpannya — bukan mencocokkan teks sumber,
+  // yang tidak akan menangkap field yang dikirim tapi tidak pernah dibaca.
+  const liveClockPoints = [
+    { lat: -6.2, lng: 106.8, time: "2026-09-26T01:00:00.000Z", speed: 18 },
+    { lat: -6.201, lng: 106.801, time: "2026-09-26T01:05:00.000Z", speed: 19 },
+    { lat: -6.202, lng: 106.802, time: "2026-09-26T01:10:00.000Z", speed: 17 },
+  ];
+
+  // Payload-nya dibangun dengan modul yang SAMA yang dipakai halaman
+  // (public/assets/live-clock.js), bukan disalin tangan. Kalau bentuk yang
+  // dikirim halaman berubah, uji ini ikut berubah — dan bukan sebaliknya.
+  // Umpan waktunya: 60 tick normal, 1 tick terlambat 25 s, 1 sistem berhenti
+  // 300 s. Angka ini persis yang dulu diukur di browser sungguhan.
+  const clockAccounting = LiveClock.createLiveClockAccounting(10, 120);
+  for (let i = 0; i < 60; i += 1) LiveClock.recordLiveClockTick(clockAccounting, 1, {});
+  LiveClock.recordLiveClockTick(clockAccounting, 25, {});
+  LiveClock.recordLiveClockTick(clockAccounting, 300, {});
+  const clockSummary = {
+    uncounted: LiveClock.liveClockUncountedSeconds(clockAccounting),
+    balance: LiveClock.liveClockBalance(clockAccounting),
+  };
+  const finalLiveClock = Object.assign(
+    { uncounted_seconds: clockSummary.uncounted, balance_seconds: clockSummary.balance },
+    LiveClock.serializeLiveClockAccounting(clockAccounting),
+  );
+
+  const withClock = await postJson(
+    "/api/save_ride",
+    {
+      uuid: `smoke-live-clock-${Date.now()}`,
+      chunk_index: 0,
+      total_chunks: 1,
+      points: liveClockPoints,
+      name: "Live Clock Ride",
+      distance: 1.23,
+      duration: 600,
+      activity_type: "ride",
+      start_date: "2026-09-26T01:00:00.000Z",
+      finish_date: "2026-09-26T01:10:00.000Z",
+      live_clock: finalLiveClock,
+    },
+    token,
+  );
+  check(
+    "B24 an activity carrying a live clock record is accepted",
+    withClock.res.status === 200 && JSON.parse(withClock.text).success === true,
+    withClock.text.slice(0, 200),
+  );
+
+  // R2 lokal menulis objeknya ke disk, jadi berkasnya bisa dibuka langsung.
+  const persistedBlob = findPersistedText(`"distance_km":1.23`);
+  check(
+    "B24 the live clock record reaches the stored activity file",
+    Boolean(persistedBlob),
+    "no stored object contains the live clock record — the field is sent but never read",
+  );
+
+  if (persistedBlob) {
+    const stored = JSON.parse(persistedBlob);
+    const record = stored?.metadata?.live_clock;
+    check(
+      "B24 the stored record keeps the measured seconds",
+      record?.counted_seconds === 70 && record?.tick_count === 62,
+      JSON.stringify(record),
+    );
+    check(
+      "B24 the buckets are summed server-side, not copied from the client",
+      record?.uncounted_seconds === 315 && record?.consistent === true,
+      JSON.stringify(record),
+    );
+    check(
+      "B24 the raw tick detail is kept, not flattened to one number",
+      record?.clamped_seconds === 15 &&
+        record?.dropped_seconds === 300 &&
+        record?.clamped_tick_count === 1 &&
+        record?.dropped_tick_count === 1,
+      JSON.stringify(record),
+    );
+    check(
+      "B24 the balance survives, so lost seconds can be checked against the tick count",
+      record?.balance_seconds === 70,
+      JSON.stringify(record),
+    );
+  }
+
+  // Aktivitas tanpa instrumentasi harus menyimpan null, bukan nol: nol adalah
+  // nilai yang sah ("tidak ada waktu yang hilang") dan tidak boleh dipakai
+  // untuk mewakili "tidak ada data".
+  const withoutClock = await postJson(
+    "/api/save_ride",
+    {
+      uuid: `smoke-no-clock-${Date.now()}`,
+      chunk_index: 0,
+      total_chunks: 1,
+      points: liveClockPoints,
+      name: "No Clock Ride",
+      distance: 4.56,
+      duration: 600,
+      activity_type: "ride",
+      start_date: "2026-09-26T02:00:00.000Z",
+      finish_date: "2026-09-26T02:10:00.000Z",
+    },
+    token,
+  );
+  const withoutClockBlob = findPersistedText(`"distance_km":4.56`);
+  check(
+    "B24 an activity without instrumentation is stored too",
+    withoutClock.res.status === 200 && Boolean(withoutClockBlob),
+    `status ${withoutClock.res.status}`,
+  );
+  if (withoutClockBlob) {
+    const stored = JSON.parse(withoutClockBlob);
+    check(
+      "B24 a missing live clock is stored as null, never as a reassuring zero",
+      "live_clock" in (stored?.metadata || {}) && stored.metadata.live_clock === null,
+      JSON.stringify(stored?.metadata?.live_clock),
     );
   }
 

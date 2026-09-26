@@ -582,8 +582,17 @@ your real bindings. `npm run cf-typegen:test` does the same from
 `tests/wrangler.test.jsonc`, which is the variant CI uses because your personal
 config is gitignored and therefore absent there.
 
-`npm test` runs the pure regressions first (`test:doctor`, `test:live`,
-`test:clock`, `test:milestones`), then the smoke test.
+`npm test` runs the pure regressions first (`test:doctor`, `test:doctor-core`,
+`test:live`, `test:clock`, `test:clock-record`, `test:milestones`, `test:radar`,
+`test:voice`), then the smoke test.
+
+`npm run test:clock-record` (`node tests/live-clock-record.mjs`) tests the
+storage rules in `src/api/live-clock-record.ts`: the buckets are summed
+server-side instead of trusted from the browser, a record whose numbers do not
+add up is flagged rather than silently accepted, and a missing record stays
+`null` instead of becoming a reassuring zero. The smoke test then posts a
+`live_clock` payload built by the same module the tracker page uses, and opens
+the stored activity file to confirm the record actually landed there.
 
 `npm run test:doctor` (`node tests/activity-doctor.mjs`) tests the pure
 moving-time and average-speed mathematics in `src/api/activity-doctor-stats.ts`
@@ -890,6 +899,43 @@ Rest blocks can come from:
 Lanjut Nanti / Finish Later saves the current blackbox session without uploading the activity. When the user resumes later, Gaspool records the rest block and starts a new etape when appropriate.
 
 No D1 migration is required. Rest blocks are stored inside the R2 activity JSON and shown in the dashboard activity modal.
+
+### Live Clock Accounting
+
+The tracker keeps its own accounting of where the recorded time went, and stores
+it in the activity JSON as `metadata.live_clock`:
+
+```json
+{
+  "tick_count": 62,
+  "counted_seconds": 70,
+  "clamped_seconds": 15,
+  "dropped_seconds": 300,
+  "clamped_tick_count": 1,
+  "dropped_tick_count": 1,
+  "uncounted_seconds": 315,
+  "balance_seconds": 70,
+  "consistent": true,
+  "issues": []
+}
+```
+
+Every second that passes during a recording lands in exactly one bucket:
+
+- `counted_seconds` — seconds the live clock counted as moving;
+- `clamped_seconds` — the part of a late tick that was cut at the maximum delta
+  (the browser postponed the tick, so the clock could not trust all of it);
+- `dropped_seconds` — ticks so far apart that the whole gap is untrustworthy
+  (screen off, tab suspended).
+
+`uncounted_seconds` is `clamped_seconds + dropped_seconds`, summed by the server
+rather than copied from the browser. `consistent` is `false` when the buckets do
+not add up; the numbers are still stored, but they must not be quoted as proof.
+
+A missing record is stored as `null`, never as zeros: "no instrumentation" and
+"no second was lost" are different answers, and only one of them is reassuring.
+The activity JSON is the place to look when asking why a ride's live moving time
+differs from the recalculated one.
 
 ### Dashboard Calendar View
 

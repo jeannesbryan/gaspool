@@ -15,6 +15,11 @@ import {
 } from "./live-share";
 import { computeMilestoneProgress } from "../milestones";
 import { appendRadarTrailPoint } from "./radar-trail";
+// Catatan jam live yang dikirim halaman tracker. Modulnya murni dan diuji
+// terpisah, karena aturannya bukan aritmatika statistik melainkan soal
+// menyimpan angka apa adanya: nol ("tidak ada waktu hilang") dan null
+// ("instrumentasi tidak ada") tidak boleh saling menggantikan.
+import { normalizeLiveClockRecord } from "./live-clock-record";
 import {
   collectDoctorRestBlocks,
   compareDoctorMovingTime,
@@ -3903,6 +3908,11 @@ api.post("/save_ride", protectAPI, async (c) => {
       0,
       Math.floor(Number(b.skipped_clock_gap_seconds || 0)),
     );
+    // Akuntansi jam live dari halaman tracker. Sampai sekarang field ini
+    // dikirim tetapi tidak pernah dibaca, jadi kehilangan waktu hanya bisa
+    // disimpulkan dari absennya peringatan — bukan dari angka. `null` berarti
+    // instrumentasi tidak sempat dimuat, dan itu disimpan apa adanya.
+    const liveClockRecord = normalizeLiveClockRecord(b.live_clock);
     const savedAtIso = new Date().toISOString();
     const startDateIso = normalizeIsoDate(b.start_date, savedAtIso);
     const finishDateIso = normalizeIsoDate(b.finish_date, savedAtIso);
@@ -4015,6 +4025,10 @@ api.post("/save_ride", protectAPI, async (c) => {
           time_context: timeContext,
           rest_summary: restSummary,
           skipped_clock_gap_seconds: skippedClockGapSeconds,
+          // Bukti ke mana waktu pergi selama gowes berjalan. Disimpan di sini
+          // supaya bisa dibuktikan dari berkasnya sendiri, tanpa harus menyalakan
+          // worker atau membuka layar finish.
+          live_clock: liveClockRecord,
           nutrition_summary: {
             enabled: nutritionSummary.enabled,
             water_count: nutritionSummary.water_count,
