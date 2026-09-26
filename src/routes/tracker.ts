@@ -480,6 +480,16 @@ tracker.get("/record", async (c) => {
             import * as DoctorCore from '/assets/doctor-core.js';
             window.DoctorCore = DoctorCore;
         </script>
+        <!-- Aturan angka mana yang DISIMPAN, dipakai halaman DAN server dari
+             satu berkas. Halaman tidak boleh menampilkan jarak yang berbeda
+             dari yang akan tersimpan — itu persis "dua kebenaran" yang dulu
+             terjadi antara layar dan studio, hanya kali ini tersembunyi di
+             berkas. Kalau modul ini gagal dimuat, halaman jatuh ke angka live
+             dan mengatakannya. -->
+        <script type="module">
+            import * as RideStatRules from '/assets/ride-stat-rules.js';
+            window.RideStatRules = RideStatRules;
+        </script>
         <script>
             let map, path = [], dist = 0, startT = 0, rec = false, watchId, radarInt, peletonRoutePollInt, restartGpsWatch = null;
 			let clockInt, movingTime = 0, lastTick = Date.now(), isPaused = false, lastAnnouncedKm = 0, lastSave = 0;
@@ -3874,8 +3884,13 @@ if (!gpsStatus) return;
 					'</div>';
 				}).join('');
 
+				// Judul kolom kanan adalah "Disimpan", bukan "Setelah diperbaiki",
+				// karena itulah yang sebenarnya terjadi: jarak dan rata-rata di
+				// kolom itu masuk ke riwayat entah tombol mana yang ditekan.
+				// Sebelumnya angka bersih hanya tersimpan kalau AUTO REPAIR
+				// dipilih, jadi kolom ini memang cuma "usulan".
 				box.innerHTML =
-					'<div class="finish-diff-head"><span>Aspek</span><span>Live</span><span>Setelah diperbaiki</span></div>' +
+					'<div class="finish-diff-head"><span>Aspek</span><span>Live</span><span>Disimpan</span></div>' +
 					body;
 
 				const movingRow = rows[1];
@@ -3883,33 +3898,39 @@ if (!gpsStatus) return;
 				const applicable = Boolean(doctor.canAutoRepair);
 				const parts = [];
 
-				if (!applicable) {
-					// Jangan pernah bilang "akan berubah" untuk usulan yang tidak
-					// bisa diterapkan: tombolnya memang akan menyimpan angka live.
-					// Kolom kanan tetap ditampilkan, tetapi sebagai informasi saja.
-					parts.push('Perbaikan otomatis tidak tersedia untuk aktivitas ini, jadi tombol apa pun akan menyimpan angka live (kolom kiri).');
-					if (changed > 0) {
-						parts.push('Kolom kanan hanya usulan Activity Doctor, bukan yang akan tersimpan.');
-					}
-				} else if (changed > 0) {
-					parts.push('<b>' + changed + '</b> dari ' + rows.length + ' angka akan berubah kalau kamu pilih AUTO REPAIR & SAVE.');
+				parts.push('Angka di kolom <b>Disimpan</b> itulah yang masuk ke riwayat.');
+				if (changed > 0) {
+					parts.push('<b>' + changed + '</b> dari ' + rows.length + ' angka berbeda dari yang dilaporkan jam live.');
 				} else {
-					parts.push('Tidak ada angka yang berubah. SAVE FINAL dan AUTO REPAIR & SAVE akan menghasilkan statistik yang sama.');
+					parts.push('Semuanya sama dengan yang dilaporkan jam live.');
+				}
+
+				if (applicable) {
+					parts.push('AUTO REPAIR & SAVE juga membersihkan titik GPS dan menambahkan rest block; SAVE FINAL menyimpan angka yang sama tanpa mengubah titik.');
+				} else {
+					parts.push('Perbaikan otomatis tidak tersedia untuk aktivitas ini.');
+				}
+
+				const storedDistance = Number(after.distance_km || 0);
+				const liveDistance = Number(before.distance_km || 0);
+				if (liveDistance > 0 && storedDistance > 0 && liveDistance !== storedDistance) {
+					parts.push('Jarak memakai tabel segmen bersama: ' + (liveDistance - storedDistance).toFixed(3) + ' km drift GPS saat berhenti tidak dihitung sebagai jarak yang ditempuh.');
 				}
 
 				if (movingUntouched) {
-					parts.push('Moving Time belum dihitung ulang oleh perbaikan ini — nilainya masih jam live yang berjalan di layar.');
+					parts.push('Moving Time tidak dihitung ulang — nilainya masih jam live yang berjalan di layar, karena pengukuran itu lebih tahu kapan kamu benar-benar berhenti.');
 				}
 
 				const note = document.getElementById('finish-diff-note');
 				if (note) note.innerHTML = parts.join(' ');
 
+				// Pill ini dulu berbunyi "USULAN SAJA" saat auto repair tidak
+				// tersedia, karena kolom kanan memang cuma usulan. Sekarang kolom
+				// kanan selalu yang tersimpan, jadi label itu menyesatkan —
+				// yang perlu dilihat adalah ada berapa angka yang berbeda.
 				const pill = document.getElementById('finish-diff-status');
 				if (pill) {
-					if (!applicable) {
-						pill.className = 'doctor-pill warn';
-						pill.innerText = 'USULAN SAJA';
-					} else if (changed > 0) {
+					if (changed > 0) {
 						pill.className = 'doctor-pill warn';
 						pill.innerText = changed + ' BERUBAH';
 					} else {
@@ -3919,16 +3940,43 @@ if (!gpsStatus) return;
 				}
 			}
 
+			// Angka yang AKAN disimpan. Memakai aturan yang sama dengan server
+			// (/assets/ride-stat-rules.js) supaya layar ini tidak menampilkan
+			// jarak yang berbeda dari yang akan tersimpan. Kalau modulnya gagal
+			// dimuat, angka live dipakai dan itu dikatakan — bukan disembunyikan.
+			function storedRideStatsFor(doctor, base) {
+				const rules = window.RideStatRules;
+				const declaredKm = Number(base.distance || 0);
+				if (!rules || typeof rules.chooseStoredDistanceKm !== 'function') {
+					return { distanceKm: declaredKm, source: 'tracker', rulesLoaded: false, reason: 'Modul aturan angka tidak termuat, jadi angka live yang dipakai.' };
+				}
+				const decision = rules.chooseStoredDistanceKm({
+					declaredKm: declaredKm,
+					cleanKm: doctor.repairedStats && doctor.repairedStats.distance_km,
+					sharedTableKm: doctor.shared_segment_distance_km
+				});
+				return {
+					distanceKm: decision.km,
+					source: decision.source,
+					rulesLoaded: true,
+					reason: decision.reason,
+					declaredKm: declaredKm
+				};
+			}
+
 			function renderFinishReview(state) {
 				const doctor = state.doctor;
 				const finalRest = state.base.rest_blocks || [];
 				const finalSignals = state.base.signal_logs || [];
-				const avg = state.base.duration > 0 && state.base.distance > 0 ? state.base.distance / (state.base.duration / 3600) : 0;
+				const stored = storedRideStatsFor(doctor, state.base);
+				// Rata-rata dihitung dari pasangan yang benar-benar disimpan,
+				// sama seperti server menghitungnya.
+				const avg = state.base.duration > 0 && stored.distanceKm > 0 ? stored.distanceKm / (state.base.duration / 3600) : 0;
 				const status = document.getElementById('finish-status');
 				const repairStatus = document.getElementById('finish-repair-status');
 				const copy = document.getElementById('finish-copy');
 
-				setText('finish-distance', Number(state.base.distance || 0).toFixed(2) + ' km');
+				setText('finish-distance', stored.distanceKm.toFixed(2) + ' km');
 				setText('finish-moving', formatResumeDuration(state.base.duration || 0));
 				setText('finish-avg', avg.toFixed(1) + ' km/h');
 				setText('finish-points', doctor.counts.valid + ' / ' + doctor.counts.raw + ' titik');
@@ -4072,9 +4120,16 @@ if (!gpsStatus) return;
 				const doctor = state.doctor;
 				const repaired = Boolean(useAutoRepair && doctor.canAutoRepair);
 				const points = repaired ? doctor.cleanedPoints : state.rawPoints;
-				const distanceValue = repaired && doctor.repairedStats.distance_km > 0
-					? doctor.repairedStats.distance_km
-					: state.base.distance;
+				// Field "distance" selalu berisi angka yang dilaporkan jam live.
+				// Jarak mana yang benar-benar DISIMPAN diputuskan server lewat
+				// aturan di /assets/ride-stat-rules.js, memakai
+				// stats_after.distance_km sebagai angka bersih. Dulu di sini
+				// angka bersih menggantikan angka live begitu AUTO REPAIR
+				// dipilih, sehingga berkas tidak lagi menyimpan berapa yang
+				// sebenarnya dilaporkan perangkat — dan angka mentah itu hilang
+				// tanpa jejak. (Catatan: jangan pakai backtick di komentar file
+				// ini, seluruh halaman adalah satu template literal.)
+				const distanceValue = state.base.distance;
 				const restBlocksValue = repaired
 					? mergeFinishRestBlocks(state.base.rest_blocks, doctor.suggestedRestBlocks)
 					: normalizeRestBlocks(state.base.rest_blocks);
@@ -4099,7 +4154,13 @@ if (!gpsStatus) return;
 					// yang ditolak hilang tanpa jejak. Apakah usulan itu dipakai
 					// dijawab oleh auto_repair_applied.
 					stats_before: doctor.currentStats,
-					stats_after: doctor.repairedStats
+					stats_after: doctor.repairedStats,
+					// Penanda bahwa stats_after.distance_km benar-benar datang
+					// dari tabel segmen bersama, bukan dari perhitungan lama.
+					// Null = modul bersama tidak termuat. Server memakai ini
+					// untuk memutuskan jarak mana yang disimpan, dan tanpa
+					// penanda ini fallback bisa lewat sebagai angka resmi.
+					shared_segment_distance_km: doctor.shared_segment_distance_km
 				};
 
 				const CHUNK_SIZE = 500;

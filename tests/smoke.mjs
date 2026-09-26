@@ -592,8 +592,45 @@ const main = async () => {
   );
   check(
     "B17 an unchanged repair is reported honestly",
-    trackerHtml.includes("Tidak ada angka yang berubah"),
-    "the modal must say so when the repair changes nothing",
+    trackerHtml.includes("Semuanya sama dengan yang dilaporkan jam live") &&
+      trackerHtml.includes("'TIDAK BERUBAH'"),
+    "the modal must say so when nothing differs from what the live clock reported",
+  );
+  // Kolom kanan adalah angka yang BENAR-BENAR tersimpan, bukan sekadar usulan.
+  // Sebelumnya labelnya "Setelah diperbaiki", dan jarak bersih hanya tersimpan
+  // kalau AUTO REPAIR ditekan — sehingga kolom itu memang cuma usulan.
+  check(
+    "B17 the right column is labelled as what actually gets stored",
+    trackerHtml.includes("<span>Disimpan</span>"),
+    "the column that holds the saved numbers is still labelled as a proposal",
+  );
+  check(
+    "B17 the modal says the saved numbers are what enters the history",
+    trackerHtml.includes("masuk ke riwayat"),
+    "nothing tells the rider which column is the one being saved",
+  );
+  // Halaman harus memuat aturan yang SAMA dengan server. Kalau modul ini tidak
+  // dimuat, halaman akan menampilkan angka live sementara server menyimpan
+  // angka bersih — persis "dua kebenaran" yang dulu terjadi, hanya kali ini
+  // tersembunyi di berkas.
+  check(
+    "B17 the page loads the same stored-stat rules the server uses",
+    trackerHtml.includes("/assets/ride-stat-rules.js") &&
+      trackerHtml.includes("window.RideStatRules = RideStatRules"),
+    "the tracker page does not load the shared stored-stat rules",
+  );
+  check(
+    "B17 the page shows the distance it will actually store",
+    trackerHtml.includes("storedRideStatsFor"),
+    "the headline distance is still the raw live number",
+  );
+  // Server hanya bisa memutuskan kalau tahu angka bersih datang dari tabel
+  // bersama. Kalau field ini berhenti dikirim, fallback akan lewat sebagai
+  // angka resmi tanpa ada yang tahu.
+  check(
+    "B17 the payload tells the server the clean distance came from the shared table",
+    trackerHtml.includes("shared_segment_distance_km: doctor.shared_segment_distance_km"),
+    "the finish payload no longer reports where its clean distance came from",
   );
 
   // --- B18: max_speed is actually sent with the activity -------------------
@@ -943,6 +980,143 @@ const main = async () => {
       JSON.stringify(stored?.metadata?.live_clock),
     );
   }
+
+  // --- B25: jarak & elevasi yang DISIMPAN, bukan hanya yang ditampilkan ----
+  // Halaman finish sudah menghitung jarak dari tabel segmen bersama
+  // (stats_after.distance_km) dan menampilkannya, tetapi D1 tetap menyimpan
+  // angka mentah. Akibatnya kartu milestone seumur hidup memakai angka yang
+  // sudah kita tahu salah: pada gowes 25 Sep 2026 itu 1651 m drift GPS
+  // (345 segmen "diam", rata-rata 0,48 km/h) yang ikut dihitung sebagai jarak
+  // yang ditempuh. Uji ini memeriksa angka yang TERSIMPAN, bukan yang dikirim
+  // klien: respons HTTP yang benar tidak membuktikan apa pun tentang D1.
+  const statPoints = [
+    { lat: -6.3, lng: 106.9, time: "2026-09-26T03:00:00.000Z", speed: 20, ele: 100 },
+    { lat: -6.301, lng: 106.901, time: "2026-09-26T03:05:00.000Z", speed: 21, ele: 130 },
+    { lat: -6.302, lng: 106.902, time: "2026-09-26T03:10:00.000Z", speed: 19, ele: 118 },
+  ];
+
+  const statRideName = `Stored Stat Ride ${Date.now()}`;
+  const storedStat = await postJson(
+    "/api/save_ride",
+    {
+      uuid: `smoke-stored-stat-${Date.now()}`,
+      chunk_index: 0,
+      total_chunks: 1,
+      points: statPoints,
+      name: statRideName,
+      // Angka mentah seperti yang dilaporkan jam live di perangkat.
+      distance: 10.0,
+      duration: 3600,
+      total_elevation: 561,
+      activity_type: "ride",
+      start_date: "2026-09-26T03:00:00.000Z",
+      finish_date: "2026-09-26T04:00:00.000Z",
+      finish_review: {
+        status: "repairable",
+        auto_repair_applied: false,
+        counts: {},
+        issues: [],
+        changes: [],
+        stats_before: { distance_km: 10.0, moving_time: 3600, avg_speed: 10, max_speed: 21 },
+        stats_after: { distance_km: 9.7, moving_time: 3600, avg_speed: 9.7, max_speed: 21 },
+        // Bukti bahwa angka bersih datang dari tabel segmen bersama.
+        shared_segment_distance_km: 9.7,
+      },
+    },
+    token,
+  );
+  check(
+    "B25 an activity carrying a cleaned distance is accepted",
+    storedStat.res.status === 200 && JSON.parse(storedStat.text).success === true,
+    storedStat.text.slice(0, 200),
+  );
+
+  // Baca D1 lewat endpoint yang dipakai dashboard, bukan lewat berkas R2.
+  const ridesAfterStat = JSON.parse(
+    (await get("/api/rides?sort=latest", { headers: { cookie: `gaspool_session=${token}` } })).text,
+  );
+  const listedStat = (ridesAfterStat.rides || ridesAfterStat.data || []).find(
+    (ride) => ride.name === statRideName,
+  );
+  check(
+    "B25 the stored ride is listed",
+    Boolean(listedStat),
+    JSON.stringify(ridesAfterStat).slice(0, 250),
+  );
+  if (listedStat) {
+    check(
+      "B25 D1 keeps the cleaned distance, not the raw one",
+      Number(listedStat.distance) === 9.7,
+      `distance=${listedStat.distance} (10 = drift GPS ikut tersimpan)`,
+    );
+    check(
+      "B25 the average speed follows the saved pair, not the raw pair",
+      Number(listedStat.average_speed) === 9.7,
+      `average_speed=${listedStat.average_speed}`,
+    );
+  }
+
+  const storedStatBlob = findPersistedText(`"distance_declared_km":10`);
+  check(
+    "B25 the file records both the stored and the declared distance",
+    Boolean(storedStatBlob),
+    "metadata.distance_declared_km tidak ada, jadi angka mentah tidak bisa ditelusuri lagi",
+  );
+  if (storedStatBlob) {
+    const stored = JSON.parse(storedStatBlob);
+    const meta = stored?.metadata || {};
+    check(
+      "B25 metadata keeps the cleaned distance too",
+      meta.distance_km === 9.7,
+      `metadata.distance_km=${meta.distance_km}`,
+    );
+    check(
+      "B25 metadata says where the number came from",
+      meta.distance_source === "shared_segment_table",
+      `distance_source=${meta.distance_source}`,
+    );
+    check(
+      "B25 elevation stays the measured one, not the recalculated one",
+      meta.total_elevation_gain === 561,
+      `total_elevation_gain=${meta.total_elevation_gain} (485-an berarti hitung ulang menimpa pengukuran)`,
+    );
+  }
+
+  // Kalau tabel bersama tidak dimuat di perangkat, jarak mentah dipertahankan
+  // dan itu harus terlihat — fallback tidak boleh diam-diam jadi angka resmi.
+  const fallbackName = `Fallback Stat Ride ${Date.now()}`;
+  await postJson(
+    "/api/save_ride",
+    {
+      uuid: `smoke-fallback-stat-${Date.now()}`,
+      chunk_index: 0,
+      total_chunks: 1,
+      points: statPoints,
+      name: fallbackName,
+      distance: 10.0,
+      duration: 3600,
+      total_elevation: 561,
+      activity_type: "ride",
+      start_date: "2026-09-26T05:00:00.000Z",
+      finish_date: "2026-09-26T06:00:00.000Z",
+      finish_review: {
+        status: "healthy",
+        auto_repair_applied: false,
+        counts: {},
+        issues: [],
+        changes: [],
+        stats_before: { distance_km: 10.0, moving_time: 3600, avg_speed: 10, max_speed: 21 },
+        stats_after: { distance_km: 10.0, moving_time: 3600, avg_speed: 10, max_speed: 21 },
+        shared_segment_distance_km: null,
+      },
+    },
+    token,
+  );
+  check(
+    "B25 a missing shared table falls back visibly instead of silently",
+    Boolean(findPersistedText(`"distance_source":"tracker"`)),
+    "jarak fallback tidak ditandai, jadi angka lama bisa lewat sebagai angka resmi",
+  );
 
   // --- B6: delete_ride id validation -------------------------------------
   const badDelete = await get("/api/delete_ride/abc", {

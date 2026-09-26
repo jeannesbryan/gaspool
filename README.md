@@ -583,8 +583,15 @@ your real bindings. `npm run cf-typegen:test` does the same from
 config is gitignored and therefore absent there.
 
 `npm test` runs the pure regressions first (`test:doctor`, `test:doctor-core`,
-`test:live`, `test:clock`, `test:clock-record`, `test:milestones`, `test:radar`,
-`test:voice`), then the smoke test.
+`test:live`, `test:clock`, `test:clock-record`, `test:stat-rules`,
+`test:milestones`, `test:radar`, `test:voice`), then the smoke test.
+
+`npm run test:stat-rules` (`node tests/ride-stat-rules.mjs`) covers the rules
+that decide which numbers get stored: distance follows the shared segment table,
+elevation keeps the measured value, an implausible clean distance is refused
+rather than stored, and a missing shared table falls back visibly. The figures
+in that test come from the real 25 Sep 2026 ride, so it guards the case that
+actually happened.
 
 `npm run test:clock-record` (`node tests/live-clock-record.mjs`) tests the
 storage rules in `src/api/live-clock-record.ts`: the buckets are summed
@@ -899,6 +906,33 @@ Rest blocks can come from:
 Lanjut Nanti / Finish Later saves the current blackbox session without uploading the activity. When the user resumes later, Gaspool records the rest block and starts a new etape when appropriate.
 
 No D1 migration is required. Rest blocks are stored inside the R2 activity JSON and shown in the dashboard activity modal.
+
+### What Gets Stored
+
+The finish screen shows what will actually enter the history, and the rules live
+in `public/assets/ride-stat-rules.js` so the page and the server cannot drift
+apart:
+
+- **Distance uses the shared segment table.** GPS drift while standing still is
+  not distance travelled. On the 25 Sep 2026 ride, 1651 m of the reported
+  55.130 km (3.0%) came from 345 segments classified as stopped, at an average
+  of 0.48 km/h. The stored number is 53.479 km, and the modal shows the
+  difference instead of hiding it.
+- **Elevation keeps the measured value.** This is the opposite direction on
+  purpose. The elevation figure cannot be pinned down from the data: different
+  filter parameters move it from 167 m to 855 m on the same ride, while the gap
+  between the two candidates was only 75 m. When no value is right, swapping one
+  estimate for another only relocates the uncertainty. Recalculation may fill a
+  gap, never overwrite a measurement.
+- **Moving time keeps the live clock**, which is a measurement rather than a
+  geometric inference; recalculation only overrides it when it falls outside
+  ±15%.
+
+Every stored activity records where its numbers came from
+(`distance_source`, `distance_declared_km`, `distance_clean_km`,
+`elevation_source`), so a number that was discarded can still be traced. If the
+shared table fails to load on the device, the raw figure is kept and
+`distance_source` says `tracker` — the fallback is visible, never silent.
 
 ### Live Clock Accounting
 

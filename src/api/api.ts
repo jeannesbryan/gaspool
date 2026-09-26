@@ -20,6 +20,15 @@ import { appendRadarTrailPoint } from "./radar-trail";
 // menyimpan angka apa adanya: nol ("tidak ada waktu hilang") dan null
 // ("instrumentasi tidak ada") tidak boleh saling menggantikan.
 import { normalizeLiveClockRecord } from "./live-clock-record";
+// Aturan "angka mana yang disimpan ke riwayat": jarak memakai tabel segmen
+// bersama (drift GPS bukan jarak yang ditempuh), elevasi mempertahankan
+// pengukuran (angka itu tidak bisa ditentukan pasti dari data). Berkasnya
+// hidup di public/assets supaya halaman tracker memakai aturan yang SAMA —
+// halaman tidak boleh menampilkan angka yang berbeda dari yang disimpan.
+import {
+  chooseStoredDistanceKm,
+  chooseStoredElevationGain,
+} from "../../public/assets/ride-stat-rules.js";
 import {
   collectDoctorRestBlocks,
   compareDoctorMovingTime,
@@ -665,6 +674,16 @@ const normalizeFinishReview = (value: any) => {
       value?.stats_after && typeof value.stats_after === "object"
         ? value.stats_after
         : {},
+    // Bukti bahwa angka jarak benar-benar datang dari tabel segmen bersama di
+    // perangkat, bukan dari perhitungan lama. Null berarti modul bersama tidak
+    // termuat, dan angka lama yang dipakai. Tanpa penanda ini, server tidak
+    // punya cara membedakan keduanya — dan fallback bisa lewat sebagai angka
+    // resmi tanpa ada yang tahu.
+    shared_segment_distance_km:
+      value?.shared_segment_distance_km === null ||
+      value?.shared_segment_distance_km === undefined
+        ? null
+        : Number(value.shared_segment_distance_km),
   };
 };
 
@@ -1297,18 +1316,32 @@ const buildDoctorStatTrust = (
     hasEnoughTimedPoints &&
     rawStats.max_speed > 0 &&
     !maxSpeedLooksLikeSpike;
+  // --- Aturan elevasi: pengukuran dipertahankan (dibalik 2026-09-26) -------
+  //
+  // Arahnya KEBALIKAN dari jarak, dan itu bukan inkonsistensi. Untuk jarak,
+  // tabel segmen memang lebih benar: drift GPS saat berhenti (0,48 km/h di
+  // gowes 25 Sep 2026) bukan jarak yang ditempuh. Untuk elevasi tidak ada yang
+  // lebih benar — pada data nyata, taksirannya bergerak dari 167 m sampai
+  // 855 m hanya karena beda parameter filter, sementara selisih antara kedua
+  // angka cuma 75 m. Kalau tidak ada nilai yang benar, jangan menukar satu
+  // taksiran dengan taksiran lain; itu cuma memindahkan ketidakpastian.
+  //
+  // Jadi hitung ulang hanya boleh MENGISI kekosongan (live tidak punya angka),
+  // tidak pernah menimpa pengukuran yang ada.
   const elevationTrusted =
     hasEnoughElevationSamples &&
-    (rawStats.total_elevation_gain > 0 || current.total_elevation_gain <= 0);
+    Math.max(0, Number(current.total_elevation_gain) || 0) <= 0 &&
+    rawStats.total_elevation_gain > 0;
 
   const safeStats = {
     distance_km: finalDistanceKm,
     moving_time: finalMovingTime,
     average_speed: Number(finalAverageSpeed.toFixed(2)),
     max_speed: maxSpeedTrusted ? rawStats.max_speed : current.max_speed,
-    total_elevation_gain: elevationTrusted
-      ? rawStats.total_elevation_gain
-      : current.total_elevation_gain,
+    total_elevation_gain: chooseStoredElevationGain({
+      liveMeters: current.total_elevation_gain,
+      recalculatedMeters: rawStats.total_elevation_gain,
+    }).meters,
     skipped_jump_count: rawStats.skipped_jump_count,
     long_gap_count: rawStats.long_gap_count,
     suspicious_speed_count: rawStats.suspicious_speed_count,
@@ -1390,12 +1423,12 @@ const buildDoctorStatTrust = (
     total_elevation_gain: doctorStatTrustItem(
       elevationTrusted,
       elevationTrusted
-        ? "Sample elevasi cukup untuk update elevation gain."
+        ? "Tidak ada elevasi pada D1, jadi hasil hitung ulang dipakai untuk MENGISI kekosongan."
         : !hasEnoughElevationSamples
           ? `Sample elevasi tidak cukup (${elevationSampleCount}/${pointCount} titik); nilai D1 dipertahankan.`
           : rawStats.total_elevation_gain <= 0 && current.total_elevation_gain > 0
-            ? "Hasil repair elevasi menjadi 0; nilai D1 dipertahankan."
-            : "Elevation gain hasil hitung ulang belum cukup dipercaya.",
+            ? "Tidak ada elevasi hasil hitung ulang; pengukuran D1 dipertahankan."
+            : "Elevasi yang diukur saat gowes dipertahankan; hitung ulang tidak menimpa pengukuran karena angka ini tidak bisa ditentukan pasti dari data.",
       rawStats.total_elevation_gain,
       safeStats.total_elevation_gain,
       current.total_elevation_gain,
@@ -3998,10 +4031,35 @@ api.post("/save_ride", protectAPI, async (c) => {
         );
       }
 
+      // --- Angka apa yang DISIMPAN -------------------------------------
+      //
+      // Sebelum ini, halaman finish sudah menghitung jarak dari tabel segmen
+      // bersama dan menampilkannya, tetapi yang tersimpan ke D1 tetap angka
+      // mentah dari jam live. Pada gowes 25 Sep 2026 selisihnya 1651 m drift
+      // GPS (345 segmen "diam", rata-rata 0,48 km/h) yang ikut dihitung
+      // sebagai jarak yang ditempuh — dan angka itulah yang dipakai kartu
+      // milestone seumur hidup.
+      //
+      // Aturannya sekarang ada di modul murni src/api/stored-ride-stats.ts
+      // supaya bisa diuji tanpa Worker, dan supaya arahnya eksplisit:
+      // jarak memakai tabel segmen bersama (drift bukan jarak), elevasi
+      // mempertahankan pengukuran (angka ini tidak bisa ditentukan pasti).
+      const storedDistance = chooseStoredDistanceKm({
+        declaredKm: distance,
+        cleanKm: finishReview.stats_after?.distance_km,
+        sharedTableKm: finishReview.shared_segment_distance_km,
+      });
+      const storedElevation = chooseStoredElevationGain({
+        liveMeters: total_elevation,
+        recalculatedMeters: finishReview.stats_after?.total_elevation_gain,
+      });
+      const storedDistanceKm = storedDistance.km;
+      const storedElevationM = storedElevation.meters;
+
       let avgSpeed = 0;
 
-      if (duration > 0 && distance > 0) {
-        avgSpeed = distance / (duration / 3600);
+      if (duration > 0 && storedDistanceKm > 0) {
+        avgSpeed = storedDistanceKm / (duration / 3600);
       }
 
       const fileName = `gaspool/gaspool_ride_${Date.now()}_${Math.floor(Math.random() * 1000)}.json`;
@@ -4013,7 +4071,7 @@ api.post("/save_ride", protectAPI, async (c) => {
         signal_logs: signalLogs,
         metadata: {
           activity_type: activity_type || "ride",
-          distance_km: distance || 0,
+          distance_km: storedDistanceKm,
           moving_time: duration || 0,
           // Stat turunan ikut disimpan. D1 memegang angka yang sama, tetapi
           // tanpa salinan di sini sebuah aktivitas kehilangan rata-rata
@@ -4021,7 +4079,15 @@ api.post("/save_ride", protectAPI, async (c) => {
           // hanya titik-titik yang mungkin sudah rusak.
           average_speed: Number(avgSpeed.toFixed(2)),
           max_speed: Number(Number(b.max_speed || 0).toFixed(2)),
-          total_elevation_gain: Number(Number(total_elevation || 0).toFixed(1)),
+          total_elevation_gain: storedElevationM,
+          // Dari mana angka tersimpan berasal, dan berapa angka yang
+          // dilaporkan perangkat. Tanpa ini, angka mentah yang dibuang tidak
+          // bisa ditelusuri lagi setelah baris D1 ditulis.
+          distance_declared_km: storedDistance.declared_km,
+          distance_clean_km: storedDistance.clean_km,
+          distance_source: storedDistance.source,
+          distance_note: storedDistance.reason,
+          elevation_source: storedElevation.source,
           time_context: timeContext,
           rest_summary: restSummary,
           skipped_clock_gap_seconds: skippedClockGapSeconds,
@@ -4071,11 +4137,11 @@ api.post("/save_ride", protectAPI, async (c) => {
       await c.env.DB.prepare(query)
         .bind(
           name || "Aktivitas",
-          distance || 0,
+          storedDistanceKm,
           duration || 0,
           avgSpeed,
           b.max_speed || 0,
-          total_elevation || 0,
+          storedElevationM,
           avg_temp || 0,
           b.participants ? JSON.stringify(b.participants) : "[]",
           startDateIso,
