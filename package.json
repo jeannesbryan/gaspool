@@ -20,19 +20,19 @@
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
-    "hono": "^4.13.9"
+    "hono": "^4.13.10"
   },
   "devDependencies": {
-    "@types/node": "^26.6.2",
+    "@types/node": "^26.6.3",
     "prettier": "^3.9.9",
     "typescript": "^7.0.2",
-    "wrangler": "^4.137.0"
+    "wrangler": "^4.142.0"
   },
   "engines": {
     "node": ">=24.18.0 <25"
   },
   "allowScripts": {
     "esbuild@0.28.1": true,
-    "workerd@1.20260921.1": true
+    "workerd@1.20260926.1": true
   }
 }
