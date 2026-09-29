@@ -3236,6 +3236,10 @@ studio.get("/video_flex/:id", async (c) => {
       </div>
 
       <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+      <!-- Jejak untuk rekaman video diambil dari R2 lewat fetch() di sisi klien.
+           Dulu kegagalannya hanya mengubah tulisan tombol tanpa penjelasan;
+           tombol itu tidak pernah menyebut kenapa dan apakah angkanya aman. -->
+      <script src="/assets/map-notice.js"></script>
 
       <script>
           const rawUrl = ${JSON.stringify(ride.polyline || "")};
@@ -3461,9 +3465,39 @@ function spreadPeletonMarkers(baseLatLng) {
               board.style.display = 'block';
           }
 
+          /**
+           * Katakan apa adanya saat jejak untuk video gagal dimuat. Tombol yang
+           * berubah jadi "GAGAL DIMUAT" saja tidak memberi tahu sebabnya dan
+           * tidak menegaskan bahwa angka aktivitasnya tidak hilang.
+           */
+          function showMapFailure(containerId, sourceUrl, err) {
+              const el = document.getElementById(containerId);
+              if (!el) return;
+              if (window.MapNotice && typeof window.MapNotice.showMapNotice === 'function') {
+                  window.MapNotice.showMapNotice(el, window.MapNotice.mapLoadFailureMessage(sourceUrl, err));
+                  return;
+              }
+              alert('Peta jejak tidak bisa dimuat. Angka aktivitas ini tetap aman dan tersimpan.');
+          }
+
+          /** Bersihkan pesan lama begitu jejak berhasil dimuat. */
+          function clearMapFailure(containerId) {
+              const el = document.getElementById(containerId);
+              if (el && window.MapNotice && typeof window.MapNotice.clearMapNotice === 'function') {
+                  window.MapNotice.clearMapNotice(el);
+              }
+          }
+
+          // Pesan gagal di halaman ini menempel di lapisan kontrol (id=controls),
+          // BUKAN di dalam peta: lapisan kontrol menutupi seluruh layar dengan
+          // latar gelap (z-index 2000), jadi pesan yang ditaruh di peta tertimbun
+          // di bawahnya dan nyaris tidak terbaca.
+          const FAILURE_HOST = 'controls';
+
           async function loadRouteData() {
               if (!rawUrl || typeof rawUrl !== 'string' || rawUrl.trim() === '') {
                   console.warn('Rute kosong: rawUrl kosong');
+                  showMapFailure(FAILURE_HOST, rawUrl, null);
                   return [];
               }
 
@@ -3502,6 +3536,7 @@ function spreadPeletonMarkers(baseLatLng) {
                   return points;
               } catch (e) {
                   console.error('Gagal load rute video:', e);
+                  showMapFailure(FAILURE_HOST, rawUrl, e);
                   return [];
               }
           }
@@ -3511,6 +3546,7 @@ function spreadPeletonMarkers(baseLatLng) {
                   fullPath = path;
 
                   if (fullPath.length > 0) {
+                      clearMapFailure(FAILURE_HOST);
                       const startCoord = fullPath[0];
 
                       map.setView(startCoord, 14);
@@ -3574,11 +3610,13 @@ function spreadPeletonMarkers(baseLatLng) {
                       document.getElementById('btn-start').innerText = '🎬 MULAI REKAMAN';
                   } else {
                       document.getElementById('btn-start').innerText = '❌ DATA RUTE KOSONG / GAGAL DIMUAT';
+                      showMapFailure(FAILURE_HOST, rawUrl, null);
                   }
               })
               .catch(err => {
                   console.error('Fatal loadRouteData:', err);
                   document.getElementById('btn-start').innerText = '❌ GAGAL MEMUAT RUTE';
+                  showMapFailure(FAILURE_HOST, rawUrl, err);
               });
 
           const duration = 20000;

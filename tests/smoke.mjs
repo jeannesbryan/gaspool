@@ -1162,6 +1162,44 @@ const main = async () => {
     "drawMap masih menelan kegagalan fetch diam-diam",
   );
 
+  // --- B27: dua peta sisanya juga tidak boleh diam -------------------------
+  // Heatmap menggabungkan SEMUA jejak: sebagian bisa gagal sementara sisanya
+  // tergambar. "Peta sebagian" tidak bisa dibedakan dari "peta penuh", jadi
+  // jumlah yang gagal harus diucapkan. Halaman video (video_flex) menggambar
+  // satu jejak seperti halaman detail.
+  const b27Heat = await get("/heatmap", { headers: { cookie: `gaspool_session=${token}` } });
+  const b27HeatHtml = b27Heat.text;
+  check(
+    "B27 the heatmap page loads the notice module",
+    b27HeatHtml.includes("/assets/map-notice.js"),
+    "heatmap bisa kehilangan sebagian jejak tanpa sepatah kata",
+  );
+  check(
+    "B27 the heatmap counts the activities it failed to load",
+    b27HeatHtml.includes("heatmapLoadFailureMessage("),
+    "kegagalan sebagian tidak pernah dihitung, jadi tidak pernah diucapkan",
+  );
+
+  const b27Video = await get("/video_flex/1", { headers: { cookie: `gaspool_session=${token}` } });
+  const b27VideoHtml = b27Video.text;
+  check(
+    "B27 the video page loads the notice module",
+    b27VideoHtml.includes("/assets/map-notice.js"),
+    "halaman video memuat peta jejak tetapi tidak bisa mengabarkan kegagalan",
+  );
+  check(
+    "B27 the video page reports a failed route load",
+    b27VideoHtml.includes("showMapFailure("),
+    "loadRouteData masih menelan kegagalan fetch diam-diam",
+  );
+  check(
+    "B27 every page that draws a ride map loads the notice module",
+    [b26DashHtml, b26DetailHtml, b27HeatHtml, b27VideoHtml].every((html) =>
+      html.includes("/assets/map-notice.js"),
+    ),
+    "masih ada halaman peta yang bisa diam saat gagal",
+  );
+
   // --- B6: delete_ride id validation -------------------------------------
   const badDelete = await get("/api/delete_ride/abc", {
     method: "DELETE",

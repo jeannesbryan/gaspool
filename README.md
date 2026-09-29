@@ -588,14 +588,27 @@ config is gitignored and therefore absent there.
 test.
 
 `npm run test:notice` (`node tests/map-notice.mjs`) tests
-`public/assets/map-notice.js`, the module both the dashboard and the activity
-detail page use when a route fails to load. Every ride map fetches its points
-from R2 **in the browser**, so a blocked network, a hijacked DNS answer or an
-expired object used to leave the map empty with nothing but a `console.error` —
-indistinguishable from a broken app. The message therefore has to say three
-things: the map failed, the numbers are safe, and (when the address is
-`r2.dev`) that the network is the usual suspect. The smoke test then checks that
-both pages load the module and that neither map swallows a failure silently.
+`public/assets/map-notice.js`, the module used by every page that draws a ride
+map: the dashboard, the activity detail page, the heatmap and the video
+(`video_flex`) page. Every ride map fetches its points from R2 **in the
+browser**, so a blocked network, a hijacked DNS answer or an expired object used
+to leave the map empty with nothing but a `console.error` — indistinguishable
+from a broken app. The message therefore has to say three things: the map
+failed, the numbers are safe, and (when the address is `r2.dev`) that the
+network is the usual suspect.
+
+The heatmap needs its own wording because it draws *many* rides at once: a
+partial failure still produces a map that looks complete, which is more
+misleading than an empty one. It counts how many activities failed and says so.
+
+Two details the tests pin down, both learned by getting them wrong: the notice
+never overwrites a container's existing `position` (the video page keeps its
+full-screen control layer at `z-index` 2000, and flattening it to `relative`
+buried the message underneath), and the video page attaches the notice to that
+control layer rather than to the map, for the same reason.
+
+The smoke test then checks that all four pages load the module and that none of
+their maps swallows a failure silently.
 
 `npm run test:stat-rules` (`node tests/ride-stat-rules.mjs`) covers the rules
 that decide which numbers get stored: distance follows the shared segment table,

@@ -71,6 +71,76 @@
         return parts.join(' ');
     };
 
+    /**
+     * Pesan untuk halaman yang menggabungkan BANYAK jejak (heatmap).
+     *
+     * Bedanya dari satu peta: kegagalan sebagian sengaja tidak menghentikan
+     * gambarannya, jadi hasilnya tetap peta yang "kelihatan penuh" padahal
+     * kehilangan beberapa aktivitas. Itu justru lebih menyesatkan daripada
+     * peta kosong, karena tidak ada yang terlihat salah. Kembalikan string
+     * kosong kalau memang tidak ada yang gagal — jangan berpesan tanpa sebab.
+     *
+     * @param {number} total    jumlah aktivitas yang dicoba dimuat
+     * @param {number} failed   berapa di antaranya gagal
+     * @param {boolean} [storageBlocked] true kalau alamatnya storage publik (r2.dev)
+     */
+    var heatmapLoadFailureMessage = function (total, failed, storageBlocked) {
+        var jumlahTotal = Number(total) > 0 ? Math.floor(Number(total)) : 0;
+        var jumlahGagal = Number(failed) > 0 ? Math.floor(Number(failed)) : 0;
+        if (jumlahGagal <= 0) return '';
+        // Jangan pernah melaporkan lebih banyak kegagalan daripada yang dicoba.
+        if (jumlahTotal > 0 && jumlahGagal > jumlahTotal) jumlahGagal = jumlahTotal;
+
+        var sebab =
+            storageBlocked === true
+                ? ' Penyebab paling sering: jaringan atau penyedia internet sedang memblokir alamat penyimpanan (r2.dev). Coba buka lewat jaringan lain atau data seluler.'
+                : ' Coba muat ulang halaman ini.';
+
+        if (jumlahTotal > 0 && jumlahGagal >= jumlahTotal) {
+            return (
+                'Peta jejak kosong: semua ' +
+                jumlahTotal +
+                ' aktivitas gagal dimuat.' +
+                sebab +
+                ' Data aktivitasnya sendiri tetap aman dan sudah tersimpan.'
+            );
+        }
+
+        return (
+            'Peta jejak ini belum lengkap: ' +
+            jumlahGagal +
+            (jumlahTotal > 0 ? ' dari ' + jumlahTotal : '') +
+            ' aktivitas gagal dimuat, jadi jejaknya tidak ikut tergambar.' +
+            sebab +
+            ' Data aktivitas yang gagal itu tetap aman dan sudah tersimpan.'
+        );
+    };
+
+    /**
+     * Lapisan absolut butuh acuan. Kalau container-nya belum punya posisi,
+     * jadikan relative supaya pesannya menempel di dalam peta.
+     *
+     * Tapi kalau container SUDAH punya posisi — inline maupun dari CSS — jangan
+     * disentuh. Pernah terjadi: halaman video memakai lapisan kontrol penuh
+     * layar (position:absolute, z-index 2000); menimpa posisinya jadi relative
+     * merusak tata letaknya, dan pesannya justru tertimbun di bawah lapisan itu
+     * sampai nyaris tidak terbaca.
+     */
+    var ensurePositioned = function (host, doc) {
+        if (!host || !host.style || host.style.position) return;
+        try {
+            var view = doc && doc.defaultView;
+            if (view && typeof view.getComputedStyle === 'function') {
+                var computed = view.getComputedStyle(host);
+                var posisi = computed && computed.position;
+                if (posisi && posisi !== 'static') return;
+            }
+        } catch (err) {
+            // Tidak bisa dibaca -> anggap static, lalu jadikan relative.
+        }
+        host.style.position = 'relative';
+    };
+
     var resolveContainer = function (container, doc) {
         if (!container) return null;
         if (typeof container === 'string') return doc ? doc.getElementById(container) : null;
@@ -121,8 +191,7 @@
             'border-radius:12px;padding:10px 12px;font:12px/1.5 system-ui,-apple-system,sans-serif;' +
             'text-align:left;pointer-events:none;';
 
-        // Lapisan absolut butuh acuan; kalau container-nya belum relatif, jadikan.
-        if (host.style && !host.style.position) host.style.position = 'relative';
+        ensurePositioned(host, document_);
 
         if (typeof host.appendChild !== 'function') return false;
         host.appendChild(el);
@@ -134,6 +203,7 @@
         isHttpUrl: isHttpUrl,
         isPublicStorageHost: isPublicStorageHost,
         mapLoadFailureMessage: mapLoadFailureMessage,
+        heatmapLoadFailureMessage: heatmapLoadFailureMessage,
         showMapNotice: showMapNotice,
         clearMapNotice: clearMapNotice,
     };

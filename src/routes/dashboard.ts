@@ -3634,6 +3634,10 @@ dashboard.get("/heatmap", async (c) => {
       </div>
       <div id="map"></div>
       <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+      <!-- Jejak di halaman ini juga diambil dari R2 lewat fetch() di sisi klien.
+           Kegagalan sebagian sengaja tidak menghentikan gambarnya, jadi tanpa
+           pesan hasilnya terlihat "penuh" padahal kehilangan beberapa aktivitas. -->
+      <script src="/assets/map-notice.js"></script>
       <script>
           // ALAT PENERJEMAH SANDI STRAVA
           function decodePolyline(str, precision = 5) {
@@ -3686,39 +3690,73 @@ dashboard.get("/heatmap", async (c) => {
           const tileUrl = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
           L.tileLayer(tileUrl, { maxZoom: 19, crossOrigin: 'anonymous' }).addTo(map);
 
+          /**
+           * Kegagalan sebagian di heatmap lebih menyesatkan daripada peta
+           * kosong: gambarnya tetap jadi, jadi tidak ada yang terlihat salah
+           * padahal beberapa aktivitas hilang. Hitung yang gagal, lalu ucapkan.
+           */
+          function showHeatmapFailure(total, failed, storageBlocked) {
+              const el = document.getElementById('map');
+              if (!el) return;
+              const pesan = window.MapNotice && typeof window.MapNotice.heatmapLoadFailureMessage === 'function'
+                  ? window.MapNotice.heatmapLoadFailureMessage(total, failed, storageBlocked)
+                  : 'Peta jejak ini belum lengkap: ' + failed + ' aktivitas gagal dimuat. Data aktivitasnya tetap aman dan sudah tersimpan.';
+              if (!pesan) return;
+              if (window.MapNotice && typeof window.MapNotice.showMapNotice === 'function') {
+                  window.MapNotice.showMapNotice(el, pesan);
+                  return;
+              }
+              alert(pesan);
+          }
+
           async function drawHeatmap() {
               let allCoords = [];
               let total = polylines.length;
               let loaded = 0;
+              let failed = 0;
+              let storageBlocked = false;
               const batchSize = 20; 
 
               for (let i = 0; i < total; i += batchSize) {
                   const batch = polylines.slice(i, i + batchSize);
                   const promises = batch.map(async (str) => {
+                      let urlStr = str ? str.trim() : '';
                       try {
                           let pts = [];
-                          let urlStr = str ? str.trim() : '';
                           if (urlStr.startsWith('"')) urlStr = urlStr.slice(1, -1).replace(/\\"/g, '"');
                           
                           if (urlStr.startsWith('[') || urlStr.startsWith('{')) {
                               pts = JSON.parse(urlStr);
                           } else if (urlStr.startsWith('http')) {
                               let res = await fetch(urlStr);
+                              if (!res.ok) throw new Error('HTTP ' + res.status);
                               pts = await res.json();
                           } else if (urlStr.length > 0) {
                               pts = decodePolyline(urlStr);
                           }
                           
-                          return normalizeRoutePoints(pts);
-                      } catch (e) { return []; }
+                          const coords = normalizeRoutePoints(pts);
+                          // Jejak yang terbaca tapi terlalu pendek untuk digambar
+                          // juga tidak akan pernah muncul di peta — itu pun
+                          // kegagalan yang harus dihitung, bukan cuma error fetch.
+                          if (coords.length <= 1) {
+                              return { coords: null, storage: window.MapNotice ? window.MapNotice.isPublicStorageHost(urlStr) : false };
+                          }
+                          return { coords: coords, storage: false };
+                      } catch (e) {
+                          return { coords: null, storage: window.MapNotice ? window.MapNotice.isPublicStorageHost(urlStr) : false };
+                      }
                   });
 
                   const batchResults = await Promise.all(promises);
 
-                  for (let coords of batchResults) {
-                      if (coords.length > 1) {
-                          allCoords.push(coords);
-                          L.polyline(coords, { color: '#FF5F00', weight: 4, opacity: 0.15, smoothFactor: 1.5, interactive: false }).addTo(map);
+                  for (let hasil of batchResults) {
+                      if (hasil.coords) {
+                          allCoords.push(hasil.coords);
+                          L.polyline(hasil.coords, { color: '#FF5F00', weight: 4, opacity: 0.15, smoothFactor: 1.5, interactive: false }).addTo(map);
+                      } else {
+                          failed++;
+                          if (hasil.storage) storageBlocked = true;
                       }
                       loaded++;
                       document.getElementById('progressFill').style.width = (loaded / total * 100) + '%';
@@ -3730,6 +3768,8 @@ dashboard.get("/heatmap", async (c) => {
                   const bounds = L.polyline(allCoords.flat()).getBounds();
                   setTimeout(() => { map.invalidateSize(); map.fitBounds(bounds, { padding: [30, 30] }); }, 100);
               }
+
+              if (failed > 0) showHeatmapFailure(total, failed, storageBlocked);
               
               setTimeout(() => { 
                   const loader = document.getElementById('loader');

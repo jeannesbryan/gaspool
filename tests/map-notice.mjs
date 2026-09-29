@@ -109,6 +109,28 @@ const msgInline = MapNotice.mapLoadFailureMessage("_p~iF~ps|U", null);
 check("data inline tidak dituduh sebagai masalah jaringan", !/jaringan/i.test(msgInline), msgInline);
 check("semua varian tetap menyebut angka aman", [msgOther, msgNamed, msgInline].every((m) => /tetap aman/i.test(m)));
 
+// --- 1b. heatmap: BANYAK peta, sebagian boleh gagal -----------------------
+// Halaman heatmap menggabungkan seluruh jejak. Sebagian bisa gagal sementara
+// sisanya tetap tergambar; itu tetap harus dikatakan, karena "peta sebagian"
+// tidak bisa dibedakan dari "peta penuh" oleh yang melihatnya.
+checkEqual("heatmap tanpa kegagalan tidak berpesan", MapNotice.heatmapLoadFailureMessage(32, 0), "");
+
+const msgSebagian = MapNotice.heatmapLoadFailureMessage(32, 3);
+check("heatmap sebagian gagal menyebut jumlahnya", /3/.test(msgSebagian) && /32/.test(msgSebagian), msgSebagian);
+check("heatmap sebagian gagal bilang petanya belum lengkap", /belum lengkap/i.test(msgSebagian), msgSebagian);
+check("heatmap sebagian gagal menyebut angkanya tetap aman", /tetap aman/i.test(msgSebagian), msgSebagian);
+
+const msgSemua = MapNotice.heatmapLoadFailureMessage(32, 32);
+check("heatmap gagal semua mengatakannya terus terang", /semua/i.test(msgSemua) && /32/.test(msgSemua), msgSemua);
+check("heatmap gagal semua tidak menyuruh menunggu peta muncul", !/belum lengkap/i.test(msgSemua), msgSemua);
+
+const msgHijack = MapNotice.heatmapLoadFailureMessage(32, 2, true);
+check("heatmap menyebut r2.dev/jaringan kalau alamatnya storage publik", /r2\.dev|jaringan/i.test(msgHijack), msgHijack);
+check("heatmap tanpa storage publik tidak menuduh jaringan", !/r2\.dev/i.test(MapNotice.heatmapLoadFailureMessage(32, 2, false)), msgSemua);
+
+const msgAneh = MapNotice.heatmapLoadFailureMessage(5, 99);
+check("jumlah gagal yang mustahil dijepit ke total", /5/.test(msgAneh) && !/99/.test(msgAneh), msgAneh);
+
 // --- 2. menempel dan membersihkan di DOM ----------------------------------
 const doc = makeDoc();
 const host = makeContainer(doc);
@@ -134,6 +156,29 @@ check("container tanpa position diurus otomatis", (() => {
   const fresh = makeContainer(doc);
   MapNotice.showMapNotice(fresh, "x", doc);
   return fresh.style.position === "relative";
+})());
+
+// Container yang SUDAH punya posisi sendiri tidak boleh diubah. Halaman video
+// punya lapisan kontrol penuh layar (position:absolute, z-index 2000): kalau
+// posisinya ditimpa jadi relative, tata letaknya rusak dan pesannya justru
+// tertimbun di bawah lapisan itu — persis yang terjadi sebelum ini.
+check("container yang sudah punya posisi inline tidak diubah", (() => {
+  const sudah = makeContainer(doc);
+  sudah.style.position = "absolute";
+  MapNotice.showMapNotice(sudah, "x", doc);
+  return sudah.style.position === "absolute";
+})());
+
+check("container yang posisinya dari CSS (bukan inline) tidak ditimpa", (() => {
+  const dariCss = makeContainer(doc);
+  const docWithView = makeDoc();
+  docWithView.defaultView = {
+    getComputedStyle() {
+      return { position: "absolute" };
+    },
+  };
+  MapNotice.showMapNotice(dariCss, "x", docWithView);
+  return !dariCss.style.position;
 })());
 
 // --- 3. jalur yang tidak boleh melempar ------------------------------------
