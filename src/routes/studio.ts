@@ -100,6 +100,11 @@ studio.get("/detail/:id", async (c) => {
           <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
           <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
           <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
+          <!-- Peta di halaman ini mengambil titik jejak dari R2 lewat fetch() di
+               sisi klien. Kalau jaringan memblokir alamat itu, halaman dulu
+               hanya menulis console.error dan petanya kosong tanpa penjelasan.
+               Modul ini yang mengatakannya. -->
+          <script src="/assets/map-notice.js"></script>
 
           <style>
               * { box-sizing: border-box; }
@@ -1635,6 +1640,30 @@ studio.get("/detail/:id", async (c) => {
               await waitForMapSettle(220);
           }
 
+          /**
+           * Katakan apa adanya saat peta jejak gagal dimuat. Pesannya disusun
+           * modul bersama /assets/map-notice.js supaya kalimatnya sama dengan
+           * dashboard. Kalau modul itu sendiri gagal termuat, kita masih
+           * memberi tahu — jalur mundur sengaja terlihat, bukan diam.
+           */
+          function showMapFailure(containerId, sourceUrl, err) {
+              const el = document.getElementById(containerId);
+              if (!el) return;
+              if (window.MapNotice && typeof window.MapNotice.showMapNotice === 'function') {
+                  window.MapNotice.showMapNotice(el, window.MapNotice.mapLoadFailureMessage(sourceUrl, err));
+                  return;
+              }
+              alert('Peta jejak tidak bisa dimuat. Angka aktivitas ini tetap aman dan tersimpan.');
+          }
+
+          /** Bersihkan pesan lama begitu peta berhasil digambar. */
+          function clearMapFailure(containerId) {
+              const el = document.getElementById(containerId);
+              if (el && window.MapNotice && typeof window.MapNotice.clearMapNotice === 'function') {
+                  window.MapNotice.clearMapNotice(el);
+              }
+          }
+
           async function drawMap() {
               try {
                   const coordsObj = await getCoordinates();
@@ -1687,9 +1716,15 @@ studio.get("/detail/:id", async (c) => {
                       renderAutoSplits(coordsObj);
                       initSegmentBuilder(coordsObj);
                       loadActivitySegments();
+                      clearMapFailure('map');
+                  } else {
+                      // Jejak tidak terbaca: kosong, terlalu pendek, atau fetch ke
+                      // penyimpanan gagal. Jangan biarkan peta kosong tanpa kata.
+                      showMapFailure('map', rawUrl, null);
                   }
               } catch (e) {
                   console.error('Gagal drawMap:', e);
+                  showMapFailure('map', rawUrl, e);
               }
           }
 

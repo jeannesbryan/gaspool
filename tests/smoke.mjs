@@ -1118,6 +1118,50 @@ const main = async () => {
     "jarak fallback tidak ditandai, jadi angka lama bisa lewat sebagai angka resmi",
   );
 
+  // --- B26: peta yang gagal dimuat mengatakannya, bukan diam --------------
+  // Semua peta jejak mengambil titiknya dari objek R2 lewat fetch() di sisi
+  // KLIEN. Kalau fetch itu gagal (jaringan memblokir r2.dev, DNS ISP dihijack,
+  // kuota habis), halaman dulu hanya menulis console.error lalu petanya kosong.
+  // Dua halaman yang paling sering dilihat — dashboard dan detail aktivitas —
+  // harus mengatakan apa yang terjadi, dan menyebut bahwa angkanya tidak hilang.
+  const noticeRes = await get("/assets/map-notice.js");
+  check(
+    "B26 the map notice module is served to the browser",
+    noticeRes.res.status === 200 && noticeRes.text.includes("mapLoadFailureMessage"),
+    `status ${noticeRes.res.status}: halaman tidak bisa memakai modul yang tidak bisa diunduh`,
+  );
+  check(
+    "B26 the notice module assigns itself where the pages can reach it",
+    noticeRes.text.includes("globalThis.MapNotice"),
+    "tanpa ini halaman harus menyalin logikanya lagi",
+  );
+
+  const b26Dash = await get("/", { headers: { cookie: `gaspool_session=${token}` } });
+  const b26DashHtml = b26Dash.text;
+  check(
+    "B26 the dashboard loads the notice module",
+    b26DashHtml.includes("/assets/map-notice.js"),
+    "dashboard memuat peta jejak tetapi tidak bisa mengabarkan kegagalan",
+  );
+  check(
+    "B26 the dashboard reports a failed route load on both maps",
+    (b26DashHtml.match(/showMapFailure\(/g) || []).length >= 2,
+    "satu peta masih diam saat gagal",
+  );
+
+  const b26Detail = await get("/detail/1", { headers: { cookie: `gaspool_session=${token}` } });
+  const b26DetailHtml = b26Detail.text;
+  check(
+    "B26 the activity detail page loads the notice module",
+    b26DetailHtml.includes("/assets/map-notice.js"),
+    "halaman detail memuat peta jejak tetapi tidak bisa mengabarkan kegagalan",
+  );
+  check(
+    "B26 the activity detail reports a failed route load",
+    b26DetailHtml.includes("showMapFailure("),
+    "drawMap masih menelan kegagalan fetch diam-diam",
+  );
+
   // --- B6: delete_ride id validation -------------------------------------
   const badDelete = await get("/api/delete_ride/abc", {
     method: "DELETE",

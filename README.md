@@ -584,7 +584,18 @@ config is gitignored and therefore absent there.
 
 `npm test` runs the pure regressions first (`test:doctor`, `test:doctor-core`,
 `test:live`, `test:clock`, `test:clock-record`, `test:stat-rules`,
-`test:milestones`, `test:radar`, `test:voice`), then the smoke test.
+`test:notice`, `test:milestones`, `test:radar`, `test:voice`), then the smoke
+test.
+
+`npm run test:notice` (`node tests/map-notice.mjs`) tests
+`public/assets/map-notice.js`, the module both the dashboard and the activity
+detail page use when a route fails to load. Every ride map fetches its points
+from R2 **in the browser**, so a blocked network, a hijacked DNS answer or an
+expired object used to leave the map empty with nothing but a `console.error` —
+indistinguishable from a broken app. The message therefore has to say three
+things: the map failed, the numbers are safe, and (when the address is
+`r2.dev`) that the network is the usual suspect. The smoke test then checks that
+both pages load the module and that neither map swallows a failure silently.
 
 `npm run test:stat-rules` (`node tests/ride-stat-rules.mjs`) covers the rules
 that decide which numbers get stored: distance follows the shared segment table,

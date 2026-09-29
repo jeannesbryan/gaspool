@@ -466,6 +466,11 @@ dashboard.get("/", async (c) => {
 
         <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
         <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+        <!-- Peta jejak mengambil titiknya dari R2 lewat fetch() di sisi klien.
+             Kalau jaringan memblokir alamat itu, dulu petanya cuma kosong tanpa
+             pesan. Modul ini yang mengatakannya. Dimuat sebagai skrip biasa
+             supaya sudah siap sebelum pengguna menekan apa pun. -->
+        <script src="/assets/map-notice.js"></script>
         <script>
           let modalMap = null;
           let activeL = [];
@@ -1002,6 +1007,31 @@ function escapeHTML(str) {
             btn.style.background = isPublic ? '#2ecc71' : '#555';
           }
 
+          /**
+           * Katakan apa adanya saat peta jejak gagal dimuat. Pesannya disusun
+           * modul bersama /assets/map-notice.js supaya dashboard dan halaman
+           * detail tidak punya dua versi kalimat. Kalau modul itu sendiri gagal
+           * termuat, kita MASIH memberi tahu — jalur mundur ini sengaja
+           * terlihat, bukan diam.
+           */
+          function showMapFailure(containerId, rawUrl, err) {
+            const el = document.getElementById(containerId);
+            if (!el) return;
+            if (window.MapNotice && typeof window.MapNotice.showMapNotice === 'function') {
+              window.MapNotice.showMapNotice(el, window.MapNotice.mapLoadFailureMessage(rawUrl, err));
+              return;
+            }
+            alert('Peta jejak tidak bisa dimuat. Angka aktivitas ini tetap aman dan tersimpan.');
+          }
+
+          /** Bersihkan pesan lama begitu peta berhasil digambar. */
+          function clearMapFailure(containerId) {
+            const el = document.getElementById(containerId);
+            if (el && window.MapNotice && typeof window.MapNotice.clearMapNotice === 'function') {
+              window.MapNotice.clearMapNotice(el);
+            }
+          }
+
           async function bukaPeta(url, name, dist, id, isPublic, notes) {
             openModal('mapModal');
             document.getElementById('mTitle').innerText = name;
@@ -1108,14 +1138,22 @@ function escapeHTML(str) {
               pts = normalizeRoutePoints(pts);
               
               if (pts.length > 0) {
+                  clearMapFailure('map-modal');
                   const l = L.polyline(pts, { color: primaryColor, weight: 5 }).addTo(modalMap);
                   activeL.push(l);
                   setTimeout(() => {
                       modalMap.invalidateSize();
                       modalMap.fitBounds(l.getBounds(), { padding: [25, 25] });
                   }, 100);
+              } else {
+                  // Titiknya terbaca nol/terlalu pendek. Peta kosong tanpa
+                  // penjelasan tidak bisa dibedakan dari aplikasi yang rusak.
+                  showMapFailure('map-modal', url, null);
               }
-            } catch(e) { console.error("Gagal load peta:", e); }
+            } catch(e) {
+                console.error("Gagal load peta:", e);
+                showMapFailure('map-modal', url, e);
+            }
           }
           
           // --- MILESTONE SEUMUR HIDUP (kelipatan 1000 km) ---
@@ -4329,6 +4367,7 @@ dashboard.get("/:username", async (c, next) => {
               try {
                   const pts = await readRoutePoints(ride.polyline || '');
                   if (pts.length > 1) {
+                      clearMapFailure('public-map-modal');
                       const line = L.polyline(pts, { color: '#FF5F00', weight: 5 }).addTo(publicMap);
                       publicMapLayers.push(line);
                       setTimeout(function() {
@@ -4337,10 +4376,12 @@ dashboard.get("/:username", async (c, next) => {
                       }, 100);
                   } else {
                       setTimeout(function() { publicMap.invalidateSize(); }, 100);
+                      showMapFailure('public-map-modal', ride.polyline, null);
                   }
               } catch (err) {
                   console.error('Gagal memuat peta public:', err);
                   setTimeout(function() { publicMap.invalidateSize(); }, 100);
+                  showMapFailure('public-map-modal', ride.polyline, err);
               }
           }
 
