@@ -465,8 +465,8 @@ tracker.get("/record", async (c) => {
             </div>
             </div>
 
-            <button class="btn btn-start" id="btn-start" onclick="mulai()">▶️ INITIATE TRACKING</button>
-            <button class="btn btn-stop" id="btn-stop" onclick="selesai()">⬜ TERMINATE & SAVE</button>
+            <button class="btn btn-start" id="btn-start" onclick="startTracking()">▶️ INITIATE TRACKING</button>
+            <button class="btn btn-stop" id="btn-stop" onclick="finishTracking()">⬜ TERMINATE & SAVE</button>
         </div>
 
         <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
@@ -3092,7 +3092,7 @@ document.getElementById(
 						maybeStartResumeStage(d.savedAt);
 					}
 					
-					mulai(true); // Lanjut gowes
+					startTracking(true); // resume the ride
 
 				} catch (error) {
 					console.error("Gagal resume sesi (Data Korup/Rusak):", error.message);
@@ -3162,7 +3162,7 @@ function gpsQuality(acc) {
 				closeSignalEvent('network_offline', 'Koneksi internet kembali online.');
 			});
 
-			function mulai(isResume = false) {
+			function startTracking(isResume = false) {
 				rec = true;
 				requestWakeLock();				
 				if(!isResume) { 
@@ -4277,7 +4277,7 @@ if (!gpsStatus) return;
 					stopBtn.innerText = '⬜ TERMINATE & SAVE';
 					stopBtn.disabled = false;
 				}
-				mulai(true);
+				startTracking(true);
 			}
 
 			async function discardFinishReview() {
@@ -4290,7 +4290,7 @@ if (!gpsStatus) return;
 				window.location.href = '/';
 			}
 
-			async function selesai() {
+			async function finishTracking() {
 				if (isStealthMode) disableStealth();
 				stopLiveEngines();
 

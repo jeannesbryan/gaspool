@@ -132,8 +132,8 @@
             var view = doc && doc.defaultView;
             if (view && typeof view.getComputedStyle === 'function') {
                 var computed = view.getComputedStyle(host);
-                var posisi = computed && computed.position;
-                if (posisi && posisi !== 'static') return;
+                var currentPosition = computed && computed.position;
+                if (currentPosition && currentPosition !== 'static') return;
             }
         } catch (err) {
             // Cannot be read -> treat it as static, then make it relative.
