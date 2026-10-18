@@ -3,14 +3,14 @@ import { logger } from "hono/logger";
 import { secureHeaders } from "hono/secure-headers";
 import { getR2PublicBaseUrl } from "./config";
 
-// Import semua modul/router
+// Import every module/router
 import authRouter from "./routes/auth";
 import dashboardRouter from "./routes/dashboard";
 import trackerRouter from "./routes/tracker";
 import studioRouter from "./routes/studio";
 import apiRouter from "./api/api";
 
-// Tipe Data untuk Cloudflare Bindings (D1, R2, KV)
+// Data types for Cloudflare Bindings (D1, R2, KV)
 export type Bindings = {
   DB: D1Database;
   R2_BUCKET: R2Bucket;
@@ -21,7 +21,7 @@ export type Bindings = {
   PUBLIC_PROFILE_SLUG?: string;
   PUBLIC_PROFILE_NAME?: string;
   PUBLIC_PROFILE_AVATAR?: string;
-  // Domain publik bucket R2 milik instance ini. Setel di wrangler.jsonc.
+  // Public domain of this instance's R2 bucket. Set it in wrangler.jsonc.
   R2_PUBLIC_BASE_URL?: string;
   TURNSTILE_SITE_KEY: string;
   TURNSTILE_SECRET_KEY: string;
@@ -30,10 +30,10 @@ export type Bindings = {
 const app = new Hono<{ Bindings: Bindings }>();
 
 // ==========================================
-// MIDDLEWARE PERTAHANAN (PERISAI PASIF)
+// DEFENCE MIDDLEWARE (PASSIVE SHIELD)
 // ==========================================
 
-// 1. Logger (CCTV Terminal) - Mencatat setiap tembakan API
+// 1. Logger (terminal CCTV) - records every API call
 app.use("*", logger());
 
 app.use("*", async (c, next) => {
@@ -45,12 +45,12 @@ app.use("*", async (c, next) => {
   );
 });
 
-// 2. Secure Headers (Gembok XSS & Clickjacking) dengan Daftar Putih VIP
+// 2. Secure Headers (XSS & clickjacking padlock) with a VIP allowlist
 //
-// CSP dibangun per-request karena `mediaSrc` harus memuat domain R2 milik
-// instance ini. Sebelumnya domain itu tertulis mati di sini, sehingga salinan
-// Gaspool yang di-deploy di akun Cloudflare lain akan memblokir audionya
-// sendiri.
+// The CSP is built per request because `mediaSrc` must carry the R2 domain of
+// this instance. That domain used to be hardcoded here, so a copy of
+// Gaspool deployed on another Cloudflare account would block its own
+// audio.
 app.use("*", async (c, next) => {
   const r2PublicUrl = getR2PublicBaseUrl(c.env);
 
@@ -101,7 +101,7 @@ app.use("*", async (c, next) => {
   })(c, next);
 });
 
-// Pasang Router (Sub-Aplikasi) ke jalur masing-masing
+// Mount the routers (sub-apps) on their own paths
 app.route("/", authRouter);
 app.route("/", dashboardRouter);
 app.route("/", trackerRouter);

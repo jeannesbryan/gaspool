@@ -1,10 +1,10 @@
 /**
- * Deklarasi tipe untuk public/assets/ride-stat-rules.js.
+ * Type declaration for public/assets/ride-stat-rules.js.
  *
- * Diperlukan karena tsconfig tidak mengaktifkan `allowJs`, jadi TypeScript
- * tidak bisa membaca tipe dari berkas .js-nya. Isinya harus mengikuti
- * ride-stat-rules.js — kalau keduanya menyimpang, typecheck akan membiarkan
- * kesalahan lewat, jadi ubah keduanya bersamaan.
+ * Needed because tsconfig does not enable `allowJs`, so TypeScript cannot read
+ * the types from its .js file. The content must follow ride-stat-rules.js: if
+ * the two drift apart, typecheck will let mistakes through, so change both
+ * together.
  */
 
 export type StoredDistanceSource = "shared_segment_table" | "tracker";

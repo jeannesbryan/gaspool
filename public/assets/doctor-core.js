@@ -1,45 +1,45 @@
 /**
- * Inti aritmatika Activity Doctor — satu tabel segmen untuk semua pemakai.
+ * Activity Doctor arithmetic core: one segment table for every consumer.
  *
- * Kenapa berkas ini ada. Aritmatika yang sama sudah DUA KALI disalin ke tempat
- * berbeda lalu diperbaiki hanya di salah satunya:
+ * Why this file exists. The same arithmetic had been copied TWICE into
+ * different places and then fixed in only one of them:
  *
- *   1. `Math.floor()` pada selisih waktu. Di modul server diperbaiki, tetapi
- *      salinannya di `detectDoctorRestBlocks` tertinggal — gowes 20 menit
- *      dilaporkan 0:00:00.
- *   2. Aturan "segitiga mana yang dianggap bergerak". Finish Review memakai
- *      aturan sendiri (buang segmen mustahil), server memakai
- *      `buildDoctorSegments()`. Hasilnya dua jarak berbeda untuk gowes yang
- *      sama: 18,741 km vs 18,506 km.
+ *   1. `Math.floor()` on the time difference. It was fixed in the server
+ *      module, but its copy inside `detectDoctorRestBlocks` was left behind,
+ *      so a 20 minute ride was reported as 0:00:00.
+ *   2. The rule for "which triangle counts as moving". Finish Review used its
+ *      own rule (drop impossible segments), the server used
+ *      `buildDoctorSegments()`. The result was two different distances for
+ *      the same ride: 18,741 km vs 18,506 km.
  *
- * Karena itu berkas ini adalah SATU-SATUNYA tempat yang memutuskan arti
- * "bergerak". Halaman tracker memuatnya sebagai modul, modul server
- * mengimpornya, dan tests/doctor-core.mjs mengujinya langsung — satu berkas,
- * tidak ada salinan yang bisa menyimpang.
+ * That is why this file is the ONLY place that decides what "moving" means.
+ * The tracker page loads it as a module, the server module imports it, and
+ * tests/doctor-core.mjs tests it directly: one file, with no copy left that
+ * can drift.
  *
- * Ditulis sebagai .js biasa (bukan .ts) supaya bisa dimuat browser tanpa build
- * dan diimpor Node tanpa kompilasi, sama seperti live-clock.js.
+ * Written as plain .js (not .ts) so the browser can load it without a build
+ * and Node can import it without compilation, the same as live-clock.js.
  */
 
 export const DOCTOR_LONG_GAP_SECONDS = 20 * 60;
 export const DOCTOR_EXTREME_JUMP_METERS = 1500;
 
-// Bagaimana "berhenti" dibuktikan.
+// How "stopped" is proven.
 //
-// Cara lama memakai panjang jeda antar titik, dan itu salah dua kali: jitter
-// GPS tidak pernah menghasilkan jeda panjang, sementara sampel rapat selalu
-// menghasilkan jeda nol.
+// The old way measured the gap between points, and that was wrong twice: GPS
+// jitter never produces a long gap, while closely spaced samples always
+// produce a gap of zero.
 //
-// Cara di sini: sebuah titik dianggap bagian dari pemberhentian kalau ada
-// rentetan titik selama DOCTOR_STOP_MIN_SECONDS yang semuanya masih di dalam
-// radius tertentu dari titik itu. Artinya "orangnya benar-benar diam di satu
-// tempat", bukan "kecepatan satu segmen kebetulan rendah".
+// The way used here: a point counts as part of a stop when there is a run of
+// points spanning DOCTOR_STOP_MIN_SECONDS that all stay inside a certain
+// radius of that point. It means "the person really stood still in one place",
+// not "one segment happened to have a low speed".
 //
-// Radiusnya diturunkan dari ambang auto-pause supaya tracker dan doctor memakai
-// definisi "bergerak" yang sama: radius = ambang_kmh x durasi. Lantainya ada
-// untuk menyerap jitter GPS alat konsumen (beberapa meter) pada aktivitas lambat
-// seperti jalan kaki, dan sengaja dipilih konservatif: kalau ragu, lebih baik
-// waktu dihitung bergerak (kecepatan tampak lebih rendah) daripada sebaliknya.
+// The radius comes from the auto-pause threshold so tracker and doctor share
+// one definition of "moving": radius = threshold_kmh x duration. The floor
+// absorbs GPS jitter from consumer devices (a few metres) on slow activities
+// such as walking, and is deliberately conservative: when in doubt, count the
+// time as moving (speed looks lower) rather than the other way around.
 export const DOCTOR_STOP_MIN_SECONDS = 60;
 export const DOCTOR_STOP_RADIUS_FLOOR_METERS = 25;
 
@@ -63,10 +63,10 @@ export const getDistanceMeters = (from, to) => {
 };
 
 /**
- * `movement_min_kmh` sengaja disamakan dengan `activityAutoPauseSpeedKmh()` di
- * src/routes/tracker.ts. Kalau dua tempat ini berbeda, live tracker dan doctor
- * akan punya dua definisi "bergerak" yang berbeda pula — persis jenis
- * ketidakcocokan yang membuat moving time dulu menyusut 47 menit.
+ * `movement_min_kmh` is deliberately set equal to `activityAutoPauseSpeedKmh()`
+ * in src/routes/tracker.ts. If these two places ever disagree, the live tracker
+ * and the doctor will also have two different definitions of "moving", exactly
+ * the kind of mismatch that once made moving time shrink by 47 minutes.
  */
 export const getDoctorSpeedLimits = (activityType) => {
   const type = String(activityType || "ride").toLowerCase();
@@ -107,16 +107,16 @@ export const getDoctorSpeedLimits = (activityType) => {
 };
 
 /**
- * Tandai titik mana yang berada di dalam sebuah pemberhentian.
+ * Mark which points lie inside a stop.
  *
- * Untuk tiap titik `a`, cari titik terjauh `b` yang masih di dalam radius dari
- * titik `a`. Kalau bentangan waktu a..b mencapai DOCTOR_STOP_MIN_SECONDS, seluruh
- * rentang itu berarti "diam di satu tempat" dan ditandai berhenti.
+ * For every point `a`, find the furthest point `b` that is still within the
+ * radius of point `a`. If the time span a..b reaches DOCTOR_STOP_MIN_SECONDS,
+ * the whole range means "stood still in one place" and is marked as stopped.
  *
- * `b` hanya bergerak maju seiring `a` bergerak maju (karena kendala jarak makin
- * longgar), sehingga totalnya O(n) — sama untuk berkas 100 titik maupun 100.000
- * titik. Penandaan rentang juga dijaga O(n) dengan hanya menandai bagian yang
- * belum pernah ditandai.
+ * `b` only moves forward as `a` moves forward (because the distance constraint
+ * keeps loosening), so the total is O(n): the same for a file of 100 points or
+ * one of 100,000 points. Range marking is also kept O(n) by only marking the
+ * part that has never been marked before.
  */
 export const classifyDoctorPointStays = (
   points,
@@ -150,7 +150,7 @@ export const classifyDoctorPointStays = (
   return inStay;
 };
 
-/** Radius pemberhentian untuk satu jenis aktivitas (lihat catatan di atas). */
+/** Stop radius for one activity type (see the note above). */
 export const getDoctorStopRadiusMeters = (movementMinKmh) =>
   Math.max(
     DOCTOR_STOP_RADIUS_FLOOR_METERS,
@@ -158,12 +158,12 @@ export const getDoctorStopRadiusMeters = (movementMinKmh) =>
   );
 
 /**
- * Satu tabel segmen, dipakai oleh SEMUA perhitungan di modul ini.
+ * One segment table, used by EVERY calculation in this module.
  *
- * Ini bukan sekadar kerapian: jarak dan waktu harus dijumlahkan dari HIMPUNAN
- * SEGMEN YANG SAMA. Versi lama menjumlahkan jarak dari semua segmen tetapi
- * waktu hanya dari sebagian, lalu membagi keduanya — itu artefak, bukan
- * pengukuran, dan hasilnya moving time menyusut 47 menit.
+ * This is not just tidiness: distance and time must be summed over the SAME
+ * SET OF SEGMENTS. The old version summed distance over all segments but time
+ * over only some of them, then divided the two, which is an artefact, not a
+ * measurement, and it made moving time shrink by 47 minutes.
  */
 export const buildDoctorSegments = (points, activityType) => {
   const limits = getDoctorSpeedLimits(activityType);
@@ -184,14 +184,14 @@ export const buildDoctorSegments = (points, activityType) => {
     const prevMs = prev.time ? Date.parse(prev.time) : 0;
     const pointMs = point.time ? Date.parse(point.time) : 0;
 
-    // Selisih waktu NYATA, bukan hasil pembulatan. Ini yang dulu hilang:
-    // Math.floor() membuat rekaman lebih rapat dari 1 detik menyumbang jarak
-    // tetapi nol waktu, dan 45 menit menguap tanpa jejak.
+    // REAL time difference, not a rounded one. This is what used to get lost:
+    // Math.floor() made recordings denser than 1 second contribute distance
+    // but zero time, and 45 minutes vanished without a trace.
     const exactSeconds =
       Number.isFinite(prevMs) && Number.isFinite(pointMs) ? (pointMs - prevMs) / 1000 : 0;
     seconds[k] = exactSeconds > 0 ? exactSeconds : 0;
 
-    // Nilai bulat tetap ada karena ambang anomali didefinisikan dalam detik utuh.
+    // The rounded value still exists because anomaly thresholds are whole seconds.
     gapSeconds[k] = Math.floor(seconds[k]);
     cumTime[k + 1] = cumTime[k] + seconds[k];
   }
@@ -205,8 +205,8 @@ export const buildDoctorSegments = (points, activityType) => {
   const kind = new Array(count).fill("moving");
 
   for (let k = 0; k < count; k++) {
-    // Urutan ini penting: lompatan GPS mengalahkan segalanya, lalu
-    // pemberhentian, sisanya baru dianggap bergerak.
+    // Order matters here: a GPS jump overrides everything, then a stop, and
+    // only what is left is treated as moving.
     if (
       distanceM[k] >= DOCTOR_EXTREME_JUMP_METERS &&
       (!gapSeconds[k] || gapSeconds[k] < DOCTOR_LONG_GAP_SECONDS)
@@ -221,16 +221,16 @@ export const buildDoctorSegments = (points, activityType) => {
 };
 
 /**
- * Jarak yang benar-benar DITEMPUH, dalam meter.
+ * Distance actually TRAVELLED, in metres.
  *
- * Hanya segmen yang ditandai "moving" yang dihitung. Inilah angka yang layak
- * disimpan sebagai jarak aktivitas.
+ * Only segments marked "moving" are counted. This is the number worth storing
+ * as the activity distance.
  *
- * Kenapa `jump` dan `stopped` tidak dihitung: pada gowes 24 Sep, 298 meter
- * terbuang dari 59 segmen yang berlangsung selama 570 detik berhenti. GPS yang
- * mengembara saat sepeda diam bukan jarak yang ditempuh siapa pun; menyimpannya
- * berarti mencatat perjalanan yang tidak pernah terjadi. Segmen `jump`
- * (>= 1,5 km) adalah lompatan GPS, bukan gerakan.
+ * Why `jump` and `stopped` are not counted: on the 24 Sep ride, 298 metres
+ * were thrown away from 59 segments spanning 570 seconds of standing still.
+ * A GPS signal wandering while the bike is parked is not distance travelled by
+ * anyone; storing it means recording a journey that never happened. `jump`
+ * segments (>= 1.5 km) are GPS leaps, not movement.
  */
 export const doctorMovingDistanceMeters = (points, activityType) => {
   const segments = buildDoctorSegments(points, activityType);
@@ -242,12 +242,12 @@ export const doctorMovingDistanceMeters = (points, activityType) => {
 };
 
 /**
- * Detik yang dianggap BERGERAK, dari tabel segmen yang sama dengan jaraknya.
+ * Seconds considered MOVING, from the same segment table as the distance.
  *
- * Sengaja tidak dipakai untuk menimpa jam live secara otomatis — lihat catatan
- * di src/api/api.ts. Jam live adalah pengukuran langsung (ia tahu kapan
- * pesepeda benar-benar berhenti, termasuk saat GPS tidak stabil); angka ini
- * adalah inferensi geometri, jadi perannya memeriksa silang.
+ * Deliberately not used to overwrite the live clock automatically, see the
+ * note in src/api/api.ts. The live clock is a direct measurement (it knows when
+ * the rider really stopped, including when the GPS is unstable); this number is
+ * a geometric inference, so its role is cross-checking.
  */
 export const doctorMovingSeconds = (points, activityType) => {
   const segments = buildDoctorSegments(points, activityType);

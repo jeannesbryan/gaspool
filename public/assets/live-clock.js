@@ -1,27 +1,27 @@
 /**
- * Akuntansi jam untuk gowes yang sedang berjalan (live).
+ * Clock accounting for a ride that is still running (live).
  *
- * Berkas ini sengaja berupa .js biasa dan tinggal di public/assets supaya
- * dipakai DUA tempat tanpa disalin: halaman tracker memuatnya sebagai modul,
- * dan tests/live-clock.mjs mengimpornya langsung. Satu berkas berarti tidak ada
- * dua implementasi yang bisa saling menyimpang — persis jenis kesalahan yang
- * dulu membuat jam live dan jam hasil repair berbeda.
+ * This file is deliberately a plain .js living in public/assets so that TWO
+ * places use it without copying: the tracker page loads it as a module, and
+ * tests/live-clock.mjs imports it directly. One file means there are no two
+ * implementations that can drift apart, exactly the kind of mistake that once
+ * made the live clock and the repaired clock differ.
  *
- * Kenapa ini ada. Jam di layar live dan jam hasil repair pernah berbeda untuk
- * gowes yang sama: 1:41:29 vs 1:44:13, padahal rentang waktunya 1:47:56.
- * Setelah diukur pada berkas asli, selisihnya punya lebih dari satu sebab:
+ * Why this exists. The clock on the live screen and the clock after repair once
+ * differed for the same ride: 1:41:29 vs 1:44:13, even though the time span was
+ * 1:47:56. After measuring the original files, that gap had several causes:
  *
- *   1. auto-pause memakai kecepatan sesaat dari chip GPS, sedangkan statistik
- *      hasil repair memakai perpindahan bersih;
- *   2. dan yang sebelumnya tak terlihat sama sekali: setiap tick yang datang
- *      terlambat DIPOTONG diam-diam. Saat layar mati atau tab di-background,
- *      browser menunda tick, dan potongannya (delta - maxDelta) tidak pernah
- *      dijumlahkan di mana pun.
+ *   1. auto-pause used the instantaneous speed from the GPS chip, while the
+ *      repaired statistics used net displacement;
+ *   2. and what had been completely invisible before: every tick that arrived
+ *      late was CLIPPED silently. When the screen goes off or the tab is in the
+ *      background, the browser delays ticks, and the clipped part (delta minus
+ *      maxDelta) was never added up anywhere.
  *
- * Modul ini menutup lubang kedua. Sifat pentingnya: SETIAP detik yang lewat
- * harus masuk salah satu keranjang, jadi jumlah semua delta mentah =
- * counted + clamped + dropped. Kalau tidak sama, ada detik yang menguap tanpa
- * jejak, dan itu justru yang harus ketahuan.
+ * This module closes the second hole. Its key property: EVERY second that
+ * passes must land in one of the buckets, so the sum of all raw deltas =
+ * counted + clamped + dropped. If they do not match, some seconds evaporated
+ * without a trace, and that is exactly what must be found out.
  */
 
 export function createLiveClockAccounting(maxDeltaSeconds, restGapSeconds) {
@@ -39,11 +39,11 @@ export function createLiveClockAccounting(maxDeltaSeconds, restGapSeconds) {
 }
 
 /**
- * Hitung satu tick.
+ * Compute one tick.
  *
- * `paused` berarti auto-pause sedang aktif: waktunya TIDAK dihitung sebagai
- * bergerak, tetapi tetap tercatat sebagai detik yang nyata lewat, sehingga
- * pembukuan tetap seimbang.
+ * `paused` means auto-pause is active: the time is NOT counted as moving, but
+ * it is still recorded as seconds that really passed, so the books stay
+ * balanced.
  */
 export function recordLiveClockTick(accounting, rawDeltaSeconds, options = {}) {
   const raw = Number(rawDeltaSeconds);
@@ -57,17 +57,17 @@ export function recordLiveClockTick(accounting, rawDeltaSeconds, options = {}) {
   accounting.tick_count += 1;
   accounting.raw_seconds += raw;
 
-  // Gap besar: browser atau sistem berhenti mengirim tick cukup lama sehingga
-  // waktunya sudah tidak bisa dipercaya. Dibuang seluruhnya, tetapi jumlahnya
-  // tetap diketahui — karena itu ia punya keranjang sendiri, bukan menghilang.
+  // Large gap: the browser or the system stopped sending ticks long enough that
+  // the time can no longer be trusted. Dropped entirely, but the amount is still
+  // known, which is why it gets its own bucket instead of simply disappearing.
   if (raw > restGap) {
     accounting.dropped_seconds += raw;
     accounting.dropped_tick_count += 1;
     return { kind: "dropped", counted: 0, lost: raw };
   }
 
-  // Tick yang terlambat tetapi masih masuk akal: dipotong di batas atas.
-  // Potongan inilah yang dulu tidak pernah tercatat.
+  // A tick that is late but still plausible: clipped at the upper bound.
+  // This clipped part is exactly what never got recorded before.
   const lost = raw > maxDelta ? raw - maxDelta : 0;
   const countedDelta = raw - lost;
 
@@ -86,16 +86,16 @@ export function recordLiveClockTick(accounting, rawDeltaSeconds, options = {}) {
 }
 
 /**
- * Detik yang lewat selama aktivitas tetapi tidak masuk moving time. Dipakai di
- * layar supaya pemakainya tahu jamnya tidak hilang, hanya tidak dihitung
- * sebagai bergerak.
+ * Seconds that passed during the activity but did not go into moving time. Shown
+ * on screen so the user knows the clock is not lost, it is just not counted as
+ * moving.
  */
 export function liveClockUncountedSeconds(accounting) {
   return Number((accounting.clamped_seconds + accounting.dropped_seconds).toFixed(1));
 }
 
 /**
- * Selisih pembukuan. Nol berarti tidak ada detik yang menguap tanpa jejak.
+ * Accounting difference. Zero means no second evaporated without a trace.
  */
 export function liveClockBalance(accounting) {
   return Number((accounting.raw_seconds - liveClockUncountedSeconds(accounting)).toFixed(1));

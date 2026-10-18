@@ -1,13 +1,13 @@
 /**
- * Uji modul pencatat jam live (src/api/live-clock-record.ts).
+ * Tests for the live clock recorder (src/api/live-clock-record.ts).
  *
- * Modulnya murni, jadi bisa dijalankan tanpa Worker/D1/network:
+ * The module is pure, so it runs without Worker, D1 or network:
  *
  *   node tests/live-clock-record.mjs
  *
- * Yang dijaga di sini adalah sifat-sifat yang membuat catatannya layak dipakai
- * sebagai bukti: nol != tidak ada data, keranjang dijumlah ulang (klien tidak
- * dipercaya), dan catatan yang tidak konsisten ditandai alih-alih dibuang
+ * What is guarded here are the properties that make the record usable as
+ * evidence: zero is not the same as no data, the buckets are re-summed (the
+ * client is not trusted), and an inconsistent record is flagged, not dropped
  * diam-diam.
  */
 import {
@@ -27,13 +27,13 @@ const checkEqual = (name, actual, expected) =>
     `expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`,
   );
 
-// ------------------------------------------------------- nol vs tidak ada data
+// ------------------------------------------------- zero versus no data
 checkEqual("catatan kosong jadi null, bukan nol", normalizeLiveClockRecord(null), null);
 checkEqual("undefined jadi null", normalizeLiveClockRecord(undefined), null);
 checkEqual("string jadi null", normalizeLiveClockRecord("580"), null);
 checkEqual("array jadi null", normalizeLiveClockRecord([1, 2]), null);
 
-// ------------------------------------------------------------ catatan normal
+// --------------------------------------------------------- a normal record
 const normal = normalizeLiveClockRecord({
   tick_count: 12534,
   counted_seconds: 12534,
@@ -48,14 +48,14 @@ check("catatan bersih dianggap konsisten", normal?.consistent === true);
 checkEqual("keranjang bersih tetap nol", normal?.uncounted_seconds, 0);
 checkEqual("tidak ada issue pada catatan bersih", normal?.issues, []);
 
-// Gowes 25 Sep 2026: tidak ada peringatan live_clock_gap, artinya uncounted 0.
+// Ride of 25 Sep 2026: no live_clock_gap warning, meaning uncounted is 0.
 checkEqual(
   "gowes 25 Sep (0 detik hilang) terbaca apa adanya",
   normal?.counted_seconds,
   12534,
 );
 
-// -------------------------------------------------- jumlah keranjang dihitung
+// --------------------------------------------- bucket totals are recomputed
 const withLoss = normalizeLiveClockRecord({
   tick_count: 600,
   counted_seconds: 580.5,
@@ -93,7 +93,7 @@ checkEqual(
   15.5,
 );
 
-// -------------------------------------------------------- nilai tidak masuk akal
+// --------------------------------------------------- values that make no sense
 const garbage = normalizeLiveClockRecord({
   tick_count: -5,
   counted_seconds: "abc",
@@ -139,7 +139,7 @@ check(
   tooManyProblemTicks?.consistent === false,
 );
 
-// balance tidak dikirim = null, bukan 0 (0 adalah nilai yang sah).
+// balance not sent = null, not 0 (0 is a valid value).
 const noBalance = normalizeLiveClockRecord({
   tick_count: 10,
   counted_seconds: 10,

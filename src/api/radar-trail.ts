@@ -1,20 +1,20 @@
 /**
- * Jejak perjalanan untuk radar.
+ * Travel trail for the radar.
  *
- * Kenapa ini ada: radar tadinya hanya menyimpan POSISI TERAKHIR, jadi penonton
- * yang membuka tautannya terlambat cuma melihat satu titik dan tidak tahu
- * pemiliknya sudah lewat mana. Untuk gowes jauh, jejaknya justru bagian yang
- * berguna.
+ * Why this exists: the radar used to keep only the LAST POSITION, so a viewer
+ * who opens the link late sees a single dot and has no idea where the owner
+ * has already passed. On long gowes rides the trail is exactly the useful
+ * part.
  *
- * Catatan penting soal tempat penyimpanan: jejak ini dititipkan di dalam nilai
- * KV milik peserta, BUKAN sebagai kunci terpisah. Alasannya, daftar peserta
- * dibaca lewat `list({ prefix: room + ":" })` lalu nama pengguna diambil dari
- * bagian setelah titik dua pertama. Kunci baru seperti `ROOM:user:trail` akan
- * terbaca sebagai peserta kedua bernama sama, dan penonton akan melihat dua
- * orang padahal hanya satu. Menitipkan di nilai yang sama menghindari itu
- * sekaligus membuat jejak ikut kedaluwarsa bersama posisinya.
+ * Important note about where it is stored: the trail rides inside the
+ * participant's KV value, NOT as a separate key. The reason: the participant
+ * list is read via `list({ prefix: room + ":" })` and the user name is taken
+ * from the part after the first colon. A new key like `ROOM:user:trail` would
+ * be read as a second participant with the same name, and viewers would see
+ * two people where there is only one. Keeping it in the same value avoids that
+ * and also makes the trail expire together with the position.
  *
- * Modul ini murni supaya bisa diuji tanpa Worker maupun KV.
+ * This module is pure so it can be tested without a Worker or KV.
  */
 
 export type RadarTrailPoint = {
@@ -24,20 +24,20 @@ export type RadarTrailPoint = {
 };
 
 /**
- * Berapa titik yang disimpan.
+ * How many points are kept.
  *
- * Interval siaran di mode normal sekitar 15 detik, jadi 120 titik kira-kira
- * setara 30 menit terakhir — cukup untuk memberi gambaran arah, tanpa membuat
- * nilai KV tumbuh tanpa batas (nilai ditulis ulang setiap kali sync).
+ * The broadcast interval in normal mode is about 15 seconds, so 120 points is
+ * roughly the last 30 minutes: enough to show the direction, without letting
+ * the KV value grow without bound (the value is rewritten on every sync).
  */
 export const RADAR_TRAIL_MAX_POINTS = 120;
 
 /**
- * Jarak minimum antar titik jejak.
+ * Minimum distance between trail points.
  *
- * GPS yang diam masih bergoyang beberapa meter. Tanpa ambang, jejak akan penuh
- * titik-titik yang saling menumpuk sehingga polyline-nya terlihat seperti
- * coretan, dan kuota tulis KV terbuang untuk informasi yang sama.
+ * A stationary GPS still wobbles by a few metres. Without a threshold the trail
+ * fills with points stacked on top of each other, so the polyline looks like
+ * scribble and KV write quota is spent on the same information.
  */
 export const RADAR_TRAIL_MIN_METERS = 12;
 
@@ -61,8 +61,8 @@ export const radarDistanceMeters = (
 };
 
 /**
- * Baca jejak dari nilai KV yang mungkin rusak.
- * Nilai yang tidak bisa dipakai menghasilkan jejak kosong, bukan lemparan.
+ * Read a trail from a KV value that may be corrupt.
+ * A value that cannot be used yields an empty trail, not a throw.
  */
 export const normalizeRadarTrail = (value: unknown): RadarTrailPoint[] => {
   if (!Array.isArray(value)) return [];
@@ -77,21 +77,21 @@ export const normalizeRadarTrail = (value: unknown): RadarTrailPoint[] => {
     points.push({ lat, lng, t: Number.isFinite(t) && t > 0 ? t : 0 });
   }
 
-  // Jejak yang entah bagaimana tumbuh lebih panjang dari batas tetap dipangkas
-  // di sini, supaya data lama tidak bisa membengkakkan halaman penonton.
+  // A trail that somehow grew past the limit is still trimmed right here, so
+  // old data cannot bloat the viewer page.
   return points.length > RADAR_TRAIL_MAX_POINTS
     ? points.slice(points.length - RADAR_TRAIL_MAX_POINTS)
     : points;
 };
 
 /**
- * Tambahkan satu posisi ke jejak.
+ * Append one position to the trail.
  *
- * Aturan:
- *   - koordinat tidak masuk akal diabaikan (jejak lama dikembalikan apa adanya);
- *   - perpindahan lebih kecil dari ambang hanya MEMPERBARUI titik terakhir,
- *     sehingga posisi terakhir tetap akurat tanpa menambah panjang jejak;
- *   - panjang jejak selalu dibatasi di ujung yang lama.
+ * Rules:
+ *   - coordinates that make no sense are ignored (the old trail is returned);
+ *   - a move smaller than the threshold only UPDATES the last point, so the
+ *     latest position stays accurate without making the trail longer;
+ *   - the trail length is always capped at the old end.
  */
 export const appendRadarTrailPoint = (
   trail: unknown,
@@ -113,7 +113,7 @@ export const appendRadarTrailPoint = (
 
   const last = existing[existing.length - 1];
   if (radarDistanceMeters(last, next) < minMeters) {
-    // Diam di tempat: cukup pindahkan titik terakhir, jangan tambah yang baru.
+    // Standing still: just move the last point, do not add a new one.
     return [...existing.slice(0, -1), next];
   }
 

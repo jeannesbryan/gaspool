@@ -1,43 +1,43 @@
 /**
- * Aturan angka apa yang DISIMPAN ke riwayat olahraga.
+ * Rules for which numbers are STORED into the sport history.
  *
- * Berkas ini sengaja berupa .js biasa di public/assets supaya dipakai TIGA
- * tempat dari satu sumber, tanpa disalin:
+ * This file is deliberately a plain .js in public/assets so that THREE places
+ * use it from one source, without copying:
  *
- *   - halaman tracker (lewat <script type="module"> → window.RideStatRules),
- *   - server (src/api/api.ts mengimpornya saat menyimpan aktivitas),
+ *   - the tracker page (through <script type="module"> → window.RideStatRules),
+ *   - the server (src/api/api.ts imports it when saving an activity),
  *   - tests/ride-stat-rules.mjs.
  *
- * Kenapa tidak ditulis dua kali: jarak yang ditampilkan halaman dan jarak yang
- * disimpan server HARUS angka yang sama. Kalau aturannya disalin, keduanya akan
- * menyimpang lagi persis seperti kasus "dua kebenaran" sebelumnya (18,741 km di
- * layar vs 18,506 km di studio) — dan kali ini penyimpangannya tidak akan
- * kelihatan, karena yang satu hanya muncul di berkas.
+ * Why it is not written twice: the distance shown by the page and the distance
+ * stored by the server MUST be the same number. If the rules get copied, the
+ * two will drift again exactly like the earlier "two truths" case (18,741 km on
+ * screen vs 18,506 km in the studio), and this time the drift would stay
+ * invisible, because one of the two only ever shows up in a file.
  *
- * Dua keputusan yang hidup di sini:
+ * Two decisions live here:
  *
- * 1. JARAK memakai tabel segmen bersama. Drift GPS saat berhenti bukan jarak
- *    yang ditempuh: pada gowes 25 Sep 2026, 1651 m dari 55,130 km (3,0%)
- *    berasal dari 345 segmen "diam" dengan kecepatan rata-rata 0,48 km/h.
- *    Selama angka mentah yang disimpan, kartu milestone seumur hidup memakai
- *    angka yang kita sendiri sudah tahu salah.
+ * 1. DISTANCE uses the shared segment table. GPS drift while stopped is not
+ *    distance travelled: on the 25 Sep 2026 ride, 1651 m of 55,130 km (3.0%)
+ *    came from 345 "stopped" segments at an average speed of 0.48 km/h. As
+ *    long as the raw number is what gets stored, the lifetime milestone cards
+ *    use a number we already know is wrong.
  *
- * 2. ELEVASI mempertahankan pengukuran — arahnya sengaja KEBALIKAN dari jarak.
- *    Tidak ada dasar untuk menyatakan salah satu angka lebih benar: pada data
- *    nyata, taksiran elevasi gowes itu bergerak dari 167 m sampai 855 m hanya
- *    karena beda parameter filter, sementara selisih kedua angka cuma 75 m.
- *    Kalau tidak ada nilai yang benar, jangan menukar satu taksiran dengan
- *    taksiran lain. Hitung ulang hanya boleh MENGISI kalau live tidak punya
- *    angka sama sekali.
+ * 2. ELEVATION keeps the measurement, and its direction is deliberately the
+ *    OPPOSITE of distance. There is no basis for claiming one number is more
+ *    correct: on real data the elevation estimate for that ride moved from
+ *    167 m to 855 m only because of different filter parameters, while the two
+ *    numbers differ by just 75 m. When no value is correct, do not swap one
+ *    estimate for another. Recalculation may only FILL IN when live has no
+ *    number at all.
  */
 
-/** Batas bawah rasio jarak bersih terhadap jarak yang dilaporkan tracker. */
+/** Lower bound for the ratio of clean distance to the distance the tracker reports. */
 export const STORED_DISTANCE_MIN_RATIO = 0.5;
 /**
- * Batas atas. Tabel segmen hanya MEMBUANG segmen, jadi jarak bersih normalnya
- * lebih kecil. Toleransi 10 persen disisakan untuk perbedaan definisi
- * "bergerak" antara jam live (auto-pause) dan tabel segmen — bukan untuk
- * menerima angka yang lebih besar dari yang dilaporkan.
+ * Upper bound. The segment table only DROPS segments, so the clean distance is
+ * normally smaller. The 10 percent tolerance is left for the difference in the
+ * definition of "moving" between the live clock (auto-pause) and the segment
+ * table, not for accepting a number larger than the one reported.
  */
 export const STORED_DISTANCE_MAX_RATIO = 1.1;
 
@@ -48,15 +48,15 @@ const positive = (value) => {
 };
 
 /**
- * Putuskan jarak mana yang disimpan ke D1 dan metadata.
+ * Decide which distance is stored into D1 and the metadata.
  *
  * @param {{declaredKm: unknown, cleanKm?: unknown, sharedTableKm?: unknown}} input
- *   declaredKm    = jarak yang dilaporkan halaman tracker (jam live).
- *   cleanKm       = jarak dari tabel segmen bersama (stats_after).
- *   sharedTableKm = jarak yang sama, tetapi hanya terisi kalau tabel bersama
- *                   benar-benar dimuat di perangkat. Null berarti perhitungan
- *                   lama yang dipakai, dan fallback tidak boleh diam-diam
- *                   menjadi angka resmi.
+ *   declaredKm    = distance reported by the tracker page (live clock).
+ *   cleanKm       = distance from the shared segment table (stats_after).
+ *   sharedTableKm = the same distance, but only filled in when the shared table
+ *                   is actually loaded on the device. Null means the old
+ *                   calculation is used, and a fallback must not quietly
+ *                   become the official number.
  */
 export const chooseStoredDistanceKm = ({ declaredKm, cleanKm, sharedTableKm }) => {
   const declared = positive(declaredKm);
@@ -114,8 +114,8 @@ export const chooseStoredDistanceKm = ({ declaredKm, cleanKm, sharedTableKm }) =
 };
 
 /**
- * Putuskan elevasi mana yang disimpan. Hitung ulang hanya MENGISI, tidak
- * pernah menimpa pengukuran.
+ * Decide which elevation is stored. Recalculation only FILLS IN, it never
+ * overwrites a measurement.
  */
 export const chooseStoredElevationGain = ({ liveMeters, recalculatedMeters }) => {
   const live = Math.max(0, Number(liveMeters) || 0);

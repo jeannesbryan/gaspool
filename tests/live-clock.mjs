@@ -1,19 +1,19 @@
 /**
- * Test untuk akuntansi jam live.
+ * Test for the live clock accounting.
  *
- * Kenapa ada: jam live dan jam hasil repair pernah berbeda 2:44 untuk gowes yang
- * sama. Salah satu sebabnya adalah potongan diam-diam di setiap tick yang
- * terlambat (Math.min(delta, maxDelta)), yang tidak pernah dijumlahkan di mana
- * pun sehingga tidak bisa dibuktikan. Test ini mengunci dua hal:
+ * Why it exists: the live clock and the repaired clock once differed by 2:44 for
+ * the same ride. One cause was the silent clamp on every late tick
+ * (Math.min(delta, maxDelta)), which was never summed anywhere, so it could not
+ * be proven. This test locks two things:
  *
- *   1. setiap detik yang lewat masuk salah satu keranjang, tidak ada yang hilang
- *      tanpa jejak;
- *   2. potongan dari tick terlambat memang terhitung, karena itulah angka yang
- *      dicari saat mendiagnosis selisih jam.
+ *   1. every second that passes lands in one of the buckets, nothing is lost
+ *      without a trace;
+ *   2. the clamp from a late tick is really accounted for, because that is the
+ *      number being looked for when diagnosing a clock difference.
  *
  *   node tests/live-clock.mjs
  *
- * Exit code 0 = semua assertion lewat.
+ * Exit code 0 = all assertions passed.
  */
 import {
   createLiveClockAccounting,
@@ -27,7 +27,7 @@ const results = [];
 const check = (name, passed, detail = "") => results.push({ name, passed: Boolean(passed), detail });
 const near = (a, b, tol) => Number.isFinite(a) && Math.abs(a - b) <= tol;
 
-// ------------------------------------------------------ tick normal
+// ---------------------------------------------------- normal tick
 {
   const acc = createLiveClockAccounting(10, 120);
   for (let i = 0; i < 60; i++) recordLiveClockTick(acc, 1);
@@ -44,10 +44,10 @@ const near = (a, b, tol) => Number.isFinite(a) && Math.abs(a - b) <= tol;
   );
 }
 
-// ------------------------------------------- tick terlambat (inti masalahnya)
+// ------------------------------------------- late tick (the core problem)
 {
   const acc = createLiveClockAccounting(10, 120);
-  // Layar mati 25 detik: tick berikutnya datang dengan delta 25, dipotong ke 10.
+  // Screen off for 25 seconds: the next tick arrives with delta 25, clamped to 10.
   const tick = recordLiveClockTick(acc, 25);
 
   check(
@@ -67,7 +67,7 @@ const near = (a, b, tol) => Number.isFinite(a) && Math.abs(a - b) <= tol;
   );
 }
 
-// ------------------------------------------------------ gap sistem
+// ------------------------------------------------------ system gap
 {
   const acc = createLiveClockAccounting(10, 120);
   recordLiveClockTick(acc, 300);
@@ -98,7 +98,7 @@ const near = (a, b, tol) => Number.isFinite(a) && Math.abs(a - b) <= tol;
   );
 }
 
-// ------------------------------------- pembukuan seimbang (kasus campuran)
+// ------------------------------------- balanced books (mixed case)
 {
   const acc = createLiveClockAccounting(10, 120);
   const raw = [];
@@ -113,8 +113,8 @@ const near = (a, b, tol) => Number.isFinite(a) && Math.abs(a - b) <= tol;
   for (const d of raw) recordLiveClockTick(acc, d);
 
   const totalRaw = raw.reduce((a, b) => a + b, 0);
-  // Tick yang wajar menyumbang penuh, tick yang terlambat menyumbang sampai
-  // batas atas saja, dan gap besar tidak menyumbang apa pun.
+  // A reasonable tick contributes in full, a late tick contributes only up to
+  // the upper bound, and a huge gap contributes nothing at all.
   const MAX_DELTA = 10;
   const REST_GAP = 120;
   const counted = raw.reduce(
@@ -147,7 +147,7 @@ const near = (a, b, tol) => Number.isFinite(a) && Math.abs(a - b) <= tol;
   );
 }
 
-// ------------------------------------------------- nilai rusak tidak melukai
+// ------------------------------------------------- bad values do no harm
 {
   const acc = createLiveClockAccounting(10, 120);
   const kinds = [NaN, -5, 0, Infinity].map((d) => recordLiveClockTick(acc, d).kind);

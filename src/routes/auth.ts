@@ -88,7 +88,7 @@ auth.get("/login", (c) => {
             }
             .btn:active { transform: scale(0.98); }
             .turnstile-box { margin-bottom: 20px; display: flex; justify-content: center; }
-            /* Pembungkus password: input dan tombol mata berbagi satu baris. */
+            /* Password wrapper: the input and the eye button share one row. */
             .password-wrap { position: relative; display: block; }
             .password-wrap input { padding-right: 54px; }
             .password-toggle {
@@ -96,7 +96,7 @@ auth.get("/login", (c) => {
                 top: 50%;
                 right: 8px;
                 transform: translateY(-50%);
-                /* 44px: sama dengan standar sasaran sentuh tombol tracker. */
+                /* 44px: same as the tracker button's touch target standard. */
                 width: 44px;
                 height: 44px;
                 display: flex;
@@ -143,9 +143,9 @@ auth.get("/login", (c) => {
             </form>
         </div>
         <script>
-            // Tombol mata: menampilkan / menyembunyikan kata sandi.
-            // Ikon digambar lewat SVG inline supaya tidak perlu berkas tambahan,
-            // dan aria-pressed diubah supaya pembaca layar ikut tahu keadaannya.
+            // Eye button: shows / hides the password.
+            // The icons are drawn as inline SVG so no extra file is needed,
+            // and aria-pressed is flipped so screen readers know the state too.
             (function () {
                 var input = document.getElementById('login-password');
                 var toggle = document.getElementById('password-toggle');
@@ -167,8 +167,8 @@ auth.get("/login", (c) => {
 
                 toggle.addEventListener('click', function () {
                     var show = input.type === 'password';
-                    // Fokus tetap di kolom sandi sesudah diklik supaya kursor
-                    // tidak melompat ke mana-mana saat sedang mengetik.
+                    // Focus stays in the password field after the click so the caret
+                    // does not jump around while the user is typing.
                     input.setAttribute('type', show ? 'text' : 'password');
                     render(show);
                     input.focus();
@@ -181,12 +181,12 @@ auth.get("/login", (c) => {
 });
 
 // ==========================================
-// PEMBATAS PERCOBAAN LOGIN (BRUTE-FORCE)
+// LOGIN ATTEMPT LIMITER (BRUTE-FORCE)
 // ==========================================
-// Tabel `login_logs` sudah ada di schema sejak awal tetapi tidak pernah dipakai,
-// sehingga tidak ada yang membatasi percobaan password. Nilainya disimpan per
-// alamat IP dengan jendela waktu, bukan hitungan seumur hidup, supaya pemilik
-// yang salah mengetik tidak terkunci permanen.
+// The `login_logs` table has existed in the schema from the start but was never used,
+// so nothing limited password attempts. The value is stored per
+// IP address with a time window, not a lifetime counter, so an owner
+// who mistypes is not locked out permanently.
 const LOGIN_WINDOW_MS = 15 * 60 * 1000;
 const LOGIN_MAX_ATTEMPTS = 8;
 
@@ -209,13 +209,13 @@ const countRecentAttempts = async (db: D1Database, ip: string) => {
     if (!row) return 0;
 
     const lastAttempt = Number(row.last_attempt || 0);
-    // Jendela sudah lewat: hitungan lama tidak lagi relevan.
+    // The window has passed: the old count is no longer relevant.
     if (!lastAttempt || Date.now() - lastAttempt > LOGIN_WINDOW_MS) return 0;
 
     return Number(row.attempts || 0);
   } catch (error) {
-    // Kalau tabel tidak bisa dibaca, login tetap dilayani. Memblokir login
-    // karena gangguan database akan mengunci pemilik keluar dari aplikasinya.
+    // If the table cannot be read, login is still served. Blocking login
+    // because of a database fault would lock the owner out of their own app.
     console.warn("Login rate limit tidak bisa dibaca:", error);
     return 0;
   }
@@ -269,16 +269,16 @@ auth.post("/login", async (c) => {
   const turnstileResponse = body["cf-turnstile-response"] as string;
   const clientIp = getClientIp(c);
 
-  // Diperiksa sebelum Turnstile dan bcrypt: keduanya mahal, dan justru itu yang
-  // dicari penyerang. Penghitung lama tetap berlaku selama jendelanya belum
-  // lewat, jadi percobaan ke-9 dan seterusnya tidak menyentuh keduanya.
+  // Checked before Turnstile and bcrypt: both are expensive, and that is exactly
+  // what an attacker is after. An existing counter stays in force while its window
+  // has not passed, so the 9th attempt onward never touches either of them.
   const previousAttempts = await countRecentAttempts(c.env.DB, clientIp);
 
   if (previousAttempts >= LOGIN_MAX_ATTEMPTS) {
     return c.html(renderLockedPage(Math.ceil(LOGIN_WINDOW_MS / 60000)), 429);
   }
 
-  // 🛡️ VERIFIKASI TURNSTILE KE SERVER CLOUDFLARE
+  // 🛡️ VERIFY TURNSTILE WITH THE CLOUDFLARE SERVER
   if (!turnstileResponse) {
     return c.html(
       '<div style="text-align:center; padding-top:50px; color:white; background:#0a0a12; height:100vh;"><h3>Validasi keamanan wajib diisi!</h3><a href="/login" style="color:#FF5F00;">Kembali</a></div>',
@@ -310,7 +310,7 @@ auth.post("/login", async (c) => {
       "SELECT COUNT(*) as total FROM users",
     ).first();
     if (count && count.total === 0) {
-      // PERUBAHAN: Gunakan fungsi async (await) agar tidak bikin CPU Cloudflare hang
+      // CHANGE: use an async function (await) so the Cloudflare CPU does not hang
       const hashedPassword = await bcrypt.hash(password, 10);
       await c.env.DB.prepare(
         "INSERT INTO users (email, password) VALUES (?, ?)",
@@ -325,7 +325,7 @@ auth.post("/login", async (c) => {
       .bind(email)
       .first();
 
-    // PERUBAHAN: Gunakan fungsi async (await) untuk komparasi password
+    // CHANGE: use an async function (await) for the password comparison
     if (user && (await bcrypt.compare(password, user.password))) {
       const token = await sign(
         {
@@ -343,14 +343,14 @@ auth.post("/login", async (c) => {
         maxAge: 60 * 60 * 24 * 7,
         path: "/",
       });
-      // Login yang sah mengosongkan hitungan: pemilik yang sempat salah ketik
-      // tidak membawa sisa kuota percobaan ke sesi berikutnya.
+      // A valid login clears the counter: an owner who mistyped earlier
+      // does not carry leftover attempt quota into the next session.
       await clearAttempts(c.env.DB, clientIp);
       return c.redirect("/");
     } else {
-      // Hanya kegagalan kredensial yang dihitung. Kegagalan Turnstile sudah
-      // ditangani sebagai gerbang bot, dan menghitungnya bisa mengunci pemilik
-      // keluar hanya karena widget-nya gagal dimuat.
+      // Only credential failures are counted. A Turnstile failure is already
+      // handled as a bot gate, and counting it could lock the owner
+      // out just because the widget failed to load.
       await recordFailedAttempt(c.env.DB, clientIp);
       return c.html(`
           <div style="text-align:center; font-family: sans-serif; background: #0a0a12; color: white; height: 100vh; padding-top: 100px;">

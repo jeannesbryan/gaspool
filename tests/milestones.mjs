@@ -1,14 +1,14 @@
 /**
- * Test untuk milestone jarak tempuh (kelipatan 1000 km).
+ * Tests for the distance milestone (multiples of 1000 km).
  *
- * Kenapa ada: angka dari modul ini masuk ke kartu yang dibagikan ke orang lain,
- * jadi "NaN km" atau milestone yang muncul dua kali akan terlihat oleh pembaca
- * di luar. Test ini mengunci batas-batasnya, terutama kasus tepat di angka
- * bulat dan kasus satu aktivitas yang melewati beberapa milestone sekaligus.
+ * Why this exists: the numbers from this module go onto a card that is shared
+ * with other people, so "NaN km" or a milestone shown twice would be seen by an
+ * outside reader. This test locks the boundaries, especially landing exactly on
+ * a round number and one activity crossing several milestones at once.
  *
  *   node tests/milestones.mjs
  *
- * Exit code 0 = semua assertion lewat.
+ * Exit code 0 = every assertion passed.
  */
 import {
   computeMilestoneProgress,
@@ -47,7 +47,7 @@ check(
   );
 }
 
-// ------------------------------------------------- belum sampai 1000 km
+// ----------------------------------------------- not yet at 1000 km
 {
   const p = computeMilestoneProgress(412.5);
   check(
@@ -62,7 +62,7 @@ check(
   );
 }
 
-// --------------------------------------------- tepat di angka milestone
+// --------------------------------------- exactly on a milestone number
 {
   const p = computeMilestoneProgress(3000);
   check(
@@ -119,7 +119,7 @@ check(
   );
 }
 
-// -------------------------------------------- nilai rusak tidak melukai
+// --------------------------------------- corrupt values do no damage
 {
   const cases = [null, undefined, NaN, "abc", -50, ""];
   const safe = cases.every((value) => {

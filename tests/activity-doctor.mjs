@@ -1,28 +1,28 @@
 /**
- * Regression test untuk statistik Activity Doctor.
+ * Regression test for the Activity Doctor statistics.
  *
- * Kenapa test ini ada: `recalculateDoctorStats()` sempat melaporkan aktivitas
- * 29,366 km dalam 1:00:35 (29,1 km/h) padahal rentang waktu aslinya 1:47:58 —
- * moving time menyusut 47 menit dan average speed ikut melonjak. Penyebabnya
- * bukan GPS rusak, melainkan dua hal di dalam algoritmanya sendiri:
+ * Why this test exists: `recalculateDoctorStats()` once reported an activity of
+ * 29.366 km in 1:00:35 (29.1 km/h) while the real time span was 1:47:58:
+ * moving time shrank by 47 minutes and average speed spiked with it. The cause
+ * was not broken GPS, but two things inside its own algorithm:
  *
- *   1. `Math.floor((pointMs - prevMs) / 1000)` membulatkan tiap jeda ke bawah.
- *      Titik GPS yang terekam lebih rapat dari 1 detik menghasilkan jeda 0,
- *      sehingga jaraknya ikut dihitung tetapi waktunya dibuang. Pada berkas
- *      gowes nyata, 2.756 dari 5.959 segmen (46%) punya jeda 0 detik dan
- *      menyembunyikan 45 menit.
- *   2. Jarak dan waktu diambil dari himpunan segmen yang BERBEDA, lalu dibagi
- *      satu sama lain. Itu bukan pengukuran, itu artefak aritmetika.
+ *   1. `Math.floor((pointMs - prevMs) / 1000)` rounded every gap down.
+ *      GPS points recorded closer than 1 second produced a 0 gap, so
+ *      the distance was counted while the time was thrown away. In a real
+ *      ride file, 2,756 of 5,959 segments (46%) had a 0 second gap and
+ *      hid 45 minutes.
+ *   2. Distance and time were taken from DIFFERENT sets of segments, then
+ *      divided by each other. That is not a measurement, it is an arithmetic artefact.
  *
- * Fixture di sini sintetis dan deterministik, jadi test bisa jalan di CI mana
- * pun tanpa berkas pribadi. Berkas GPX asli hanya diuji kalau disediakan lewat
- * env GASPOOL_REAL_GPX, sengaja tidak di-commit karena berisi koordinat GPS
- * asli sedangkan repo ini publik.
+ * The fixtures here are synthetic and deterministic, so the test can run on any
+ * CI without private files. The real GPX file is only tested when supplied via
+ * env GASPOOL_REAL_GPX, deliberately not committed because it holds real GPS
+ * coordinates while this repository is public.
  *
  *   node tests/activity-doctor.mjs
  *   GASPOOL_REAL_GPX=~/Downloads/Gaspool_Route.gpx node tests/activity-doctor.mjs
  *
- * Exit code 0 = semua assertion lewat.
+ * Exit code 0 = all assertions passed.
  */
 import { readFileSync } from "node:fs";
 import {
@@ -45,18 +45,18 @@ const fmtClock = (seconds) => {
   return `${Math.floor(s / 3600)}:${String(Math.floor((s % 3600) / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
 };
 
-// 1 meter ke arah utara; memakai radius bumi yang sama dengan getDistanceMeters
+// 1 metre towards north; uses the same earth radius as getDistanceMeters
 const METER_IN_DEG_LAT = 180 / (Math.PI * 6371000);
 const START = { lat: -7.3685135, lng: 112.7113094 };
 const BASE_MS = Date.parse("2026-09-18T11:53:05.461Z");
 
-/** Ulangi satu langkah sebanyak `count` kali. */
+/** Repeat one step `count` times. */
 const repeat = (count, step) => Array.from({ length: count }, () => ({ ...step }));
 
 /**
- * Bangun track lurus ke utara dari daftar { seconds, speedKmh }.
- * `speedKmh: 0` = berhenti; opsional GPS tetap bergoyang di tempat (bounded,
- * bukan random-walk) supaya mirip perilaku alat nyata.
+ * Build a straight northbound track from a list of { seconds, speedKmh }.
+ * `speedKmh: 0` = stopped; optionally GPS still wanders in place (bounded,
+ * not a random walk) so it resembles the behaviour of a real device.
  */
 const buildTrack = (steps, { jitterMeters = 0 } = {}) => {
   const points = [{ lat: START.lat, lng: START.lng, time: new Date(BASE_MS).toISOString() }];
@@ -92,10 +92,10 @@ const buildTrack = (steps, { jitterMeters = 0 } = {}) => {
 };
 
 // ---------------------------------------------------------------- fixture 1
-// Sampling lebih rapat dari 1 detik TIDAK boleh menghapus waktu.
-// Paruh pertama direkam 1 detik sekali, paruh kedua 0,5 detik sekali — pola yang
-// sama dengan berkas gowes nyata (browser kadang memberi sampel ekstra).
-// Pesepeda melaju konstan 10 km/h selama 40 menit tanpa berhenti.
+// Sampling closer than 1 second must NOT erase time.
+// The first half is recorded once per second, the second half once per 0.5
+// seconds, the same pattern as a real ride file (the browser sometimes provides
+// extra samples). The rider moves at a constant 10 km/h for 40 minutes, no stop.
 const fixtureDense = buildTrack([
   ...repeat(1200, { seconds: 1, speedKmh: 10 }), // 20 menit
   ...repeat(2400, { seconds: 0.5, speedKmh: 10 }), // 20 menit, sampel 2 Hz
@@ -114,7 +114,7 @@ check(
 );
 
 // ---------------------------------------------------------------- fixture 2
-// Istirahat 30 menit harus MASUK waktu berhenti, bukan waktu bergerak.
+// A 30 minute rest has to COUNT as stopped time, not moving time.
 const fixtureRest = buildTrack(
   [
     ...repeat(1200, { seconds: 1, speedKmh: 15 }), // 20 menit gowes -> 5 km
@@ -147,8 +147,8 @@ check(
 );
 
 // ---------------------------------------------------------------- fixture 3
-// Tidak boleh ada detik yang hilang tanpa penjelasan. Setiap detik harus jadi
-// moving, stopped, atau excluded (lompatan GPS).
+// No second may go missing without an explanation. Every second has to become
+// moving, stopped, or excluded (GPS jump).
 for (const [label, stats] of [
   ["sampling rapat", denseStats],
   ["istirahat", restStats],
@@ -163,7 +163,7 @@ for (const [label, stats] of [
 }
 
 // ---------------------------------------------------------------- fixture 4
-// Lompatan GPS harus tetap dibuang, dan waktunya ikut dicatat sebagai excluded.
+// A GPS jump must still be dropped, and its time must be recorded as excluded.
 const jumpTrack = [
   { lat: START.lat, lng: START.lng, time: "2026-09-18T11:00:00.000Z" },
   { lat: START.lat + 100 * METER_IN_DEG_LAT, lng: START.lng, time: "2026-09-18T11:00:10.000Z" },
@@ -189,13 +189,13 @@ check(
 );
 
 // ---------------------------------------------------------------- fixture 5
-// Blok istirahat yang dilaporkan ke UI memakai jam yang SAMA dengan statistik
-// utama. `moving_time` di blok ini kumulatif sejak awal aktivitas, jadi ia harus
-// cocok dengan `recalculateDoctorStats()` pada titik yang sama.
+// The rest blocks reported to the UI use the SAME clock as the main statistics.
+// `moving_time` in these blocks is cumulative from the start of the activity, so
+// it has to match `recalculateDoctorStats()` at the same point.
 //
-// Regresi lama: nilai itu dijumlahkan dengan Math.floor(), sehingga pada
-// perekaman 2 Hz seluruh 20 menit kayuhan sebelum istirahat tercatat sebagai 0
-// detik — di layar tertulis "waktu bergerak sebelum istirahat: 0:00:00".
+// Old regression: that value was summed with Math.floor(), so on a 2 Hz
+// recording the whole 20 minutes of pedalling before the rest was recorded as 0
+// seconds, and the screen read "waktu bergerak sebelum istirahat: 0:00:00".
 const fixtureRestDense = buildTrack([
   ...repeat(2400, { seconds: 0.5, speedKmh: 15 }), // 20 menit gowes, 2 Hz -> 5 km
   { seconds: 30 * 60, speedKmh: 0 }, // istirahat 30 menit
@@ -226,12 +226,12 @@ check(
 );
 
 // ---------------------------------------------------------------- fixture 6
-// Fail-closed: kalau moving time hasil hitung ulang menyimpang jauh dari D1,
-// doctor harus MENOLAK menimpa dan menyerahkan keputusan ke manusia.
+// Fail-closed: if the recomputed moving time diverges far from D1, the doctor
+// has to REFUSE to overwrite and hand the decision to a human.
 //
-// Angka di sini diambil dari kejadian nyata: D1 1:41:29, doctor lama
-// mengusulkan 1:00:35. Penyimpangan 40% itu dulu LOLOS karena ambang lamanya
-// 0,35x-1,35x, sehingga riwayat gowes ditulis ulang dengan angka yang salah.
+// The numbers here come from a real incident: D1 1:41:29, the old doctor
+// proposed 1:00:35. That 40% deviation used to PASS because the old threshold
+// was 0.35x-1.35x, so ride history was rewritten with the wrong number.
 const d1Seconds = 6089; // 1:41:29
 const regressionSeconds = 3635; // 1:00:35 <- usulan doctor yang rusak
 
@@ -249,7 +249,7 @@ check(
   regressionComparison.message,
 );
 
-// Hasil yang sudah diperbaiki memang berdekatan dengan D1, jadi harus diterima.
+// A repaired result is indeed close to D1, so it has to be accepted.
 const fixedComparison = compareDoctorMovingTime(d1Seconds, 6253);
 check(
   "fail-closed: usulan yang berdekatan dengan D1 diterima",
@@ -257,7 +257,7 @@ check(
   `ratio=${fixedComparison.ratio?.toFixed(3)} (harap diterima)`,
 );
 
-// Arah sebaliknya juga harus ditolak, dengan pesan yang membedakan arahnya.
+// The opposite direction must be rejected too, with a message that names it.
 const longerComparison = compareDoctorMovingTime(d1Seconds, d1Seconds * 1.6);
 check(
   "fail-closed: usulan 60% lebih panjang juga ditolak",
@@ -265,7 +265,7 @@ check(
   longerComparison.message,
 );
 
-// D1 yang belum punya statistik bukan alasan untuk memblokir pengisian.
+// A D1 row that has no statistics yet is no reason to block the backfill.
 const emptyComparison = compareDoctorMovingTime(0, 6253);
 check(
   "fail-closed: D1 kosong tidak dianggap menyimpang",
@@ -274,7 +274,7 @@ check(
 );
 
 // ---------------------------------------------------------------- fixture 7
-// average_speed harus selalu sama dengan jarak / moving time yang dilaporkan.
+// average_speed must always equal the reported distance / moving time.
 for (const [label, stats] of [
   ["sampling rapat", denseStats],
   ["istirahat", restStats],
@@ -289,7 +289,7 @@ for (const [label, stats] of [
   );
 }
 
-// ------------------------------------------------- opsional: berkas gowes nyata
+// -------------------------------------------------- optional: real ride file
 const realPath = process.env.GASPOOL_REAL_GPX;
 if (realPath) {
   const raw = readFileSync(realPath, "utf8");
@@ -310,18 +310,18 @@ if (realPath) {
   const real = recalculateDoctorStats(points, "ride");
   const span = real.time_integrity.span_seconds;
 
-  // Ambangnya 75%, bukan 90%.
+  // The threshold is 75%, not 90%.
   //
-  // Sebelumnya 90% dan itu keliru sebagai INVARIAN: angka itu diam-diam
-  // mengandaikan gowes contoh hampir tidak pernah berhenti. Begitu berkas uji
-  // diganti dengan gowes yang benar-benar berhenti (lampu merah, istirahat),
-  // assertion ini gagal padahal doktornya benar — dan test yang merah padahal
-  // produknya sehat justru membuat orang berhenti mempercayai test.
+  // It used to be 90% and that was wrong as an INVARIANT: that number silently
+  // assumed the sample ride almost never stops. As soon as the test file was
+  // replaced with a ride that really stops (red light, rest), this assertion
+  // failed while the doctor was correct, and a red test over healthy product
+  // is exactly what makes people stop trusting the test.
   //
-  // Yang diuji di sini adalah regresi penyusutan parah: bug Math.floor dulu
-  // menyisakan ~56% dari rentang. Invarian yang sesungguhnya (setiap detik
-  // masuk salah satu keranjang) diuji terpisah di bawah lewat
-  // unaccounted_seconds, jadi rasio ini hanya penjaga lapis kedua.
+  // What is tested here is the severe shrinkage regression: the Math.floor bug
+  // used to leave ~56% of the span. The real invariant (every second lands in
+  // one of the buckets) is tested separately below through
+  // unaccounted_seconds, so this ratio is only a second-layer guard.
   const movingRatio = span > 0 ? real.moving_time / span : 0;
   check(
     "gowes nyata: moving time tidak menyusut karena segmen tanpa waktu",

@@ -1,11 +1,11 @@
 /**
- * Uji aturan "angka mana yang disimpan" (public/assets/ride-stat-rules.js).
+ * Tests for the "which number gets saved" rule (public/assets/ride-stat-rules.js).
  *
  *   node tests/ride-stat-rules.mjs
  *
- * Angka-angka di sini berasal dari gowes nyata 25 Sep 2026 (11027 titik,
- * 55,130 km dilaporkan, 53,479 km setelah drift GPS dibuang), supaya ujinya
- * menjaga kasus yang benar-benar terjadi, bukan kasus karangan.
+ * The numbers here come from a real ride on 25 Sep 2026 (11027 points,
+ * 55.130 km reported, 53.479 km after GPS drift was dropped), so the test
+ * guards a case that actually happened rather than an invented one.
  */
 import {
   STORED_DISTANCE_MAX_RATIO,
@@ -20,7 +20,7 @@ const check = (name, passed, detail = "") => {
   console.log(`${passed ? "  ok  " : " FAIL "} ${name}${passed || !detail ? "" : `\n         ${detail}`}`);
 };
 
-// ------------------------------------------------------- jarak: tabel bersama
+// -------------------------------------------------- distance: shared table
 const realRide = chooseStoredDistanceKm({
   declaredKm: 55.129836272592335,
   cleanKm: 53.479,
@@ -42,7 +42,7 @@ check(
   JSON.stringify(realRide),
 );
 
-// Angka lain yang sudah terkurasi sebelumnya.
+// Other numbers curated earlier.
 const curated = chooseStoredDistanceKm({
   declaredKm: 18.805,
   cleanKm: 18.506,
@@ -54,7 +54,7 @@ check(
   JSON.stringify(curated),
 );
 
-// ----------------------------------------------- jarak: tabel bersama tidak ada
+// -------------------------------------------- distance: shared table missing
 const noTable = chooseStoredDistanceKm({
   declaredKm: 55.13,
   cleanKm: 53.479,
@@ -71,7 +71,7 @@ check(
   noTable.reason,
 );
 
-// ------------------------------------------------------------- jarak: penjaga
+// --------------------------------------------------------- distance: guard
 const absurd = chooseStoredDistanceKm({
   declaredKm: 55.13,
   cleanKm: 5.0,
@@ -99,8 +99,8 @@ check(
   JSON.stringify(biggerThanDeclared),
 );
 
-// Batas rasio diuji tepat di tepinya, supaya penjaganya tidak menyimpang
-// diam-diam kalau konstantanya diubah.
+// The ratio limit is tested right at its edges, so the guard cannot drift
+// silently when the constant is changed.
 const atMin = chooseStoredDistanceKm({ declaredKm: 100, cleanKm: 100 * STORED_DISTANCE_MIN_RATIO, sharedTableKm: 100 * STORED_DISTANCE_MIN_RATIO });
 check("tepat di batas bawah masih diterima", atMin.km === 50, JSON.stringify(atMin));
 const belowMin = chooseStoredDistanceKm({ declaredKm: 100, cleanKm: 100 * STORED_DISTANCE_MIN_RATIO - 0.01, sharedTableKm: 100 * STORED_DISTANCE_MIN_RATIO - 0.01 });
@@ -108,7 +108,7 @@ check("sedikit di bawah batas bawah ditolak", belowMin.km === 100, JSON.stringif
 const atMax = chooseStoredDistanceKm({ declaredKm: 100, cleanKm: 100 * STORED_DISTANCE_MAX_RATIO, sharedTableKm: 100 * STORED_DISTANCE_MAX_RATIO });
 check("tepat di batas atas masih diterima", atMax.km === 110, JSON.stringify(atMax));
 
-// --------------------------------------------------- jarak: masukan aneh
+// ------------------------------------------------ distance: strange input
 const noDistance = chooseStoredDistanceKm({ declaredKm: 0, cleanKm: 9.5, sharedTableKm: 9.5 });
 check(
   "tracker melaporkan nol: pakai tabel segmen daripada menyimpan nol",

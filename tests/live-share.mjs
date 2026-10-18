@@ -1,17 +1,17 @@
 /**
- * Test untuk token siaran live (gowes solo).
+ * Tests for the live broadcast token (solo ride).
  *
- * Kenapa token ini diuji sendiri: /radar/<token> bisa dibuka tanpa login, jadi
- * token adalah satu-satunya yang menghalangi orang asing menemukan lokasi
- * seseorang. Kesalahan kecil di sini — alfabet yang panjangnya bukan pembagi
- * 256, atau token yang bisa berulang — tidak akan terlihat di layar, tetapi
- * langsung menurunkan jumlah tebakan yang dibutuhkan penyerang.
+ * Why this token is tested on its own: /radar/<token> can be opened without
+ * logging in, so the token is the only thing stopping a stranger from finding
+ * someone's location. A small mistake here -- an alphabet whose length does
+ * not divide 256, or a token that can repeat -- would not show on screen, but
+ * it directly lowers the number of guesses an attacker needs.
  *
- * Semua fungsi di sini murni, jadi test berjalan tanpa Worker, D1, KV, jaringan.
+ * Every function here is pure, so the test runs without Worker, D1, KV or network.
  *
  *   node tests/live-share.mjs
  *
- * Exit code 0 = semua assertion lewat.
+ * Exit code 0 = every assertion passed.
  */
 import {
   createLiveShareToken,
@@ -77,8 +77,8 @@ check(
 );
 
 // ------------------------------------------------- sebaran karakter (bias)
-// Kalau alfabetnya bukan pembagi 256, huruf-huruf awal akan lebih sering muncul.
-// Uji ini menangkap kesalahan itu tanpa perlu membaca kodenya.
+// If the alphabet does not divide 256, the leading letters show up more often.
+// This test catches that mistake without having to read the code.
 const counts = Object.fromEntries([...LIVE_SHARE_ALPHABET].map((ch) => [ch, 0]));
 for (const token of tokens) for (const ch of token) counts[ch] += 1;
 
@@ -92,7 +92,7 @@ check(
   `simpangan terbesar ${(maxDrift * 100).toFixed(2)}% dari rata-rata ${expected.toFixed(0)}`,
 );
 
-// ---------------------------------------------------------------- kunci sesi
+// ------------------------------------------------------------- session key
 check(
   "kunci sesi tidak bisa bertabrakan dengan posisi peserta",
   liveSessionKey("ABCD2345EFGH6789").includes("~") &&
@@ -105,7 +105,7 @@ check(
   `${liveSessionKey("abcd2345efgh6789")} vs ${liveSessionKey("ABCD2345EFGH6789")}`,
 );
 
-// --------------------------------------------- catatan sesi (KV tiruan)
+// -------------------------------------------- session record (fake KV)
 const makeKv = () => {
   const store = new Map();
   return {
@@ -139,7 +139,7 @@ check(
   "token asing seharusnya tidak punya sesi",
 );
 
-// Nilai KV yang rusak tidak boleh menjatuhkan halaman penonton.
+// A corrupt KV value must not take the viewer page down.
 kv.store.set(liveSessionKey(token), "{bukan json");
 check(
   "catatan sesi yang rusak ditolak dengan aman",

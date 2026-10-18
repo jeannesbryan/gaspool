@@ -1,10 +1,10 @@
 /**
- * Konfigurasi yang bergantung pada deployment.
+ * Configuration that depends on the deployment.
  *
- * Nilai-nilai di sini punya default agar deployment yang sudah berjalan tidak
- * berubah perilakunya, tetapi semuanya bisa (dan sebaiknya) diatur lewat `vars`
- * di wrangler.jsonc supaya instance milik orang lain tidak menunjuk ke resource
- * milik pengembang aslinya.
+ * The values here carry defaults so that deployments already running do not
+ * change behaviour, but all of them can (and should) be set via `vars`
+ * in wrangler.jsonc so that someone else's instance does not point at the
+ * original developer's resources.
  */
 
 const DEFAULT_R2_PUBLIC_BASE_URL =
@@ -13,18 +13,18 @@ const DEFAULT_R2_PUBLIC_BASE_URL =
 type PublicUrlEnv = { R2_PUBLIC_BASE_URL?: string };
 
 /**
- * Basis URL publik bucket R2, tempat file rute JSON dan rekaman radio disajikan.
+ * Public base URL of the R2 bucket, where route JSON files and radio recordings are served.
  *
- * Setel `R2_PUBLIC_BASE_URL` ke domain publik bucket milikmu sendiri. Kalau
- * dibiarkan kosong, nilainya jatuh ke default pengembang dan tautan berkas akan
- * menunjuk ke bucket yang salah.
+ * Set `R2_PUBLIC_BASE_URL` to the public domain of your own bucket. If it is
+ * left empty, the value falls back to the developer default and file links will
+ * point at the wrong bucket.
  */
 export const getR2PublicBaseUrl = (env?: PublicUrlEnv) => {
   const configured = String(env?.R2_PUBLIC_BASE_URL || "").trim();
   return (configured || DEFAULT_R2_PUBLIC_BASE_URL).replace(/\/+$/, "");
 };
 
-/** Hostname saja, dipakai saat membandingkan asal sebuah polyline. */
+/** Hostname only, used when comparing the origin of a polyline. */
 export const getR2PublicHostname = (env?: PublicUrlEnv) => {
   try {
     return new URL(getR2PublicBaseUrl(env)).hostname;

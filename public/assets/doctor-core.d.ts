@@ -1,9 +1,9 @@
 /**
- * Deklarasi tipe untuk public/assets/doctor-core.js.
+ * Type declaration for public/assets/doctor-core.js.
  *
- * Berkas itu sengaja .js biasa supaya bisa dimuat browser tanpa build; berkas
- * ini yang memberi tahu TypeScript bentuknya. `allowJs` tidak diaktifkan di
- * tsconfig, jadi tanpa deklarasi ini `import ... from "....js"` akan ditolak.
+ * That file is deliberately plain .js so the browser can load it without a
+ * build; this file tells TypeScript its shape. `allowJs` is not enabled in
+ * tsconfig, so without this declaration `import ... from "....js"` is rejected.
  */
 
 export type DoctorCorePoint = {

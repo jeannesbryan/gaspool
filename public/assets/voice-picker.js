@@ -1,36 +1,36 @@
 /**
- * Pemilih suara untuk panduan arah (TTS).
+ * Voice picker for turn-by-turn guidance (TTS).
  *
- * Kenapa ini dipisah dan diuji: suara tidak datang dari repo ini, melainkan
- * dari daftar yang disediakan peramban dan sistem operasi. Jadi yang bisa
- * diperbaiki bukan "suaranya", melainkan CARA MEMILIH di antara yang tersedia.
+ * Why this is separated and tested: the voices do not come from this repo, but
+ * from the list the browser and the operating system provide. So what can be
+ * fixed is not "the voice" but the WAY OF CHOOSING among the available ones.
  *
- * Versi sebelumnya memakai find() sederhana: ambil suara pertama yang bahasanya
- * berawalan "id". Tiga akibatnya, dan ketiganya terdengar oleh pemakai:
+ * The previous version used a plain find(): take the first voice whose language
+ * starts with "id". That had three consequences, all of them audible to users:
  *
- *   1. Kalau perangkat menyediakan beberapa suara Indonesia, yang terambil
- *      adalah yang kebetulan pertama di daftar sistem — bisa suara pria,
- *      bisa suara berkualitas rendah.
- *   2. Kalau TIDAK ada suara Indonesia sama sekali, kode lama menyerahkan
- *      utterance.lang = "id-ID" tanpa voice. Peramban lalu memakai suara
- *      bawaannya — biasanya Inggris — untuk melafalkan kata Indonesia. Itulah
- *      yang terdengar sebagai "aksen Indonesia yang jelek": sebenarnya bukan
- *      aksen Indonesia, melainkan pelafalan Inggris atas kata Indonesia.
- *   3. Tidak ada cara bagi pemakai untuk memilih, padahal telinga merekalah
- *      yang paling tahu mana yang enak didengar.
+ *   1. If a device provides several Indonesian voices, the one taken was
+ *      whichever happened to come first in the system list, which could be a
+ *      male voice or a low quality one.
+ *   2. If there was NO Indonesian voice at all, the old code set
+ *      utterance.lang = "id-ID" with no voice. The browser then used its own
+ *      default voice, usually English, to pronounce Indonesian words. That is
+ *      what sounds like a "bad Indonesian accent": it is not an Indonesian
+ *      accent at all, it is an English pronunciation of Indonesian words.
+ *   3. There was no way for the user to choose, even though their ears are
+ *      the ones that best know what sounds pleasant.
  *
- * Berkas ini berupa .js biasa di public/assets supaya dipakai DUA tempat tanpa
- * disalin: halaman tracker dan tests/voice-picker.mjs.
+ * This file is a plain .js in public/assets so TWO places can use it without
+ * copying: the tracker page and tests/voice-picker.mjs.
  */
 
-/** Bahasa yang paling cocok, berurut dari yang terbaik. */
+/** The most suitable languages, ordered from best to worst. */
 const LANGUAGE_RANK = [
   { prefix: "id", score: 100 },
   { prefix: "ms", score: 55 }, // Melayu: pelafalan Latin yang dekat
   { prefix: "jv", score: 40 }, // Jawa: sering tersedia dan terdengar akrab
 ];
 
-/** Penanda kualitas pada nama suara. */
+/** Quality markers in the voice name. */
 const QUALITY_MARKERS = [
   { token: "natural", score: 30 },
   { token: "neural", score: 28 },
@@ -42,11 +42,11 @@ const QUALITY_MARKERS = [
 ];
 
 /**
- * Penanda suara perempuan.
+ * Markers of a female voice.
  *
- * Ini bukan soal selera: panduan arah dibacakan sambil berkendara, dan suara
- * perempuan umumnya lebih mudah dibedakan dari bising jalan pada rentang
- * frekuensi yang dipakai. Pemakai juga memintanya secara eksplisit.
+ * This is not a matter of taste: guidance is read out while riding, and a
+ * female voice is generally easier to pick out of road noise in the frequency
+ * range being used. Users also asked for it explicitly.
  */
 const FEMALE_MARKERS = [
   { token: "female", score: 26 },
@@ -64,8 +64,8 @@ const FEMALE_MARKERS = [
   { token: "female_", score: 26 },
 ];
 
-/** Penanda suara pria: dikurangi, bukan dilarang, karena tetap lebih baik
- *  daripada melafalkan kata Indonesia dengan suara Inggris. */
+/** Markers of a male voice: penalised, not banned, since it is still better
+ *  than pronouncing Indonesian words with an English voice. */
 const MALE_MARKERS = [
   { token: "male", score: -30 },
   { token: "pria", score: -30 },
@@ -76,7 +76,7 @@ const MALE_MARKERS = [
   { token: "mark", score: -20 },
 ];
 
-/** Penanda kualitas rendah yang sebaiknya dihindari. */
+/** Low quality markers that are better avoided. */
 const LOW_QUALITY_MARKERS = [
   { token: "compact", score: -18 },
   { token: "espeak", score: -40 },
@@ -87,8 +87,8 @@ const LOW_QUALITY_MARKERS = [
 const normalize = (value) => String(value || "").toLowerCase();
 
 /**
- * Beri skor satu suara. Semakin tinggi semakin cocok.
- * Diekspor supaya bisa diperiksa langsung di test, bukan hanya lewat urutan.
+ * Score one voice. The higher the better.
+ * Exported so it can be checked directly in a test, not only through ordering.
  */
 export function scoreVoice(voice) {
   if (!voice) return Number.NEGATIVE_INFINITY;
@@ -102,12 +102,12 @@ export function scoreVoice(voice) {
   if (language) {
     score += language.score;
   } else if (lang) {
-    // Punya bahasa, hanya bukan salah satu yang cocok. Tetap bisa dipakai
-    // sebagai pilihan terakhir, jadi skornya rendah tetapi bukan mustahil.
+    // It has a language, just not one of the fits. It can still be used as a
+    // last resort, so the score is low but not impossible.
     score -= 40;
   } else {
-    // Tidak ada keterangan bahasa sama sekali: tidak ada dasar untuk menilai,
-    // jadi jangan pernah menang selama ada suara yang jelas bahasanya.
+    // No language information at all: there is no basis to judge it, so it
+    // must never win while a voice with a clear language exists.
     score -= 100;
   }
 
@@ -124,8 +124,8 @@ export function scoreVoice(voice) {
     if (name.includes(marker.token)) score += marker.score;
   }
 
-  // Suara lokal tidak butuh jaringan, jadi tidak putus saat sinyal hilang —
-  // penting untuk panduan arah di jalan.
+  // A local voice needs no network, so it does not drop out when the signal
+  // goes: important for turn-by-turn guidance on the road.
   if (voice.localService) score += 8;
   if (voice.default) score += 2;
 
@@ -133,8 +133,8 @@ export function scoreVoice(voice) {
 }
 
 /**
- * Urutkan daftar suara dari yang paling cocok.
- * Mengembalikan array baru; daftar aslinya tidak diubah.
+ * Sort the voice list from the best fit.
+ * Returns a new array; the original list is not modified.
  */
 export function rankVoices(voices) {
   const list = Array.isArray(voices) ? voices.filter(Boolean) : [];
@@ -143,17 +143,17 @@ export function rankVoices(voices) {
     .map((voice, index) => ({ voice, index, score: scoreVoice(voice) }))
     .sort((a, b) => {
       if (b.score !== a.score) return b.score - a.score;
-      // Urutan tetap kalau skornya sama, supaya hasilnya dapat diprediksi.
+      // Keep the order when scores are equal, so the result is predictable.
       return a.index - b.index;
     })
     .map((entry) => entry.voice);
 }
 
 /**
- * Apakah suara ini benar-benar berbahasa Indonesia.
- * Dipakai untuk memberi tahu pemakai bahwa perangkatnya tidak punya suara
- * Indonesia, walaupun panduan arahnya mungkin tetap jalan memakai bahasa
- * kerabat terdekat.
+ * Whether this voice really speaks Indonesian.
+ * Used to tell the user that their device has no Indonesian voice, even though
+ * turn-by-turn guidance may still work using the closest related language
+ * available.
  */
 export function isIndonesianVoice(voice) {
   const lang = normalize(voice && voice.lang).replace("_", "-");
@@ -161,21 +161,21 @@ export function isIndonesianVoice(voice) {
 }
 
 /**
- * Apakah suara ini layak dipakai untuk membacakan kata Indonesia.
+ * Whether this voice is fit to read Indonesian words aloud.
  *
- * Melayu dan Jawa ikut diterima, dan itu keputusan sadar: keduanya satu rumpun
- * dengan Indonesia, sehingga "belok kiri" dan "tujuh ratus meter" terdengar
- * hampir sama. Yang tidak layak adalah suara Inggris dan sejenisnya, karena
- * melafalkan kata Indonesia dengan fonetik Inggris itulah yang membuat panduan
- * arah terdengar aneh.
+ * Malay and Javanese are accepted too, and that is a conscious decision: they
+ * belong to the same family as Indonesian, so "belok kiri" and "tujuh ratus
+ * meter" sound almost the same. What is not fit is an English voice and the
+ * like, because pronouncing Indonesian words with English phonetics is exactly
+ * what makes the guidance sound strange.
  *
- * Perlu ditegaskan: "tidak layak" BUKAN berarti aplikasi lalu diam. Panduan
- * arah yang hilang tanpa penjelasan jauh lebih berbahaya di jalan daripada
- * panduan yang terdengar aneh. Karena itu pemanggil tetap membacakan
- * instruksinya, sementara layar memberi tahu bahwa perangkat ini belum punya
- * suara Indonesia dan menawarkan cara menggantinya. Yang dilakukan pemilih ini
- * adalah memastikan suara terbaik yang ADA memang dipakai, bukan yang kebetulan
- * pertama di daftar sistem.
+ * To be clear: "not fit" does NOT mean the app then stays silent. Guidance
+ * that disappears without explanation is far more dangerous on the road than
+ * guidance that sounds strange. That is why the caller still reads the
+ * instruction out, while the screen tells the user that this device has no
+ * Indonesian voice yet and offers a way to change that. What this picker does
+ * is make sure the best voice that EXISTS is actually used, not whichever one
+ * happens to be first in the system list.
  */
 export function isAcceptableVoice(voice) {
   const lang = normalize(voice && voice.lang).replace("_", "-");
@@ -183,12 +183,12 @@ export function isAcceptableVoice(voice) {
 }
 
 /**
- * Pilih suara untuk panduan arah.
+ * Pick a voice for turn-by-turn guidance.
  *
- * `preferredName` adalah pilihan pemakai yang disimpan sebelumnya. Pilihan itu
- * dihormati selama suaranya masih tersedia — perangkat bisa kehilangan suara
- * setelah pembaruan sistem, dan pilihan yang sudah hilang tidak boleh membuat
- * pemilihan gagal total.
+ * `preferredName` is the user's previously saved choice. That choice is
+ * honoured as long as the voice is still available: a device can lose a voice
+ * after a system update, and a choice that has gone must not make the whole
+ * pick fail.
  */
 export function pickBestVoice(voices, preferredName) {
   const ranked = rankVoices(voices);
@@ -201,10 +201,10 @@ export function pickBestVoice(voices, preferredName) {
   }
 
   const best = ranked[0];
-  // Kalau yang terbaik pun tidak layak (misalnya seluruh perangkat hanya punya
-  // suara Inggris), lebih baik tidak bersuara sama sekali: panduan arah yang
-  // dilafalkan dengan aksen asing lebih membingungkan daripada tidak ada
-  // panduan.
+  // If even the best one is not fit (for example the whole device only has
+  // English voices), staying silent is better: turn-by-turn guidance
+  // pronounced with a foreign accent is more confusing than having no
+  // guidance at all.
   if (!isAcceptableVoice(best)) {
     return ranked.find(isAcceptableVoice) || null;
   }
@@ -212,7 +212,7 @@ export function pickBestVoice(voices, preferredName) {
   return best;
 }
 
-/** Ringkasan singkat untuk ditampilkan di layar. */
+/** Short summary to show on screen. */
 export function describeVoice(voice) {
   if (!voice) return "TIDAK ADA SUARA INDONESIA";
   const name = String(voice.name || "").replace(/^(Google|Microsoft)\s*/i, "");

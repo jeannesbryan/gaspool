@@ -1,27 +1,27 @@
 /**
- * Pemberitahuan saat peta jejak gagal dimuat.
+ * Notice shown when a trail map fails to load.
  *
- * Kenapa berkas ini ada. Setiap peta jejak di Gaspool mengambil titiknya dari
- * objek R2 lewat fetch() di sisi KLIEN — bukan lewat server. Kalau fetch itu
- * gagal (jaringan/ISP memblokir r2.dev, DNS dihijack, kuota habis, objeknya
- * hilang), dulu halaman hanya menulis console.error lalu petanya tinggal
- * KOSONG. Dari sisi pemakai, peta kosong tidak bisa dibedakan dari "aplikasi
- * rusak" — persis pola "diam" yang di repo ini dihindari.
+ * Why this file exists. Every trail map in Gaspool fetches its points from an
+ * R2 object from the CLIENT side, not through the server. If that fetch fails
+ * (network or ISP blocking r2.dev, hijacked DNS, quota exhausted, object gone),
+ * the page used to only write console.error and then leave the map EMPTY. From
+ * the user's side an empty map cannot be told apart from "the app is broken",
+ * exactly the "silent" pattern this repo avoids.
  *
- * Aturan yang dipegang berkas ini:
- * 1. Kegagalan harus TERLIHAT di layar, bukan cuma di konsol.
- * 2. Pesannya menyebut hal yang paling penting bagi yang membaca: angkanya
- *    (jarak, waktu, kecepatan) tetap aman dan tersimpan; yang gagal hanya
- *    gambarnya.
- * 3. Sebab yang paling sering disebut apa adanya — kalau alamatnya r2.dev,
- *    katakan bahwa jaringan/ISP kerap memblokirnya, jangan menyalahkan
- *    pengguna atau membuatnya mencari bug yang tidak ada.
+ * The rules this file holds to:
+ * 1. A failure must be VISIBLE on screen, not only in the console.
+ * 2. The message names what matters most to the reader: the numbers
+ *    (distance, time, speed) are still safe and stored; only the picture
+ *    failed.
+ * 3. The most common cause is stated plainly: if the address is r2.dev, say
+ *    that networks and ISPs often block it, do not blame the user or make
+ *    them hunt for a bug that is not there.
  *
- * Berkas ini .js biasa dan menempelkan dirinya ke globalThis supaya dipakai
- * DUA halaman (dashboard dan detail aktivitas) tanpa disalin — pola yang sama
- * dengan doctor-core.js. Karena tidak memakai `export`, ia bisa dimuat sebagai
- * <script src> biasa, sehingga sudah siap sebelum pengguna sempat menekan apa
- * pun (tidak ada balapan dengan <script type="module">).
+ * This file is a plain .js and attaches itself to globalThis so that TWO pages
+ * (dashboard and activity detail) can use it without copying, the same pattern
+ * as doctor-core.js. Because it uses no `export`, it can be loaded as an
+ * ordinary <script src>, so it is ready before the user can press anything
+ * (no race with <script type="module">).
  */
 (function () {
     'use strict';
@@ -32,7 +32,7 @@
         return typeof raw === 'string' && /^https?:\/\//i.test(raw.trim());
     };
 
-    /** true kalau alamatnya penyimpanan objek publik Cloudflare (r2.dev). */
+    /** true when the address is Cloudflare public object storage (r2.dev). */
     var isPublicStorageHost = function (raw) {
         if (typeof raw !== 'string') return false;
         try {
@@ -44,9 +44,9 @@
     };
 
     /**
-     * Pesan yang dibaca manusia. `rawUrl` = alamat polyline yang gagal diambil,
-     * `error` = error aslinya kalau ada (boleh null kalau penyebabnya bukan
-     * error, misalnya titik yang terbaca cuma satu).
+     * Human readable message. `rawUrl` = the polyline address that failed to
+     * load, `error` = the original error if any (may be null when the cause is
+     * not an error, for example only one point could be read).
      */
     var mapLoadFailureMessage = function (rawUrl, error) {
         var parts = [
@@ -72,23 +72,23 @@
     };
 
     /**
-     * Pesan untuk halaman yang menggabungkan BANYAK jejak (heatmap).
+     * Message for a page that merges MANY trails (heatmap).
      *
-     * Bedanya dari satu peta: kegagalan sebagian sengaja tidak menghentikan
-     * gambarannya, jadi hasilnya tetap peta yang "kelihatan penuh" padahal
-     * kehilangan beberapa aktivitas. Itu justru lebih menyesatkan daripada
-     * peta kosong, karena tidak ada yang terlihat salah. Kembalikan string
-     * kosong kalau memang tidak ada yang gagal — jangan berpesan tanpa sebab.
+     * The difference from a single map: a partial failure deliberately does not
+     * stop the drawing, so the result stays a map that "looks full" while some
+     * activities are missing. That is more misleading than an empty map,
+     * because nothing looks wrong. Return an empty string when nothing actually
+     * failed: do not raise an alarm without a cause.
      *
-     * @param {number} total    jumlah aktivitas yang dicoba dimuat
-     * @param {number} failed   berapa di antaranya gagal
-     * @param {boolean} [storageBlocked] true kalau alamatnya storage publik (r2.dev)
+     * @param {number} total    number of activities that were attempted
+     * @param {number} failed   how many of them failed
+     * @param {boolean} [storageBlocked] true when the address is public storage (r2.dev)
      */
     var heatmapLoadFailureMessage = function (total, failed, storageBlocked) {
         var jumlahTotal = Number(total) > 0 ? Math.floor(Number(total)) : 0;
         var jumlahGagal = Number(failed) > 0 ? Math.floor(Number(failed)) : 0;
         if (jumlahGagal <= 0) return '';
-        // Jangan pernah melaporkan lebih banyak kegagalan daripada yang dicoba.
+        // Never report more failures than there were attempts.
         if (jumlahTotal > 0 && jumlahGagal > jumlahTotal) jumlahGagal = jumlahTotal;
 
         var sebab =
@@ -117,14 +117,14 @@
     };
 
     /**
-     * Lapisan absolut butuh acuan. Kalau container-nya belum punya posisi,
-     * jadikan relative supaya pesannya menempel di dalam peta.
+     * An absolute layer needs a reference. If the container has no position yet,
+     * make it relative so the message sticks inside the map.
      *
-     * Tapi kalau container SUDAH punya posisi — inline maupun dari CSS — jangan
-     * disentuh. Pernah terjadi: halaman video memakai lapisan kontrol penuh
-     * layar (position:absolute, z-index 2000); menimpa posisinya jadi relative
-     * merusak tata letaknya, dan pesannya justru tertimbun di bawah lapisan itu
-     * sampai nyaris tidak terbaca.
+     * But if the container ALREADY has a position, inline or from CSS, leave it
+     * alone. This happened before: the video page used a full screen control
+     * layer (position:absolute, z-index 2000); overwriting its position with
+     * relative broke the layout, and the message ended up buried under that
+     * layer until it was barely readable.
      */
     var ensurePositioned = function (host, doc) {
         if (!host || !host.style || host.style.position) return;
@@ -136,7 +136,7 @@
                 if (posisi && posisi !== 'static') return;
             }
         } catch (err) {
-            // Tidak bisa dibaca -> anggap static, lalu jadikan relative.
+            // Cannot be read -> treat it as static, then make it relative.
         }
         host.style.position = 'relative';
     };
@@ -171,8 +171,8 @@
     };
 
     /**
-     * Tempelkan pesan sebagai lapisan di atas peta. Dipanggil berulang kali aman:
-     * pesan lama diganti, tidak menumpuk jadi beberapa lapis.
+     * Attach the message as a layer on top of the map. Safe to call repeatedly:
+     * the old message is replaced, it does not stack into several layers.
      */
     var showMapNotice = function (container, message, doc) {
         var document_ = doc || globalThis.document;

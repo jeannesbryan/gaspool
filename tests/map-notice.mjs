@@ -1,16 +1,16 @@
 /**
- * Uji modul pemberitahuan peta (public/assets/map-notice.js).
+ * Test for the map notice module (public/assets/map-notice.js).
  *
- * Kenapa uji ini ada. Semua peta jejak di Gaspool mengambil titiknya dari objek
- * R2 lewat fetch() di sisi klien. Selama ini, kalau fetch itu gagal, halaman
- * hanya menulis console.error dan petanya tinggal kosong — dari sisi pemakai
- * tidak bisa dibedakan dari "aplikasinya rusak". Aturan repo ini: jangan pernah
- * diam. Uji ini menjaga pesannya tetap ada, tetap menyebut sebab yang paling
- * sering, dan tetap menyebut bahwa angka aktivitasnya tidak hilang.
+ * Why this test exists. Every ride map in Gaspool takes its points from an R2
+ * object via fetch() on the client side. Until now, when that fetch failed, the
+ * page only wrote console.error and the map stayed empty, which from the user's
+ * side cannot be told apart from "the app is broken". This repo's rule: never
+ * stay silent. This test keeps the message present, keeps it naming the most
+ * common cause, and keeps it saying that the activity numbers are not lost.
  *
  *   node tests/map-notice.mjs
  *
- * Murni Node, tanpa Worker/D1/network: DOM-nya tiruan kecil.
+ * Pure Node, no Worker/D1/network: a small fake DOM.
  */
 import "../public/assets/map-notice.js";
 
@@ -23,7 +23,7 @@ const check = (name, passed, detail) => {
 const checkEqual = (name, actual, expected) =>
   check(name, Object.is(actual, expected), `expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
 
-/** DOM tiruan: cukup untuk fungsi yang kita pakai, tanpa jsdom. */
+/** Fake DOM: just enough for the functions we use, without jsdom. */
 function makeDoc() {
   const doc = {
     _byId: {},
@@ -109,10 +109,10 @@ const msgInline = MapNotice.mapLoadFailureMessage("_p~iF~ps|U", null);
 check("data inline tidak dituduh sebagai masalah jaringan", !/jaringan/i.test(msgInline), msgInline);
 check("semua varian tetap menyebut angka aman", [msgOther, msgNamed, msgInline].every((m) => /tetap aman/i.test(m)));
 
-// --- 1b. heatmap: BANYAK peta, sebagian boleh gagal -----------------------
-// Halaman heatmap menggabungkan seluruh jejak. Sebagian bisa gagal sementara
-// sisanya tetap tergambar; itu tetap harus dikatakan, karena "peta sebagian"
-// tidak bisa dibedakan dari "peta penuh" oleh yang melihatnya.
+// --- 1b. heatmap: MANY maps, some of them may fail ------------------------
+// The heatmap page merges every ride. Some can fail while the rest still
+// draws; that still has to be said, because "a partial map" cannot be told
+// apart from "a full map" by the person looking at it.
 checkEqual("heatmap tanpa kegagalan tidak berpesan", MapNotice.heatmapLoadFailureMessage(32, 0), "");
 
 const msgSebagian = MapNotice.heatmapLoadFailureMessage(32, 3);
@@ -131,7 +131,7 @@ check("heatmap tanpa storage publik tidak menuduh jaringan", !/r2\.dev/i.test(Ma
 const msgAneh = MapNotice.heatmapLoadFailureMessage(5, 99);
 check("jumlah gagal yang mustahil dijepit ke total", /5/.test(msgAneh) && !/99/.test(msgAneh), msgAneh);
 
-// --- 2. menempel dan membersihkan di DOM ----------------------------------
+// --- 2. attaching to and clearing the DOM ---------------------------------
 const doc = makeDoc();
 const host = makeContainer(doc);
 host.style.position = "relative";
@@ -158,10 +158,10 @@ check("container tanpa position diurus otomatis", (() => {
   return fresh.style.position === "relative";
 })());
 
-// Container yang SUDAH punya posisi sendiri tidak boleh diubah. Halaman video
-// punya lapisan kontrol penuh layar (position:absolute, z-index 2000): kalau
-// posisinya ditimpa jadi relative, tata letaknya rusak dan pesannya justru
-// tertimbun di bawah lapisan itu — persis yang terjadi sebelum ini.
+// A container that ALREADY has its own position must not be changed. The video
+// page has a full screen control layer (position:absolute, z-index 2000): if
+// its position is overwritten to relative, the layout breaks and the message
+// gets buried under that layer instead, exactly what happened before this.
 check("container yang sudah punya posisi inline tidak diubah", (() => {
   const sudah = makeContainer(doc);
   sudah.style.position = "absolute";
@@ -181,7 +181,7 @@ check("container yang posisinya dari CSS (bukan inline) tidak ditimpa", (() => {
   return !dariCss.style.position;
 })());
 
-// --- 3. jalur yang tidak boleh melempar ------------------------------------
+// --- 3. the paths that must not throw -------------------------------------
 const byIdHost = makeContainer(doc);
 doc._byId["map-modal"] = byIdHost;
 checkEqual("container boleh diberikan sebagai id", MapNotice.showMapNotice("map-modal", "pesan", doc), true);

@@ -1,33 +1,33 @@
 /**
- * Statistik Activity Doctor — modul murni, tanpa dependensi runtime.
+ * Activity Doctor statistics: a pure module with no runtime dependencies.
  *
- * Kenapa modul ini dipisah dari src/api/api.ts:
- * angka yang keluar dari sini (jarak, moving time, average speed) dipakai untuk
- * MENULIS ULANG riwayat olahraga seseorang. Angka seperti itu harus
- * deterministik dan bisa diuji tanpa menyalakan Worker, D1, atau R2. Modul ini
- * sengaja tidak mengimpor apa pun supaya test bisa memuatnya langsung lewat
- * TypeScript type stripping Node (lihat tests/activity-doctor.mjs).
+ * Why this module is split out of src/api/api.ts:
+ * the numbers that leave this file (distance, moving time, average speed) are
+ * used to REWRITE someone's ride history. Numbers like that must be
+ * deterministic and testable without booting a Worker, D1 or R2. This module
+ * deliberately imports nothing so tests can load it directly through Node's
+ * TypeScript type stripping (see tests/activity-doctor.mjs).
  *
- * Tipe di sini adalah kontrak modul ini sendiri (struktural), bukan salinan
- * tipe milik api.ts — api.ts boleh punya tipe yang lebih kaya (misalnya
- * `RoutePoint & {...}`) selama bentuknya cocok dengan yang ada di sini.
+ * The types here are this module's own structural contract, not a copy of
+ * api.ts's types: api.ts may have richer types (for example
+ * `RoutePoint & {...}`) as long as their shape matches what is here.
  *
- * ATURAN YANG BERLAKU (semuanya pernah dilanggar, lihat tests/activity-doctor.mjs):
+ * RULES THAT APPLY (all of them were broken once, see tests/activity-doctor.mjs):
  *
- *   1. Satu himpunan segmen. Jarak dan waktu HARUS dijumlahkan dari segmen yang
- *      sama. Versi lama menjumlahkan jarak dari semua segmen tetapi waktu hanya
- *      dari sebagian, lalu membagi keduanya — itu artefak, bukan pengukuran.
- *   2. Waktu memakai selisih nyata (pecahan detik), bukan yang sudah dibulatkan.
- *      Versi lama memakai Math.floor(), sehingga titik yang terekam lebih rapat
- *      dari 1 detik menyumbang jarak tetapi nol waktu.
- *   3. "Bergerak" didefinisikan sama dengan auto-pause di tracker: pergeseran
- *      BERSIH di dalam jendela waktu, bukan kecepatan satu segmen. Kecepatan
- *      satu segmen terlalu berisik pada sampel rapat dan terlalu tumpul pada
- *      sampel jarang.
- *   4. Tidak ada detik yang boleh hilang tanpa penjelasan. Setiap detik di
- *      dalam rentang aktivitas harus muncul sebagai moving_time, stopped_time,
- *      atau excluded_jump_seconds; sisanya dilaporkan sebagai
- *      unaccounted_seconds supaya bisa ditolak, bukan disembunyikan.
+ *   1. One set of segments. Distance and time MUST be summed from the same
+ *      segments. The old version summed distance from every segment but time
+ *      from only some of them: an artefact, not a measurement.
+ *   2. Time uses real differences (fractional seconds), not rounded ones.
+ *      The old version used Math.floor(), so points recorded closer together
+ *      than 1 second contributed distance but zero time.
+ *   3. "Moving" is defined the same way as auto-pause in the tracker: NET
+ *      displacement inside the time window, not the speed of one segment.
+ *      One segment's speed is too noisy on dense samples and too blunt on
+ *      sparse ones.
+ *   4. No second may disappear without an explanation. Every second inside
+ *      the activity span must show up as moving_time, stopped_time or
+ *      excluded_jump_seconds; the remainder is reported as
+ *      unaccounted_seconds so it can be rejected, not hidden.
  */
 
 import {
@@ -44,10 +44,10 @@ import {
   getDoctorStopRadiusMeters,
 } from "../../public/assets/doctor-core.js";
 
-// Aritmatika inti TIDAK didefinisikan di sini lagi. Ia tinggal di
-// public/assets/doctor-core.js supaya halaman tracker, modul ini, dan test
-// memakai SATU tabel segmen. Simbol di bawah diteruskan apa adanya supaya
-// pemakai lama (api.ts, tests/activity-doctor.mjs) tidak perlu diubah.
+// The core arithmetic is NOT defined here any more. It lives in
+// public/assets/doctor-core.js so the tracker page, this module and the tests
+// all use ONE segment table. The symbols below are re-exported as they are so
+// existing callers (api.ts, tests/activity-doctor.mjs) do not need changes.
 export {
   classifyDoctorPointStays,
   DOCTOR_EXTREME_JUMP_METERS,
@@ -117,24 +117,24 @@ export const DOCTOR_MOVING_GAP_SECONDS = 5 * 60;
 export const DOCTOR_MAX_ANOMALIES = 200;
 export const DOCTOR_ELEVATION_SPIKE_METERS = 50;
 
-// Ambang diskontinuitas sengaja jauh di atas DOCTOR_EXTREME_JUMP_METERS: 1,5 km
-// masih bisa berupa GPS noise, sedangkan 20 km berarti track ini menempelkan
-// dua perjalanan yang berbeda.
+// The discontinuity threshold sits deliberately far above
+// DOCTOR_EXTREME_JUMP_METERS: 1.5 km can still be GPS noise, while 20 km
+// means this track glued together two different rides.
 export const DOCTOR_DISCONTINUITY_METERS = 20000;
 export const DOCTOR_MIN_CLUSTER_POINTS = 5;
 export const DOCTOR_MAX_CLUSTERS = 24;
 
-// Aturan "berhenti", radius pemberhentian, jarak haversine, dan batas kecepatan
-// per jenis aktivitas semuanya tinggal di public/assets/doctor-core.js dan
-// diteruskan di bagian atas berkas ini. Jangan menyalinnya kembali ke sini:
-// salinan itulah yang dulu membuat halaman dan server menghitung jarak berbeda.
+// The "stopped" rule, the stop radius, the haversine distance and the speed
+// limits per activity type all live in public/assets/doctor-core.js and are
+// re-exported at the top of this file. Do not copy them back in here:
+// that copy is what once made the page and the server compute different distances.
 
-// Memotong route pada lompatan antar titik BERURUTAN yang melebihi ambang.
-// Definisi ini yang benar untuk mencari track gabungan: rute 100 km yang
-// di-sample tiap 5 km tetap satu gugus karena tiap langkah kecil, sedangkan
-// track yang menempelkan dua perjalanan berbeda terbelah di jahitannya.
-// (Mengukur jarak ke centroid akan salah menandai rute panjang sebagai banyak
-// gugus, karena centroid menjauh dari titik-titik ujung.)
+// Split the route on jumps between CONSECUTIVE points that exceed the threshold.
+// This definition is the right one for finding glued tracks: a 100 km route
+// sampled every 5 km stays one cluster because every step is small, while a
+// track that joins two different rides splits at the seam.
+// (Measuring distance to the centroid would wrongly flag a long route as many
+// clusters, because the centroid drifts away from the end points.)
 export const buildDoctorClusters = (points: DoctorStatPoint[]) => {
   const runs: Array<{
     count: number;
@@ -171,19 +171,19 @@ export const buildDoctorClusters = (points: DoctorStatPoint[]) => {
 };
 
 /**
- * Seberapa jauh moving time hasil hitung ulang boleh menyimpang dari D1 sebelum
- * hasilnya ditolak.
+ * How far recomputed moving time may drift from D1 before the result is
+ * rejected.
  *
- * Kenapa toleransinya ketat (±15%) dan bukan longgar seperti dulu (0,35x-1,35x):
- * doctor dan tracker mengukur hal yang sama, jadi keduanya memang seharusnya
- * berdekatan. Regresi yang membuat 1:41:29 menjadi 1:00:35 hanya menyimpang
- * sekitar 40% — cukup untuk lolos dari ambang lama sambil tetap menulis ulang
- * riwayat seseorang dengan angka yang salah. Ambang longgar itu bukan pengaman,
- * ia hanya memberi ruang bagi bug berikutnya untuk lewat.
+ * Why the tolerance is tight (±15%) and not loose like before (0.35x-1.35x):
+ * doctor and tracker measure the same thing, so the two should indeed be
+ * close. The regression that turned 1:41:29 into 1:00:35 only drifted about
+ * 40%, enough to pass the old threshold while still rewriting someone's
+ * history with wrong numbers. That loose threshold was not a safety net, it
+ * only gave the next bug room to slip through.
  *
- * Arah penyimpangan tetap dibedakan di dalam pesannya, karena "lebih pendek"
- * dan "lebih panjang" punya penyebab yang berbeda dan pemakainya perlu tahu
- * yang mana.
+ * The direction of the drift is still distinguished in the message, because
+ * "shorter" and "longer" have different causes and the user needs to know
+ * which one it is.
  */
 export const DOCTOR_MOVING_TIME_RATIO_TOLERANCE = 0.15;
 
@@ -195,12 +195,12 @@ export type DoctorMovingTimeComparison = {
 };
 
 /**
- * Bandingkan moving time hasil hitung ulang dengan yang sudah ada di D1.
+ * Compare recomputed moving time against what D1 already holds.
  *
- * Rasio null berarti salah satu sisi tidak punya nilai (misalnya aktivitas lama
- * yang belum pernah punya statistik). Dalam keadaan itu tidak ada yang bisa
- * dibandingkan, dan hasilnya TIDAK dianggap menyimpang — kalau D1 memang kosong,
- * mengisinya adalah perbaikan, bukan risiko.
+ * A null ratio means one side has no value (for example an old activity that
+ * never had statistics). In that state there is nothing to compare, and the
+ * result is NOT treated as drift: if D1 really is empty, filling it in is a
+ * fix, not a risk.
  */
 export const compareDoctorMovingTime = (
   currentSeconds: number,
@@ -249,12 +249,12 @@ export const compareDoctorMovingTime = (
 export type DoctorSegmentKind = "jump" | "stopped" | "moving";
 
 /**
- * Satu tabel segmen, dipakai oleh SEMUA perhitungan di modul ini.
+ * One segment table, used by EVERY calculation in this module.
  *
- * Ini bukan sekadar kerapian. Regresi aslinya lahir justru karena jarak dan
- * waktu dijumlahkan di dua tempat berbeda dengan aturan berbeda. Selama masih
- * ada dua tempat, bug yang sama bisa lahir lagi; dengan satu tabel, "bergerak"
- * hanya punya satu arti.
+ * This is not just tidiness. The original regression was born precisely
+ * because distance and time were summed in two different places with different
+ * rules. As long as two places exist, the same bug can be born again; with one
+ * table, "moving" has only one meaning.
  */
 export type DoctorSegments = {
   count: number;
@@ -283,12 +283,12 @@ export type DoctorRestBlock = {
 };
 
 /**
- * Blok istirahat panjang, dipakai untuk analisis bahan bakar (nutrition) dan
- * ringkasan istirahat. Sama seperti statistik utama, blok ini melaporkan
- * `moving_time` KUMULATIF sampai istirahat itu mulai.
+ * Long rest blocks, used for fuel (nutrition) analysis and the rest summary.
+ * Like the main statistics, these blocks report the CUMULATIVE `moving_time`
+ * up to the point where that rest starts.
  *
- * Ambangnya sengaja tetap DOCTOR_LONG_GAP_SECONDS: ini memang daftar istirahat
- * panjang, bukan setiap lampu merah.
+ * The threshold deliberately stays DOCTOR_LONG_GAP_SECONDS: this really is a
+ * list of long rests, not every red light.
  */
 export const collectDoctorRestBlocks = (
   points: DoctorStatPoint[],
@@ -313,8 +313,8 @@ export const collectDoctorRestBlocks = (
     }
 
     if (segments.gapSeconds[k] >= DOCTOR_LONG_GAP_SECONDS) {
-      // Variabel lokal dipakai supaya TypeScript bisa menyempitkan tipe:
-      // penyempitan tidak berlaku pada akses elemen berulang (points[i - 1]).
+      // Local variables are used so TypeScript can narrow the types:
+      // narrowing does not apply to repeated element access (points[i - 1]).
       const prevTime = points[i - 1].time;
       const pointTime = point.time;
       const prevMs = prevTime ? Date.parse(prevTime) : 0;
@@ -359,9 +359,9 @@ export const recalculateDoctorStats = (
     span_seconds: 0,
   };
 
-  // ---- Langkah 1: satukan tabel segmen lewat buildDoctorSegments(). Tabel yang
-  // sama juga dipakai collectDoctorRestBlocks(), jadi blok istirahat tidak bisa
-  // lagi melaporkan jam yang berbeda dari statistik utama.
+  // ---- Step 1: build one segment table via buildDoctorSegments(). The same
+  // table is also used by collectDoctorRestBlocks(), so rest blocks can no
+  // longer report a different time from the main statistics.
   const segments = buildDoctorSegments(points, activityType);
   const { distanceM: segmentDistanceM, seconds: segmentSeconds, gapSeconds: segmentGapSeconds, cumTime } =
     segments;
@@ -394,9 +394,9 @@ export const recalculateDoctorStats = (
     });
   };
 
-  // ---- Langkah 2: klasifikasikan tiap segmen dan jumlahkan. Jarak dan waktu
-  // diambil dari cabang yang sama, jadi keduanya tidak mungkin lagi berasal
-  // dari himpunan segmen yang berbeda.
+  // ---- Step 2: classify each segment and sum it up. Distance and time are
+  // taken from the same branch, so they can no longer come from a different
+  // set of segments.
   let distanceKm = 0;
   let movingSeconds = 0;
   let stoppedSeconds = 0;
@@ -415,9 +415,9 @@ export const recalculateDoctorStats = (
     const prevMs = prev.time ? Date.parse(prev.time) : 0;
     const pointMs = point.time ? Date.parse(point.time) : 0;
 
-    // Integritas waktu diperiksa terpisah dari gapSec: gapSec sengaja bernilai 0
-    // untuk timestamp yang tidak masuk akal, sehingga timeline yang mundur
-    // selama ini lolos tanpa catatan.
+    // Time integrity is checked separately from gapSec: gapSec is deliberately 0
+    // for timestamps that make no sense, so until now a backwards timeline
+    // slipped through with no record at all.
     if (Number.isFinite(pointMs) && pointMs > 0) {
       if (timeIntegrity.first_ms === 0 || pointMs < timeIntegrity.first_ms) {
         timeIntegrity.first_ms = pointMs;
@@ -503,12 +503,12 @@ export const recalculateDoctorStats = (
       );
     }
 
-    // Klasifikasi dari tabel bersama (lihat buildDoctorSegments): "jump" sudah
-    // ditangani di atas, "stopped" berarti jitter GPS di tempat, sisanya
-    // "moving". Jarak dan waktu diambil dari cabang yang sama persis.
+    // Classification comes from the shared table (see buildDoctorSegments):
+    // "jump" is handled above, "stopped" means GPS jitter in place, the rest
+    // is "moving". Distance and time come from exactly the same branch.
     if (segments.kind[k] === "stopped") {
-      // Berhenti: tidak menambah jarak (jitter GPS saat diam bukan rute) dan
-      // tidak menambah moving time. Waktunya tetap tercatat, bukan dibuang.
+      // Stopped: adds no distance (GPS jitter while standing still is not
+      // route) and no moving time. The time is still recorded, not discarded.
       stoppedSeconds += deltaSec;
       continue;
     }
@@ -551,9 +551,9 @@ export const recalculateDoctorStats = (
   const movingTime = Math.max(0, Math.floor(movingSeconds));
   const stoppedTime = Math.max(0, Math.floor(stoppedSeconds));
 
-  // Average speed diturunkan dari angka yang benar-benar dilaporkan, supaya
-  // "jarak dan moving time" yang tertulis di laporan memang bisa dibagi dan
-  // hasilnya persis angka yang ditampilkan.
+  // Average speed is derived from the numbers actually reported, so the
+  // "distance and moving time" written in the report really do divide into
+  // exactly the number being displayed.
   const averageSpeed = movingTime > 0 ? distanceKm / (movingTime / 3600) : 0;
   const clusters = buildDoctorClusters(points);
   const spanSeconds =
@@ -561,9 +561,9 @@ export const recalculateDoctorStats = (
       ? Math.floor((timeIntegrity.last_ms - timeIntegrity.first_ms) / 1000)
       : 0;
 
-  // Akuntansi waktu: setiap detik di dalam rentang aktivitas harus muncul di
-  // salah satu kolom. Sisa yang tak terjelaskan dilaporkan apa adanya supaya
-  // pemanggil bisa menolak hasilnya, bukan menampilkannya diam-diam.
+  // Time accounting: every second inside the activity span must show up in
+  // one of the columns. The unexplained remainder is reported as is so the
+  // caller can reject the result, not display it silently.
   const accountedSeconds = movingSeconds + stoppedSeconds + excludedJumpSeconds;
   const unaccountedSeconds = Math.max(0, Number((spanSeconds - accountedSeconds).toFixed(1)));
 

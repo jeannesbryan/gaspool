@@ -1,26 +1,26 @@
 /**
- * Akuntansi jam live yang ikut DISIMPAN bersama aktivitas.
+ * Live clock accounting that gets STORED alongside the activity.
  *
- * Kenapa modul ini ada. Halaman tracker sudah mengirim `live_clock` di payload
- * sejak commit dfb3e28, tetapi api.ts tidak pernah membacanya dan metadata
- * aktivitas tidak memuatnya — jadi catatannya hilang begitu layar finish
- * ditutup. Akibatnya, pada gowes 25 Sep 2026 (11027 titik, rentang 7 jam),
- * pertanyaan "apakah jam live kehilangan detik?" hanya bisa dijawab dari
- * ABSENNYA sebuah peringatan, bukan dari angka. Berkas ini membuat angka itu
- * ikut tersimpan, supaya gowes berikutnya bisa dibuktikan dari berkasnya
- * sendiri.
+ * Why this module exists. The tracker page has been sending `live_clock` in
+ * the payload since commit dfb3e28, but api.ts never read it and the activity
+ * metadata never carried it, so the record vanished once the finish screen
+ * was closed. As a result, on the 25 Sep 2026 gowes (11027 points, 7 hour
+ * span), the question "did the live clock lose any seconds?" could only be
+ * answered from the ABSENCE of a warning, not from a number. This file makes
+ * that number get stored too, so the next gowes can be proven from its own
+ * file.
  *
- * Prinsip modul ini:
+ * Rules this module follows:
  *
- *  1. Ia TIDAK menghitung ulang statistik apa pun. Nilai yang tersimpan adalah
- *     pengukuran jam live, dan hitung ulang tetap tugas Activity Doctor.
- *  2. Nol dan "tidak ada data" adalah dua hal berbeda. Kalau instrumentasi
- *     tidak sempat dimuat, hasilnya `null` — bukan angka nol yang bisa
- *     disalahartikan sebagai "tidak ada waktu yang hilang".
- *  3. Angka dari klien dirapikan, bukan dipercaya. Jumlahkan sendiri
- *     keranjangnya, lalu tandai kalau klien mengirim total yang tidak cocok.
+ *  1. It does NOT recompute any statistic. The stored value is the live clock
+ *     measurement, and recomputation stays Activity Doctor's job.
+ *  2. Zero and "no data" are two different things. If instrumentation never
+ *     got loaded, the result is `null`, not a zero that could be misread as
+ *     "no time was lost".
+ *  3. Numbers from the client are cleaned up, not trusted. Sum the buckets
+ *     yourself, then flag it when the client sends a total that disagrees.
  *
- * Modul murni: nol impor runtime, jadi bisa diuji tanpa Worker/D1/network.
+ * Pure module: zero runtime imports, so it can be tested without Worker/D1/network.
  */
 
 export type LiveClockRecord = {
@@ -30,19 +30,19 @@ export type LiveClockRecord = {
   dropped_seconds: number;
   clamped_tick_count: number;
   dropped_tick_count: number;
-  /** clamped + dropped, dihitung ulang di sini — bukan disalin dari klien. */
+  /** clamped + dropped, recomputed here, not copied from the client. */
   uncounted_seconds: number;
-  /** Salinan apa adanya dari klien; null kalau tidak dikirim. */
+  /** Copy taken as is from the client; null when it was not sent. */
   balance_seconds: number | null;
   /**
-   * true = angka-angka saling cocok. false = ada keranjang yang tidak
-   * menjumlah, jadi catatan ini TIDAK boleh dipakai sebagai bukti.
+   * true = the numbers agree with each other. false = some bucket does not add
+   * up, so this record must NOT be used as evidence.
    */
   consistent: boolean;
   issues: string[];
 };
 
-/** Toleransi pembulatan antar-keranjang, dalam detik. */
+/** Rounding tolerance between buckets, in seconds. */
 export const LIVE_CLOCK_CONSISTENCY_TOLERANCE_SECONDS = 1;
 
 const toNonNegativeNumber = (value: unknown): number => {
@@ -58,11 +58,11 @@ const toNonNegativeCount = (value: unknown): number => {
 };
 
 /**
- * Rapikan catatan jam live yang dikirim halaman tracker.
+ * Clean up the live clock record sent by the tracker page.
  *
- * Mengembalikan `null` kalau memang tidak ada catatan (instrumentasi tidak
- * dimuat, atau aktivitas lama yang direkam sebelum fitur ini ada). Itu
- * disengaja: menyimpannya sebagai nol akan menyamarkan kehilangan data.
+ * Returns `null` when there really is no record (instrumentation never loaded,
+ * or an old activity recorded before this feature existed). That is deliberate:
+ * storing it as zero would disguise missing data.
  */
 export const normalizeLiveClockRecord = (
   value: unknown,
@@ -81,8 +81,8 @@ export const normalizeLiveClockRecord = (
 
   const uncountedSeconds = Number((clampedSeconds + droppedSeconds).toFixed(1));
 
-  // Keranjang yang kosong tapi tanpa satu tick pun = catatan yang tidak masuk
-  // akal. Ini bukan alasan menolak menyimpan, tapi alasan menandainya.
+  // An empty bucket with not a single tick = a record that makes no sense.
+  // That is not a reason to refuse storing it, but a reason to flag it.
   if (tickCount === 0) {
     issues.push(
       "tick_count 0: tidak ada tick yang tercatat, angka di sini tidak bisa dipakai sebagai bukti.",
@@ -95,8 +95,8 @@ export const normalizeLiveClockRecord = (
     );
   }
 
-  // Klien mengirim totalnya sendiri; kalau tidak sama dengan jumlah keranjang,
-  // salah satu angkanya berbohong dan kita tidak tahu yang mana.
+  // The client sends its own total; if it does not match the bucket sum,
+  // one of the numbers is lying and we cannot tell which one it is.
   const claimedUncounted = Number(source.uncounted_seconds);
   if (Number.isFinite(claimedUncounted)) {
     const drift = Math.abs(claimedUncounted - uncountedSeconds);
@@ -112,9 +112,9 @@ export const normalizeLiveClockRecord = (
     ? Number(rawBalance.toFixed(1))
     : null;
 
-  // Waktu nyata yang lewat selalu >= waktu yang dihitung bergerak, karena
-  // auto-pause hanya bisa MENGURANGI counted. Balapan sebaliknya berarti
-  // keranjangnya rusak.
+  // Real elapsed time is always >= the time counted as moving, because
+  // auto-pause can only REDUCE counted. The reverse race means the buckets
+  // are corrupt.
   if (balanceSeconds !== null && balanceSeconds < countedSeconds - LIVE_CLOCK_CONSISTENCY_TOLERANCE_SECONDS) {
     issues.push(
       `balance_seconds (${balanceSeconds.toFixed(1)}) lebih kecil dari counted_seconds (${countedSeconds.toFixed(1)}).`,
@@ -136,10 +136,10 @@ export const normalizeLiveClockRecord = (
 };
 
 /**
- * Kalimat siap-baca untuk menjelaskan catatan ini ke manusia.
+ * Ready-to-read sentence that explains this record to a human.
  *
- * Dipakai supaya pertanyaan "jamnya hilang berapa detik?" tidak lagi dijawab
- * dengan menebak dari absennya peringatan.
+ * Used so the question "how many seconds did the clock lose?" is no longer
+ * answered by guessing from the absence of a warning.
  */
 export const describeLiveClockRecord = (record: LiveClockRecord | null) => {
   if (!record) {

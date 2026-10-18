@@ -57,12 +57,12 @@ tracker.get("/record", async (c) => {
             .val { font-size: 20px; font-weight: 900; color: #fff; }
             .val-main { font-size: 4rem; font-weight: 900; color: var(--primary); font-style: italic; text-align: center; margin: 5px 0; text-shadow: 0 0 20px rgba(255,95,0,0.4); }
             
-            /* Ukuran minimum target sentuh.
-               Halaman ini dioperasikan sambil mengayuh, kadang dengan sarung
-               tangan dan layar berembun, jadi tombol yang nyaman untuk tetikus
-               belum tentu bisa ditekan dengan benar. 48px mengikuti panduan
-               Material; 44px adalah batas bawah yang masih diterima (WCAG
-               2.5.5). Sebelum ini tombol terkecil hanya 25px. */
+            /* Minimum touch target size.
+               This page is operated while pedalling, sometimes with gloves on
+               and a fogged screen, so a button that is comfortable for a mouse
+               is not necessarily pressable correctly. 48px follows the Material
+               guideline; 44px is the lowest limit still accepted (WCAG 2.5.5).
+               Before this, the smallest button was only 25px. */
             .btn { padding: 20px; border-radius: 15px; border: none; font-weight: 900; cursor: pointer; text-transform: uppercase; font-style: italic; width: 100%; pointer-events: auto; transition: 0.3s; min-height: 48px; touch-action: manipulation; }
             .btn:active { transform: scale(0.95); }
             .btn-start { background: var(--primary); color: #fff; }
@@ -76,7 +76,7 @@ tracker.get("/record", async (c) => {
             .btn-panel-toggle { display:none; margin:0 0 8px; padding:10px; font-size:10px; background:rgba(255,255,255,0.09); border:1px solid rgba(255,255,255,0.14); color:#fff; }
             .tracker-extra.is-collapsed { display:none; }
 
-            /* Panel siaran live (gowes solo maupun peleton). */
+            /* Live broadcast panel (solo ride as well as peleton). */
             .live-panel { display:none; margin:0 0 8px; padding:10px 12px; border-radius:14px; background:rgba(37,211,102,0.10); border:1px solid rgba(37,211,102,0.45); pointer-events:auto; }
             .live-panel-head { display:flex; align-items:center; gap:7px; margin-bottom:6px; }
             .live-dot { width:8px; height:8px; border-radius:50%; background:#2ecc71; box-shadow:0 0 8px #2ecc71; animation:livePulse 1.6s infinite; }
@@ -152,9 +152,9 @@ tracker.get("/record", async (c) => {
             .finish-row.warning { border-left-color:#f1c40f; }
             .finish-row.danger { border-left-color:#e74c3c; }
             .finish-row.info { border-left-color:#3498db; }
-            /* Tabel SEBELUM -> SESUDAH. Tujuannya supaya keputusan "simpan apa
-               adanya" atau "perbaiki dulu" diambil dengan angka di depan mata,
-               bukan tebak-tebakan. */
+            /* The SEBELUM -> SESUDAH (before -> after) table. Its purpose is to
+               make the "save as it is" or "repair first" decision with the
+               numbers in front of you, instead of guessing. */
             .finish-diff { display:grid; gap:7px; }
             .finish-diff-head,
             .finish-diff-row { display:grid; grid-template-columns: 1.15fr 1fr 1fr; gap:6px; align-items:center; }
@@ -200,10 +200,10 @@ tracker.get("/record", async (c) => {
                 .label { font-size: 7px; letter-spacing: 1px; margin-bottom: 2px; }
                 .val { font-size: 15px; line-height: 1.05; }
                 .action-row { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin-bottom: 6px; }
-                /* Layar kecil TIDAK boleh mengecilkan tombol di bawah ukuran
-                   yang aman disentuh. Sebelumnya baris ini memaksa 34px, dan
-                   itulah sebab tombol terkecil hanya 25px. Ruang yang sempit
-                   diserap oleh panel bawah yang bisa digulir, bukan oleh jari. */
+                /* A small screen MUST NOT shrink the button below a size that
+                   is safe to touch. This line used to force 34px, and that is
+                   why the smallest button was only 25px. Tight space is taken
+                   up by the scrollable bottom panel, not by the finger. */
                 .action-row .btn { padding: 10px 4px !important; min-height: 48px; border-radius: 11px; font-size: 11px !important; letter-spacing: 0.2px; }
                 .nav-voice-status { margin: -2px 0 6px; font-size: 11px; letter-spacing: 0.6px; }
                 .btn-panel-toggle { display:block; }
@@ -495,18 +495,18 @@ tracker.get("/record", async (c) => {
 			let clockInt, movingTime = 0, lastTick = Date.now(), isPaused = false, lastAnnouncedKm = 0, lastSave = 0;
 			let skippedClockGapSeconds = 0;
 
-			// --- Akuntansi jam ---------------------------------------------
-			// Jam live dan jam hasil repair pernah berbeda 2:44 untuk gowes yang
-			// sama. Sebagian sebabnya sudah diketahui (auto-pause pakai kecepatan
-			// sesaat), tetapi sebagian lagi tidak terlihat sama sekali: setiap
-			// tick yang datang terlambat dipotong diam-diam oleh
-			// Math.min(delta, maxDelta), dan potongannya tidak pernah dijumlahkan
-			// di mana pun. Penghitung ini mencatatnya TANPA mengubah perilaku:
-			// moving time tetap dihitung seperti sebelumnya.
+			// --- Clock accounting ---------------------------------------------
+			// The live clock and the repaired clock once differed by 2:44 for the
+			// same ride. Part of the cause is known (auto-pause uses instantaneous
+			// speed), but part of it is completely invisible: every
+			// tick that arrives late is silently clipped by
+			// Math.min(delta, maxDelta), and the clipped part is never added up
+			// anywhere. This counter records it WITHOUT changing behaviour:
+			// moving time is still computed exactly as before.
 			//
-			// Modulnya dimuat dari /assets/live-clock.js supaya berkas yang sama
-			// juga dipakai tests/live-clock.mjs. Kalau gagal dimuat, tracker tetap
-			// berjalan seperti biasa, hanya tanpa instrumentasi.
+			// The module is loaded from /assets/live-clock.js so that the same file
+			// is also used by tests/live-clock.mjs. If loading fails, the tracker still
+			// runs as usual, only without instrumentation.
 			let liveClockMod = null, liveClockAcc = null, liveClockLoadTried = false;
 
 			async function loadLiveClock() {
@@ -534,8 +534,8 @@ tracker.get("/record", async (c) => {
 				});
 			}
 
-			// Ringkasan untuk layar: berapa detik yang lewat tetapi tidak dihitung
-			// sebagai bergerak, dan berapa banyak tick yang terlambat.
+			// Summary for the screen: how many seconds elapsed but were not counted
+			// as moving, and how many ticks arrived late.
 			function liveClockSummary() {
 				if (!liveClockMod || !liveClockAcc) return null;
 				const a = liveClockAcc;
@@ -548,10 +548,10 @@ tracker.get("/record", async (c) => {
 					balance: liveClockMod.liveClockBalance(a),
 				};
 			}
-			// Variabel Elevasi (Tanjakan)
+			// Elevation variables (climb)
 			let totalElevation = 0, lastAlt = null;
 
-			// Variabel Suhu & Audio
+			// Temperature & audio variables
 			let tempReadings = [], lastTempCheck = 0;
 			let playedAudioUrls = new Set();
 			let radarTick = 0; // Untuk hitung throttle radar
@@ -603,29 +603,29 @@ tracker.get("/record", async (c) => {
 			let peletonRouteVersion = 0;
 			let lastPeletonRouteCheck = 0;
 			let userName = "${captainName}";
-			// Ruang siaran live dipisahkan dari roomID dengan sengaja.
+			// The live broadcast room is deliberately kept separate from roomID.
 			//
-			// roomID menentukan identitas "gowes peleton" dan dipakai di banyak
-			// tempat untuk memutuskan apakah rute peleton, radio, dan audio
-			// peleton perlu dihidupkan. Mengisinya dengan token siaran solo akan
-			// membangunkan seluruh mesin peleton itu. Jadi siaran solo memakai
-			// variabelnya sendiri: Peleton mengisinya sejak awal, gowes solo
-			// mengisinya saat siaran dimulai.
+			// roomID defines the "peleton ride" identity and is used in many
+			// places to decide whether the peleton route, radio and audio
+			// need to be turned on. Filling it with a solo broadcast token would
+			// wake up that whole peleton machinery. So a solo broadcast uses its
+			// own variable: Peleton fills it from the start, a solo ride fills it
+			// when the broadcast begins.
 			//
-			// CATATAN untuk yang mengedit berkas ini: seluruh halaman ini adalah
-			// satu template literal TypeScript, jadi JANGAN memakai backtick di
-			// dalam komentar — backtick menutup template-nya dan merusak halaman.
-			// Halaman ini dirender di server, jadi peleton harus disimpulkan ulang
-			// di sisi klien: variabel isPeleton milik server tidak ada di browser.
+			// NOTE for anyone editing this file: this whole page is one
+			// TypeScript template literal, so NEVER use a backtick inside
+			// a comment: a backtick closes the template and breaks the page.
+			// This page is rendered on the server, so peleton has to be inferred
+			// again on the client: the server-side isPeleton variable does not exist in the browser.
 			const isPeletonMode = roomID !== "SINGLE_MODE";
 			let liveRoom = isPeletonMode ? roomID : "";
-			// Token siaran lama yang belum kedaluwarsa. Hanya disiapkan, tidak
-			// dipakai sampai kapten menekan tombol bagikan lagi.
+			// An old broadcast token that has not expired yet. Only prepared, not
+			// used until the captain presses the share button again.
 			let resumableLiveRoom = "";
 			const liveShareKey = 'gaspool_live_room';
-			// Link yang dibagikan tadi pagi masih masuk akal untuk dilanjutkan sore
-			// ini, tetapi tidak untuk minggu depan: lokasi lama tidak boleh menempel
-			// pada token yang sudah lama tidak dipakai.
+			// A link shared this morning still makes sense to continue this
+			// afternoon, but not next week: an old location must not stick to a
+			// token that has not been used for a long time.
 			const LIVE_RESUME_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 			let plannedRouteData = null;
 			let plannedRouteLine = null;
@@ -726,7 +726,7 @@ tracker.get("/record", async (c) => {
 			};
 			let trackingMode = sanitizeTrackingMode(localStorage.getItem(trackingModeKey));
 
-			// --- INISIALISASI INDEXEDDB (ANTI NGE-LAG & BUNKER MODE) ---
+			// --- INDEXEDDB INITIALISATION (ANTI-LAG & BUNKER MODE) ---
 			const DB_NAME = "GaspoolDB_TS";
 			const STORE_NAME = "gaspool_points";
 			const BUNKER_STORE = "sync_queue";
@@ -750,9 +750,9 @@ tracker.get("/record", async (c) => {
 
 }
 
-			// Naikkan versi ke 2 agar browser membuat tabel brankas baru
+			// Raise the version to 2 so the browser creates the new vault table
 			try {
-    // Cek dulu apakah browser mendukung dan mengizinkan IndexedDB
+    // First check whether the browser supports and allows IndexedDB
     const request = window.indexedDB ? indexedDB.open(DB_NAME, 2) : null;
     
     if (request) {
@@ -770,7 +770,7 @@ tracker.get("/record", async (c) => {
 
 function savePointDB(point) {
     try {
-        // Pastikan db eksis dan tabelnya sudah terbuat sebelum menyimpan
+        // Make sure the db exists and the table is already created before saving
         if (db && db.objectStoreNames.contains(STORE_NAME)) {
             db.transaction(STORE_NAME, "readwrite").objectStore(STORE_NAME).add(point);
         }
@@ -781,7 +781,7 @@ function savePointDB(point) {
 
 function clearDB() {
     try {
-        // Pastikan db eksis sebelum mencoba menghapus data (mencegah error saat tombol Abort ditekan)
+        // Make sure the db exists before trying to delete data (prevents an error when the Abort button is pressed)
         if (db && db.objectStoreNames.contains(STORE_NAME)) {
             db.transaction(STORE_NAME, "readwrite").objectStore(STORE_NAME).clear();
         }
@@ -2316,17 +2316,17 @@ function clearDB() {
 				setRerouteButtonVisible(false);
 			}
 
-			// --- Pemilihan suara ------------------------------------------------
-			// Suara TTS tidak disediakan aplikasi ini, melainkan oleh peramban dan
-			// sistem operasi, jadi yang bisa diperbaiki adalah cara MEMILIH di
-			// antara yang tersedia. Versi lama mengambil suara Indonesia pertama
-			// (bisa pria, bisa berkualitas rendah), dan kalau perangkat tidak punya
-			// suara Indonesia sama sekali, kata Indonesia tetap dilafalkan memakai
-			// suara bawaan peramban yang biasanya Inggris — itulah yang terdengar
-			// seperti "aksen jelek".
+			// --- Voice selection ------------------------------------------------
+			// TTS voices are not provided by this app but by the browser and the
+			// operating system, so what can be fixed is the way we CHOOSE among
+			// the available ones. The old version took the first Indonesian voice
+			// (could be male, could be low quality), and if the device has no
+			// Indonesian voice at all, Indonesian words are still pronounced with the
+			// browser default voice, which is usually English, and that is what sounds
+			// like a "bad accent".
 			//
-			// Peringkat dan pemilihannya ada di /assets/voice-picker.js, berkas yang
-			// sama juga diuji oleh tests/voice-picker.mjs.
+			// The ranking and the picking live in /assets/voice-picker.js, the same
+			// file is also tested by tests/voice-picker.mjs.
 			const navVoicePrefKey = 'gaspool_nav_voice';
 			let voicePickerMod = null, voicePickerTried = false, navVoiceChoice = '';
 
@@ -2358,17 +2358,17 @@ function clearDB() {
 			function pickIndonesianVoice() {
 				const voices = availableVoices();
 				if (!voicePickerMod) {
-					// Jaring pengaman sebelum modul selesai dimuat: tetap pilih yang
-					// berbahasa Indonesia, jangan yang kebetulan pertama.
+					// Safety net before the module finishes loading: still pick an
+					// Indonesian one, not whatever happens to come first.
 					return voices.find(v => (v.lang || '').toLowerCase().startsWith('id')) || null;
 				}
 				return voicePickerMod.pickBestVoice(voices, navVoiceChoice);
 			}
 
-			// Ganti ke suara berikutnya yang layak, lalu ucapkan contoh singkat
-			// supaya pemakainya bisa langsung mendengar perbedaannya. Tidak ada
-			// cara menilai "enak didengar" dari kode — telinga pemakainyalah yang
-			// menentukan, jadi pilihan diserahkan kepadanya.
+			// Switch to the next suitable voice, then speak a short sample
+			// so the user can hear the difference right away. There is no
+			// way to judge "pleasant to hear" from code: the user's ears are what
+			// decide, so the choice is left to them.
 			async function cycleNavVoice() {
 				const mod = await loadVoicePicker();
 				if (!mod) { setNavVoiceStatus('PILIH SUARA TIDAK TERSEDIA', true); return; }
@@ -2386,7 +2386,7 @@ function clearDB() {
 				saveVoicePreference(next.name);
 				setNavVoiceStatus('SUARA: ' + mod.describeVoice(next));
 
-				// Contoh diucapkan supaya bisa langsung dibandingkan.
+				// The sample is spoken so it can be compared right away.
 				const wasEnabled = routeVoiceEnabled;
 				routeVoiceEnabled = true;
 				speakRouteNow('Belok kiri dalam tiga ratus meter');
@@ -2422,9 +2422,9 @@ function clearDB() {
 				} else if (routeSpeechQueue.length > 0) {
 					setNavVoiceStatus('SUARA NAV ANTRE ' + routeSpeechQueue.length);
 				} else {
-					// Suara yang sedang dipakai ikut ditampilkan supaya kalau
-					// terdengar aneh, pemakainya tahu itu suara mana dan bisa
-					// langsung menekan GANTI SUARA.
+					// The voice currently in use is shown too, so that if it
+					// sounds odd the user knows which voice it is and can
+					// press GANTI SUARA straight away.
 					const activeVoice = pickIndonesianVoice();
 					const voiceNote = voicePickerMod
 						? (activeVoice ? ' · ' + voicePickerMod.describeVoice(activeVoice) : ' · TIDAK ADA SUARA INDONESIA')
@@ -2877,9 +2877,9 @@ function clearDB() {
 
 			bootRouteSharing();
 			bootLiveShare();
-			// Pilihan suara dimuat lebih dulu supaya pemanggilan pertama sudah
-			// menghormati preferensi pemakai, bukan mengambil suara pertama yang
-			// kebetulan ada. Kegagalan memuat tidak menghalangi navigasi.
+			// The voice preference is loaded first so that the first call already
+			// respects the user preference instead of taking the first voice that
+			// happens to exist. A load failure does not block navigation.
 			loadVoicePreference();
 			loadVoicePicker().then(updateNavVoiceControls).catch(() => {});
 			updateNavVoiceControls();
@@ -3005,8 +3005,8 @@ document.getElementById(
 					const rawData = localStorage.getItem(key);
 					if (!rawData) throw new Error("Data Blackbox kosong");
 
-					// Parse data dengan aman. Kalau JSON-nya kepotong/korup, 
-					// JS akan langsung lompat ke blok catch() di bawah.
+					// Parse the data safely. If the JSON is truncated/corrupt,
+					// JS jumps straight to the catch() block below.
 					const d = JSON.parse(rawData);
 					
 					dist = d.dist || 0; 
@@ -3042,8 +3042,8 @@ document.getElementById(
 					
 					document.getElementById('safeMode').style.display = 'none';
 					
-					// Proteksi tambahan: Jaga-jaga kalau IndexedDB belum selesai loading 
-					// saat kapten memencet tombol Resume terlalu cepat
+					// Extra protection: in case IndexedDB has not finished loading
+					// when the captain presses the Resume button too quickly
 					if (!db) {
 
   console.warn(
@@ -3063,7 +3063,7 @@ document.getElementById(
 
 }
 					
-					// Tarik jalur koordinat dari IndexedDB
+					// Pull the coordinate path out of IndexedDB
 					if (db) {
 						const tx = db.transaction(STORE_NAME, "readonly");
 						const allPoints = await new Promise((resolve, reject) => {
@@ -3098,7 +3098,7 @@ document.getElementById(
 					console.error("Gagal resume sesi (Data Korup/Rusak):", error.message);
 					alert("Peringatan Sistem: Sesi gowes sebelumnya rusak akibat HP mati mendadak. Membuka sesi baru...");
 					
-					// Eksekusi pembersihan paksa agar aplikasi bisa terbuka normal lagi
+					// Force the cleanup so the app can open normally again
 					discardSession(); 
 				}
 			}
@@ -3169,8 +3169,8 @@ function gpsQuality(acc) {
 					startT = Date.now(); path = []; dist = 0; movingTime = 0; lastAnnouncedKm = 0; 
 					captureStartTimezone();
 					skippedClockGapSeconds = 0;
-					// Muat modul akuntansi lalu mulai dari nol. Kegagalan memuat
-					// tidak menghalangi gowes: instrumentasi sifatnya tambahan.
+					// Load the accounting module and start from zero. A load failure
+					// does not block the ride: the instrumentation is an extra.
 					loadLiveClock().then(resetLiveClock).catch(() => {});
 					autoRerouteCount = 0;
 					lastAutoRerouteAt = 0;
@@ -3215,8 +3215,8 @@ function gpsQuality(acc) {
 					lastTick = now;
 
 					if (!Number.isFinite(delta) || delta < 0) delta = 0;
-					// Simpan nilai mentah sebelum dipotong: potongan itulah yang
-					// dicatat sebagai waktu yang lewat tetapi tidak dihitung.
+					// Keep the raw value before clipping: the clipped part is what
+					// gets recorded as time that elapsed but was not counted.
 					const rawDelta = delta;
 					if (delta > REST_CLOCK_GAP_SECONDS) {
 						skippedClockGapSeconds += delta;
@@ -3339,10 +3339,10 @@ if (!gpsStatus) return;
 						const d = map.distance([last.lat, last.lng], cur) / 1000;
 						
 						if(d > 0.003 && d < 1.5 && shouldStoreTrackPoint(d, speedKmh)) { 
-    // Jarak normal, catat semuanya
+    // Normal distance, record everything
     dist += d; 
     
-    // Kalkulasi Elevasi
+    // Elevation calculation
     if (lastAlt !== null && altitude !== null) {
         let altDiff = altitude - lastAlt;
         if (altDiff > 3 && altDiff < 50) totalElevation += altDiff;
@@ -3358,7 +3358,7 @@ if (!gpsStatus) return;
 } else if (d >= 1.5) {
     console.warn("Lonjakan Sinyal (Blank Spot). Jangkar dipindah, jarak tempuh tidak ditambahkan.");
     
-    // TETAP rekam koordinatnya sebagai pijakan baru agar tracker tidak lumpuh
+    // STILL record the coordinate as a new foothold so the tracker does not freeze
     let pt = { lat, lng, speed: speedKmh, ele: altitude || 0, time: new Date().toISOString() };
     path.push(pt); 
     savePointDB(pt); 
@@ -3382,7 +3382,7 @@ if (!gpsStatus) return;
 						document.getElementById('val-speed').innerText = speedKmh.toFixed(1);
 					}
 
-					// Jangan paksa kamera geser kalau Stealth lagi aktif (bikin berat)
+					// Do not force the camera to pan while Stealth is active (it is heavy)
 					if (!isStealthMode) {
 						if (autoFollow) {
 
@@ -3402,7 +3402,7 @@ if (!gpsStatus) return;
 						speakRoute('Jarak tempuh ' + currentKm + ' kilometer. Kecepatan rata-rata ' + avgSpeedVoice + ' kilometer per jam.', false);
 					}
 
-					// Simpan Blackbox (Metadata saja, path di-skip karena sudah masuk IndexedDB)
+					// Save the Blackbox (metadata only, the path is skipped because it already went into IndexedDB)
 					let nowTime = Date.now();
 					if (nowTime - lastSave > 10000) { 
 						persistBlackboxSnapshot(nowTime);
@@ -3458,15 +3458,15 @@ if (!gpsStatus) return;
 					const config = currentTrackingConfig();
 					let threshold = isStealthMode ? config.stealthRadarSeconds : config.radarSeconds;
 					
-					// liveRoom kosong berarti tidak ada yang dibagikan: gowes solo
-					// sebelum kapten menekan BAGIKAN LIVE, atau setelah dihentikan.
+					// An empty liveRoom means nothing is shared: a solo ride
+					// before the captain presses BAGIKAN LIVE, or after it was stopped.
 					//
-					// Yang dikirim ke server adalah liveRoom, BUKAN roomID. Di gowes
-					// solo roomID bernilai tetap "SINGLE_MODE" dan server menolak
-					// room itu, jadi mengirim roomID berarti posisi tidak pernah
-					// tersimpan dan penonton hanya melihat peta kosong. Di mode
-					// Peleton keduanya sama, sehingga satu nilai ini berlaku untuk
-					// kedua mode.
+					// What is sent to the server is liveRoom, NOT roomID. In a solo
+					// ride roomID is the fixed value "SINGLE_MODE" and the server rejects
+					// that room, so sending roomID would mean the position is never
+					// stored and spectators only see an empty map. In Peleton
+					// mode both are the same, so this single value works for
+					// both modes.
 					if(radarTick >= threshold && liveRoom && path.length > 0) {
 						radarTick = 0;
 						const lastP = path[path.length-1];
@@ -3674,15 +3674,15 @@ if (!gpsStatus) return;
 					previous = point;
 				});
 
-				// Jarak dihitung ulang oleh tabel segmen yang SAMA dengan Activity
-				// Doctor di studio. Sebelumnya halaman ini punya aturannya sendiri
-				// (buang segmen >= 1,5 km dan segmen yang terlalu cepat), sehingga
-				// gowes yang sama menghasilkan dua jarak berbeda: 18,741 km di sini
-				// vs 18,506 km di studio. Aturan "bergerak" sekarang hidup di satu
-				// tempat saja (public/assets/doctor-core.js).
+				// The distance is recomputed by the SAME segment table as the Activity
+				// Doctor in studio. Previously this page had rules of its own
+				// (drop segments >= 1.5 km and segments that are too fast), so the
+				// same ride produced two different distances: 18.741 km here
+				// vs 18.506 km in studio. The "moving" rule now lives in one
+				// place only (public/assets/doctor-core.js).
 				//
-				// Kalau modulnya belum termuat, angka dari perhitungan lama di atas
-				// tetap dipakai — lebih baik daripada menyimpan jarak kosong.
+				// If the module has not loaded, the numbers from the old calculation
+				// above are still used, which is better than saving an empty distance.
 				let sharedSegmentDistanceKm = null;
 				if (window.DoctorCore && typeof window.DoctorCore.doctorMovingDistanceMeters === 'function' && cleaned.length > 1) {
 					try {
@@ -3727,9 +3727,9 @@ if (!gpsStatus) return;
 					issues.push({ severity: 'info', code: 'clock_gap', message: 'Ada ' + formatStageDuration(skippedClockGapSeconds) + ' system gap yang sudah diabaikan dari moving time.', autoFix: false });
 				}
 
-				// Ke mana perginya waktu selama gowes. Ditampilkan apa adanya supaya
-				// selisih antara jam di layar dan statistik setelah repair bisa
-				// dijelaskan dengan angka, bukan ditebak.
+				// Where the time went during the ride. Shown as it is so the
+				// gap between the on-screen clock and the statistics after repair can
+				// be explained with numbers instead of guessed.
 				const clockSummary = liveClockSummary();
 				if (clockSummary && clockSummary.uncounted >= 1) {
 					const parts = [];
@@ -3773,10 +3773,10 @@ if (!gpsStatus) return;
 						suspicious_speed: suspiciousSpeed,
 						long_gaps: longGaps
 					},
-					// Bukti bahwa jarak benar-benar datang dari tabel segmen bersama,
-					// bukan dari perhitungan lama. Null berarti modul bersama tidak
-					// termuat dan angka lama yang dipakai — itu harus terlihat, bukan
-					// diam-diam.
+					// Proof that the distance really comes from the shared segment table
+					// and not from the old calculation. Null means the shared module did
+					// not load and the old numbers are used, which must be visible, not
+					// silent.
 					shared_segment_distance_km: sharedSegmentDistanceKm,
 					currentStats: {
 						distance_km: Number(Number(currentDistance || 0).toFixed(3)),
@@ -3818,9 +3818,9 @@ if (!gpsStatus) return;
 				}).join('');
 			}
 
-			// Jam ringkas untuk tabel perbandingan: 1:09:05, bukan "1 jam 9 menit".
-			// Detik ikut ditampilkan karena justru detik yang dipertanyakan
-			// ketika moving time live dan hasil hitung ulang berbeda.
+			// Compact time for the comparison table: 1:09:05, not "1 hour 9 minutes".
+			// Seconds are shown because the seconds are exactly what is questioned
+			// when the live moving time and the recomputed result differ.
 			function formatDiffClock(seconds) {
 				const total = Math.max(0, Math.floor(Number(seconds || 0)));
 				const hours = Math.floor(total / 3600);
@@ -3829,11 +3829,11 @@ if (!gpsStatus) return;
 				return hours + ':' + String(minutes).padStart(2, '0') + ':' + String(secs).padStart(2, '0');
 			}
 
-			// Tabel SEBELUM -> SESUDAH. Semua angka yang dipakai tombol
-			// "AUTO REPAIR & SAVE" ditampilkan lebih dulu, supaya keputusan
-			// diambil dengan angka, bukan tebakan. Baris yang tidak berubah
-			// tetap ditampilkan (redup) — kalau disembunyikan, orang akan
-			// mengira angkanya tidak pernah diperiksa.
+			// BEFORE -> AFTER table. Every number the button uses is shown
+			// "AUTO REPAIR & SAVE" first, so the decision is taken
+			// with numbers, not by guessing. Rows that do not change
+			// are still shown (dimmed): if they were hidden, people would
+			// think the numbers were never checked.
 			function renderFinishDiff(doctor) {
 				const box = document.getElementById('finish-diff');
 				if (!box) return;
@@ -3868,9 +3868,9 @@ if (!gpsStatus) return;
 				];
 
 				let changed = 0;
-				// Dibandingkan lewat teks yang benar-benar tampil, bukan lewat
-				// angka mentah, supaya selisih yang tidak terlihat mata tidak
-				// ikut menyalakan tanda "berubah".
+				// Compared through the text that is actually displayed, not through
+				// the raw numbers, so a difference the eye cannot see does not
+				// switch on the "changed" marker.
 				const body = rows.map(function(row) {
 					const isChanged = row.before !== row.after;
 					if (isChanged) changed++;
@@ -3884,11 +3884,11 @@ if (!gpsStatus) return;
 					'</div>';
 				}).join('');
 
-				// Judul kolom kanan adalah "Disimpan", bukan "Setelah diperbaiki",
-				// karena itulah yang sebenarnya terjadi: jarak dan rata-rata di
-				// kolom itu masuk ke riwayat entah tombol mana yang ditekan.
-				// Sebelumnya angka bersih hanya tersimpan kalau AUTO REPAIR
-				// dipilih, jadi kolom ini memang cuma "usulan".
+				// The right-hand column header is "Disimpan", not "Setelah diperbaiki",
+				// because that is what actually happens: the distance and average in
+				// that column go into the history whichever button is pressed.
+				// Previously the clean numbers were only saved when AUTO REPAIR
+				// was chosen, so this column really was only a "proposal".
 				box.innerHTML =
 					'<div class="finish-diff-head"><span>Aspek</span><span>Live</span><span>Disimpan</span></div>' +
 					body;
@@ -3924,10 +3924,10 @@ if (!gpsStatus) return;
 				const note = document.getElementById('finish-diff-note');
 				if (note) note.innerHTML = parts.join(' ');
 
-				// Pill ini dulu berbunyi "USULAN SAJA" saat auto repair tidak
-				// tersedia, karena kolom kanan memang cuma usulan. Sekarang kolom
-				// kanan selalu yang tersimpan, jadi label itu menyesatkan —
-				// yang perlu dilihat adalah ada berapa angka yang berbeda.
+				// This pill used to read "USULAN SAJA" when auto repair was not
+				// available, because the right column really was only a proposal. Now the
+				// right column is always what gets saved, so that label is misleading:
+				// what needs to be seen is how many numbers differ.
 				const pill = document.getElementById('finish-diff-status');
 				if (pill) {
 					if (changed > 0) {
@@ -3940,10 +3940,10 @@ if (!gpsStatus) return;
 				}
 			}
 
-			// Angka yang AKAN disimpan. Memakai aturan yang sama dengan server
-			// (/assets/ride-stat-rules.js) supaya layar ini tidak menampilkan
-			// jarak yang berbeda dari yang akan tersimpan. Kalau modulnya gagal
-			// dimuat, angka live dipakai dan itu dikatakan — bukan disembunyikan.
+			// The numbers that WILL be saved. Uses the same rules as the server
+			// (/assets/ride-stat-rules.js) so this screen does not show a
+			// distance different from what will be saved. If the module fails
+			// to load, the live numbers are used and that is stated, not hidden.
 			function storedRideStatsFor(doctor, base) {
 				const rules = window.RideStatRules;
 				const declaredKm = Number(base.distance || 0);
@@ -3969,8 +3969,8 @@ if (!gpsStatus) return;
 				const finalRest = state.base.rest_blocks || [];
 				const finalSignals = state.base.signal_logs || [];
 				const stored = storedRideStatsFor(doctor, state.base);
-				// Rata-rata dihitung dari pasangan yang benar-benar disimpan,
-				// sama seperti server menghitungnya.
+				// The average is computed from the samples that are actually saved,
+				// exactly the way the server computes it.
 				const avg = state.base.duration > 0 && stored.distanceKm > 0 ? stored.distanceKm / (state.base.duration / 3600) : 0;
 				const status = document.getElementById('finish-status');
 				const repairStatus = document.getElementById('finish-repair-status');
@@ -4048,10 +4048,10 @@ if (!gpsStatus) return;
 				closeSignalEvent('poor_accuracy', 'Aktivitas masuk Finish Review.');
 				const finalSignalLogs = serializeSignalLogs(true);
 				const finalNutritionSummary = serializeNutritionSummary();
-				// Ringkasan jam live, dikirim bersama aktivitas. Null berarti
-				// instrumentasi tidak sempat dimuat — dan itu dicatat apa adanya,
-				// bukan diganti angka nol yang bisa disalahartikan sebagai "tidak
-				// ada waktu yang hilang".
+				// Live clock summary, sent together with the activity. Null means
+				// the instrumentation never loaded, and that is recorded as it is,
+				// not replaced by a zero that could be mistaken for "no
+				// time was lost".
 				const liveClockFinalSummary = liveClockSummary();
 				const finalLiveClock = liveClockFinalSummary
 					? Object.assign(
@@ -4082,10 +4082,10 @@ if (!gpsStatus) return;
 						name: '${type.toUpperCase()} ' + formatDateWithTimezoneOffset(startT, finalTimeContext.start_timezone_offset_min),
 						distance: Number(dist || 0),
 						duration: dur,
-						// Max speed dari titik yang benar-benar disimpan. Sebelum
-						// ini nilainya tidak pernah ikut dikirim, sehingga setiap
-						// aktivitas tersimpan punya max_speed 0 di D1 dan di R2,
-						// padahal Finish Review sudah menghitungnya.
+						// Max speed from the samples that are actually saved. Before
+						// this the value was never sent along, so every
+						// stored activity had max_speed 0 in D1 and in R2,
+						// even though Finish Review had already computed it.
 						max_speed: Number(Number(doctor.currentStats.max_speed || 0).toFixed(2)),
 						activity_type: '${type}',
 						start_date: finalTimeContext.start_date,
@@ -4100,10 +4100,10 @@ if (!gpsStatus) return;
 						avg_temp: finalAvgTemp,
 						total_elevation: Math.round(totalElevation),
 						skipped_clock_gap_seconds: Math.floor(skippedClockGapSeconds || 0),
-						// Bukti ke mana waktu pergi selama gowes berjalan: potongan
-						// dari tick yang terlambat dan gap sistem. Disimpan apa adanya
-						// supaya selisih jam live vs hasil repair bisa dibuktikan
-						// dengan angka, bukan dugaan.
+						// Proof of where the time went while the ride was running: the clipped
+						// parts from late ticks and system gaps. Stored as it is
+						// so the gap between the live clock and the repaired result can be proven
+						// with numbers, not with assumptions.
 						live_clock: finalLiveClock,
 						stages: finalTripStages,
 						rest_blocks: finalRestBlocks,
@@ -4120,15 +4120,15 @@ if (!gpsStatus) return;
 				const doctor = state.doctor;
 				const repaired = Boolean(useAutoRepair && doctor.canAutoRepair);
 				const points = repaired ? doctor.cleanedPoints : state.rawPoints;
-				// Field "distance" selalu berisi angka yang dilaporkan jam live.
-				// Jarak mana yang benar-benar DISIMPAN diputuskan server lewat
-				// aturan di /assets/ride-stat-rules.js, memakai
-				// stats_after.distance_km sebagai angka bersih. Dulu di sini
-				// angka bersih menggantikan angka live begitu AUTO REPAIR
-				// dipilih, sehingga berkas tidak lagi menyimpan berapa yang
-				// sebenarnya dilaporkan perangkat — dan angka mentah itu hilang
-				// tanpa jejak. (Catatan: jangan pakai backtick di komentar file
-				// ini, seluruh halaman adalah satu template literal.)
+				// The "distance" field always holds the number reported by the live clock.
+				// Which distance is actually SAVED is decided by the server through
+				// the rules in /assets/ride-stat-rules.js, using
+				// stats_after.distance_km as the clean number. This used to
+				// replace the live number with the clean one as soon as AUTO REPAIR
+				// was chosen, so the record no longer stored what the
+				// device actually reported, and that raw number was lost
+				// without a trace. (Note: do not use a backtick in a comment in this
+				// file, the whole page is one template literal.)
 				const distanceValue = state.base.distance;
 				const restBlocksValue = repaired
 					? mergeFinishRestBlocks(state.base.rest_blocks, doctor.suggestedRestBlocks)
@@ -4147,19 +4147,19 @@ if (!gpsStatus) return;
 						};
 					}),
 					changes: doctor.changes.slice(0, 30),
-					// Kontrak yang jelas: stats_before = angka live, stats_after =
-					// USULAN perbaikan. Dulu stats_after diisi angka live ketika
-					// tombol "SAVE FINAL" yang dipilih, sehingga catatan aktivitas
-					// selalu tampak "tidak ada yang berubah" dan usulan perbaikan
-					// yang ditolak hilang tanpa jejak. Apakah usulan itu dipakai
-					// dijawab oleh auto_repair_applied.
+					// A clear contract: stats_before = live numbers, stats_after =
+					// the repair PROPOSAL. stats_after used to be filled with the live
+					// numbers when "SAVE FINAL" was chosen, so the activity record
+					// always looked like "nothing changed" and a repair proposal
+					// that was rejected vanished without a trace. Whether the proposal was used
+					// is answered by auto_repair_applied.
 					stats_before: doctor.currentStats,
 					stats_after: doctor.repairedStats,
-					// Penanda bahwa stats_after.distance_km benar-benar datang
-					// dari tabel segmen bersama, bukan dari perhitungan lama.
-					// Null = modul bersama tidak termuat. Server memakai ini
-					// untuk memutuskan jarak mana yang disimpan, dan tanpa
-					// penanda ini fallback bisa lewat sebagai angka resmi.
+					// Marker that stats_after.distance_km really came
+					// from the shared segment table, not from the old calculation.
+					// Null = the shared module did not load. The server uses this
+					// to decide which distance is saved, and without
+					// this marker a fallback could pass as the official number.
 					shared_segment_distance_km: doctor.shared_segment_distance_km
 				};
 
@@ -4382,10 +4382,10 @@ if (!gpsStatus) return;
 				autoFollow = true;
 				document.getElementById('btn-recenter').style.display = 'none';
 
-				// Ambil posisi satelit dari marker merah secara langsung
+				// Take the satellite position straight from the red marker
 				const pos = marker.getLatLng();
 				
-				// Pastikan koordinat bukan titik nol (0,0) sebelum melempar kamera
+				// Make sure the coordinate is not the zero point (0,0) before moving the camera
 				if (pos && pos.lat !== 0 && pos.lng !== 0) {
 					map.setView(pos, map.getZoom());
 				}
@@ -4413,14 +4413,14 @@ if (!gpsStatus) return;
 				if (dot) dot.classList.remove('is-off');
 			}
 
-			// Ruang siaran dibuat saat tombol ditekan, bukan saat halaman dibuka.
-			// Menyiarkan lokasi harus selalu hasil tindakan yang disadari, bukan
-			// efek samping membuka halaman.
+			// The broadcast room is created when the button is pressed, not when the page opens.
+			// Broadcasting a location must always be the result of a deliberate action, not
+			// a side effect of opening the page.
 			async function ensureLiveRoom() {
 				if (liveRoom) return liveRoom;
 
-				// Link yang tadinya sudah dibagikan dipakai kembali kalau masih segar,
-				// supaya reload halaman tidak mematikan link yang sudah dikirim ke rekan.
+				// A link that was already shared is reused if it is still fresh,
+				// so reloading the page does not kill a link already sent to a friend.
 				if (resumableLiveRoom) {
 					liveRoom = resumableLiveRoom;
 					resumableLiveRoom = '';
@@ -4428,8 +4428,8 @@ if (!gpsStatus) return;
 					return liveRoom;
 				}
 
-				// Nama ikut dikirim supaya halaman penonton bisa menyapa "sedang
-				// gowes siapa", bukan hanya menampilkan titik di peta.
+				// The name is sent too so the spectator page can greet "who is
+				// riding", not just show a dot on the map.
 				const res = await fetch('/api/live_start', {
 					method: 'POST',
 					headers: { 'Content-Type': 'application/json' },
@@ -4474,8 +4474,8 @@ if (!gpsStatus) return;
 					await navigator.clipboard.writeText(liveShareUrl());
 					setRouteStatus('📡 LINK DISALIN', liveShareUrl());
 				} catch (e) {
-					// Clipboard butuh konteks aman dan izin; kalau ditolak, link
-					// ditampilkan supaya masih bisa disalin manual.
+					// The clipboard needs a secure context and permission; if it is denied, the link
+					// is shown so it can still be copied by hand.
 					setRouteStatus('📡 SALIN MANUAL', liveShareUrl());
 				}
 			}
@@ -4488,9 +4488,9 @@ if (!gpsStatus) return;
 				setRouteStatus('📡 SIARAN DIHENTIKAN', 'Lokasi tidak lagi dibagikan.');
 			}
 
-			// Dipanggil sekali saat halaman siap. Sengaja TIDAK langsung menyiarkan:
-			// hanya menyiapkan token agar link lama bisa dipakai lagi kalau kapten
-			// menekan tombol bagikan.
+			// Called once when the page is ready. Deliberately does NOT broadcast at once:
+			// it only prepares a token so an old link can be reused if the captain
+			// presses the share button.
 			function bootLiveShare() {
 				if (!isPeletonMode) {
 					try {
@@ -4520,7 +4520,7 @@ if (!gpsStatus) return;
 			}
 			
 			function exportGPX() {
-    // 🟢 Perhatikan penambahan double-backslash (\\n) di bawah ini
+    // 🟢 Note the extra double-backslash (\\n) added below
     let g = '<?xml version="1.0" encoding="UTF-8"?>\\n' +
             '<gpx version="1.1" creator="Gaspool" xmlns="http://www.topografix.com/GPX/1/1">\\n<trk>\\n<trkseg>\\n';
             
@@ -4571,16 +4571,16 @@ if (!gpsStatus) return;
 });
 
 // ==========================================
-// 2. RADAR SPECTATOR (Mode Keluarga / Pantau)
+// 2. RADAR SPECTATOR (Family / Watch mode)
 // ==========================================
 tracker.get("/radar/:room", async (c) => {
   const room = c.req.param("room").toUpperCase();
 
-  // Room Peleton dipilih sendiri oleh pemakainya dan berguna untuk ditampilkan
-  // (peserta perlu tahu room mana yang mereka ikuti). Siaran solo sebaliknya:
-  // namanya token acak, jadi menampilkan "ROOM: <token>" di layar penonton
-  // hanya membocorkan alamat siaran tanpa menjelaskan apa pun. Karena itu
-  // tampilannya dibedakan di sini, saat halaman dirender.
+  // Peleton rooms are chosen by the users themselves and are worth showing
+  // (participants need to know which room they joined). A solo broadcast is the opposite:
+  // its name is a random token, so showing "ROOM: <token>" on the spectator screen
+  // only leaks the broadcast address without explaining anything. That is why
+  // the display differs here, while the page is rendered.
   const liveSession = await readLiveSession(c.env.GASPOOL_RADAR, room);
   const isLiveShare = liveSession !== null;
   const pageTitle = isLiveShare ? "Gowes Live" : `Radar Peleton: ${room}`;
@@ -4589,9 +4589,9 @@ tracker.get("/radar/:room", async (c) => {
     ? `${liveSession.user ? liveSession.user : "Pesepeda"} · lokasi langsung`
     : `ROOM: ${room}`;
 
-  // Teks ajakan dibangun di sini lalu dikirim sebagai literal JSON, bukan
-  // dirangkai di browser: variabel `room` hanya ada di server, dan
-  // JSON.stringify menjamin tanda kutip serta baris baru sampai utuh.
+  // The invitation text is built here and sent as a JSON literal, not
+  // assembled in the browser: the room variable only exists on the server, and
+  // JSON.stringify guarantees the quotes and newlines arrive intact.
   const shareIntro = isLiveShare
     ? "Pantau pergerakan gowes saya secara live!"
     : `Pantau pergerakan gowes peleton secara live!\nRoom: *${room}*`;
@@ -4615,14 +4615,14 @@ tracker.get("/radar/:room", async (c) => {
             .status-dot { display: inline-block; width: 8px; height: 8px; background: #2ecc71; border-radius: 50%; margin-right: 5px; box-shadow: 0 0 10px #2ecc71; animation: pulse 2s infinite; }
             @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.4; } 100% { opacity: 1; } }
             .peleton-label { background: rgba(142, 68, 173, 0.9); color: white; padding: 4px 10px; border-radius: 8px; font-size: 12px; font-weight: bold; border: 1px solid #fff; white-space: nowrap; box-shadow: 0 4px 10px rgba(0,0,0,0.5); }
-            /* Warna label mengikuti warna titiknya, supaya legenda di atas
-               benar-benar cocok dengan yang terlihat di peta. Label ungu lama
-               membuat titik merah terbaca seperti milik orang lain. */
+            /* The label colour follows the dot colour, so the legend above
+               really matches what is seen on the map. The old purple label made
+               the red dot read like somebody else's. */
             .label-rider { background: rgba(231, 76, 60, 0.94) !important; }
             .label-me { background: rgba(46, 204, 113, 0.94) !important; color: #06170d !important; }
             .btn-share { position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); z-index: 1000; background: #25D366; color: white; border: none; padding: 12px 25px; border-radius: 12px; font-weight: bold; font-size: 12px; cursor: pointer; box-shadow: 0 5px 15px rgba(0,0,0,0.5); text-decoration: none;}
-            /* Keterangan warna titik. Tanpa ini penonton tidak tahu titik mana
-               dirinya dan titik mana pesepeda yang dipantau. */
+            /* Explains what each dot colour means. Without this the viewer does
+               not know which dot is them and which is the rider being watched. */
             .legend { position: absolute; top: 108px; left: 50%; transform: translateX(-50%); z-index: 1000; display: flex; gap: 14px; align-items: center; background: rgba(10,10,18,0.85); backdrop-filter: blur(10px); padding: 8px 14px; border-radius: 14px; border: 1px solid rgba(255,255,255,0.12); font-size: 11px; font-weight: 800; letter-spacing: 0.4px; white-space: nowrap; }
             .legend .lg { display: flex; align-items: center; gap: 6px; color: #cbd5e1; }
             .legend i.dot { width: 11px; height: 11px; border-radius: 50%; display: inline-block; border: 2px solid #fff; }
@@ -4650,8 +4650,8 @@ tracker.get("/radar/:room", async (c) => {
         <script>
             const map = L.map('map', { zoomControl: false }).setView([-7.25, 112.76], 13);
 
-            // Nama pesepeda untuk legenda. Dikirim sebagai literal JSON karena
-            // variabel server tidak ada di browser.
+            // Rider names for the legend. Sent as a JSON literal because
+            // server variables do not exist in the browser.
             const riderName = ${JSON.stringify(liveSession && liveSession.user ? liveSession.user : "")};
             (function () {
                 const el = document.getElementById('legend-rider');
@@ -4663,25 +4663,25 @@ tracker.get("/radar/:room", async (c) => {
             }).addTo(map);
             
             // ==============================================================
-            // POSISI PENONTON SENDIRI (titik hijau)
+            // THE SPECTATOR'S OWN POSITION (green dot)
             // ==============================================================
-            // watch:true membuat browser terus memperbarui posisi, jadi titik
-            // ini ikut bergeser saat penonton berpindah, bukan hanya sekali
-            // saat halaman dibuka.
+            // watch:true keeps the browser updating the position, so this dot
+            // moves with the spectator instead of being placed once
+            // when the page opens.
             //
-            // Posisi penonton TIDAK dikirim ke server mana pun. Titik hijau ini
-            // hanya digambar di layar orang yang membukanya sendiri, supaya
-            // pembagian lokasi tetap satu arah: yang dibagikan hanya posisi
-            // pesepeda, bukan posisi siapa pun yang menonton.
+            // The spectator position is NOT sent to any server. This green dot
+            // is only drawn on the screen of the person who opened it, so that
+            // location sharing stays one-way: what is shared is only the
+            // rider's position, never the position of anyone watching.
             let viewerPos = null;
             let viewerMarker = null;
             let viewerAccuracy = 0;
 
             const noteBox = document.getElementById('radar-note');
-            // Dua hal bisa membuat layar tampak "kosong": posisi pesepeda belum
-            // sampai, atau izin lokasi penonton ditolak. Dulu keduanya diam saja
-            // sehingga penonton mengira aplikasinya rusak. Sekarang masing-masing
-            // punya kalimatnya sendiri.
+            // Two things can make the screen look "empty": the rider position has not
+            // arrived yet, or the spectator location permission was denied. Both used to stay silent
+            // so the spectator thought the app was broken. Now each of them
+            // has its own sentence.
             let viewerBlocked = false;
             let waitingNotice = '';
 
@@ -4721,9 +4721,9 @@ tracker.get("/radar/:room", async (c) => {
             });
 
             map.on('locationerror', function(e) {
-                // Izin lokasi ditolak atau tidak tersedia. Katakan apa adanya:
-                // tanpa pesan, penonton mengira aplikasinya rusak, padahal
-                // halaman tetap bekerja dan titik pesepeda tetap tampil.
+                // Location permission denied or unavailable. Say it as it is:
+                // without a message the spectator thinks the app is broken, even though
+                // the page still works and the rider dot is still shown.
                 viewerBlocked = e && e.code === 1
                     ? 'Izin lokasi ditolak browser, jadi titik hijau (kamu) tidak ditampilkan.'
                     : 'Posisi kamu belum bisa dibaca browser, jadi titik hijau (kamu) belum tampil.';
@@ -4731,8 +4731,8 @@ tracker.get("/radar/:room", async (c) => {
             });
 
             const markers = {};
-            // Garis jejak per peserta, dipisah dari marker supaya posisi bisa
-            // diperbarui tanpa menggambar ulang seluruh garis.
+            // Trail line per participant, kept apart from the marker so positions can
+            // be updated without redrawing the whole line.
             const trails = {};
             let bounds = L.latLngBounds();
 
@@ -4754,10 +4754,10 @@ tracker.get("/radar/:room", async (c) => {
                             hasUpdate = true;
                             const latlng = [p.lat, p.lng];
                             bounds.extend(latlng);
-                            // Merah = pesepeda yang dipantau, hijau = penonton
-                            // sendiri. Warnanya sengaja dibedakan supaya tidak
-                            // tertukar, dan legenda di bawah judul menjelaskan
-                            // artinya tanpa perlu menebak.
+                            // Red = the rider being watched, green = the spectator
+                            // themselves. The colours are deliberately different so they are not
+                            // swapped, and the legend under the title explains
+                            // the meaning without guessing.
                             if(!markers[p.user]) {
                                 markers[p.user] = L.circleMarker(latlng, {radius: 8, color: '#fff', weight: 2, fillColor: '#e74c3c', fillOpacity: 1}).addTo(map)
                                     .bindTooltip(p.user + ' (' + Math.round(p.speed) + ' km/h)', {permanent: true, className: 'peleton-label label-rider', direction: 'top', offset: [0, -10]}).openTooltip();
@@ -4766,10 +4766,10 @@ tracker.get("/radar/:room", async (c) => {
                                 markers[p.user].setTooltipContent(p.user + ' (' + Math.round(p.speed) + ' km/h)');
                             }
 
-                            // Jejak perjalanan. Titik terakhir saja tidak cukup:
-                            // penonton yang membuka tautan belakangan tidak tahu
-                            // pemiliknya sudah lewat mana. Tanpa jejak, layar
-                            // hanya menampilkan satu titik tanpa arah.
+                            // Travel trail. The last dot alone is not enough:
+                            // a spectator who opens the link later does not know
+                            // where the owner has already been. Without a trail the screen
+                            // shows a single dot with no direction.
                             const trail = Array.isArray(p.trail) ? p.trail : [];
                             if(trail.length >= 2) {
                                 const points = trail
@@ -4781,30 +4781,30 @@ tracker.get("/radar/:room", async (c) => {
                                     } else {
                                         trails[p.user] = L.polyline(points, {color: '#e74c3c', weight: 3, opacity: 0.55}).addTo(map);
                                     }
-                                    // Ikut menentukan area peta supaya seluruh
-                                    // jejak terlihat, bukan hanya posisi terkini.
+                                    // Part of the map bounds so the whole
+                                    // trail is visible, not just the current position.
                                     points.forEach(pt => bounds.extend(pt));
                                 }
                             }
                         });
 
-                        // Kalau tidak ada satu pun posisi yang segar, katakan
-                        // sedang menunggu. Peta kosong tanpa penjelasan adalah
-                        // persis pengalaman yang membingungkan: penonton tidak
-                        // tahu apakah tautannya salah atau siarannya mati.
+                        // If not a single position is fresh, say
+                        // that we are waiting. An empty map with no explanation is
+                        // exactly the confusing experience: the spectator does not
+                        // know whether the link is wrong or the broadcast is dead.
                         waitingNotice = hasUpdate
                             ? ''
                             : 'Belum ada posisi terkirim. Kalau siaran sempat berhenti, minta pesepeda menekan BAGIKAN LIVE lagi — titik merah akan muncul di sini.';
                         refreshNote();
 
-                        // Pusatkan peta dinamis mengikuti sebaran pesepeda.
+                        // Centre the map dynamically on the spread of riders.
                         //
-                        // Titik penonton ikut diperhitungkan hanya kalau jaraknya
-                        // dekat (di bawah 5 km). Kalau penonton berada di kota
-                        // lain, memasukkan posisinya akan memaksa peta men-zoom
-                        // keluar sampai titik pesepeda tinggal sebesar debu —
-                        // justru menghilangkan hal yang ingin dilihat. Jaraknya
-                        // tetap ditampilkan di legenda.
+                        // The spectator dot only counts if its distance is
+                        // close (under 5 km). If the spectator is in another
+                        // city, including their position would force the map to zoom
+                        // out until the rider dot is the size of a speck of dust,
+                        // which removes exactly what you want to see. The distance
+                        // is still shown in the legend.
                         if(hasUpdate) {
                             if(viewerPos && map.distance(viewerPos, bounds.getCenter()) < 5000) {
                                 bounds.extend(viewerPos);
@@ -4816,8 +4816,8 @@ tracker.get("/radar/:room", async (c) => {
                 } catch(e) {}
             }
 
-            // Jarak penonton ke pesepeda, dibulatkan. Ini yang biasanya paling
-            // ingin diketahui penonton: "dia masih jauh atau sudah dekat?".
+            // Distance from spectator to rider, rounded. This is usually what the
+            // spectator most wants to know: "is he still far or already close?".
             function updateLegendDistance() {
                 const label = document.getElementById('legend-distance');
                 if (!label) return;

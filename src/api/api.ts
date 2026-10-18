@@ -4,10 +4,10 @@ import { csrf } from "hono/csrf";
 import { Bindings } from "../index";
 import { verify } from "hono/jwt";
 import { getR2PublicBaseUrl, getR2PublicHostname } from "../config";
-// Statistik Activity Doctor tinggal di modulnya sendiri supaya bisa diuji tanpa
-// menyalakan Worker/D1/R2. Aturannya (satu himpunan segmen untuk jarak dan
-// waktu, selisih waktu nyata, akuntansi detik yang tidak hilang) didokumentasikan
-// di sana dan dikunci oleh tests/activity-doctor.mjs.
+// Activity Doctor statistics live in their own module so they can be tested
+// without booting Worker/D1/R2. Its rules (one set of segments for distance and
+// time, real time differences, second accounting that loses nothing) are
+// documented there and locked down by tests/activity-doctor.mjs.
 import {
   createLiveShareToken,
   readLiveSession,
@@ -15,16 +15,16 @@ import {
 } from "./live-share";
 import { computeMilestoneProgress } from "../milestones";
 import { appendRadarTrailPoint } from "./radar-trail";
-// Catatan jam live yang dikirim halaman tracker. Modulnya murni dan diuji
-// terpisah, karena aturannya bukan aritmatika statistik melainkan soal
-// menyimpan angka apa adanya: nol ("tidak ada waktu hilang") dan null
-// ("instrumentasi tidak ada") tidak boleh saling menggantikan.
+// Live clock record sent by the tracker page. Its module is pure and tested
+// separately, because its rules are not statistical arithmetic but about
+// storing numbers as they are: zero ("no time lost") and null ("no
+// instrumentation") must never stand in for each other.
 import { normalizeLiveClockRecord } from "./live-clock-record";
-// Aturan "angka mana yang disimpan ke riwayat": jarak memakai tabel segmen
-// bersama (drift GPS bukan jarak yang ditempuh), elevasi mempertahankan
-// pengukuran (angka itu tidak bisa ditentukan pasti dari data). Berkasnya
-// hidup di public/assets supaya halaman tracker memakai aturan yang SAMA —
-// halaman tidak boleh menampilkan angka yang berbeda dari yang disimpan.
+// The rule for "which number gets stored in the history": distance uses the
+// shared segment table (GPS drift is not distance travelled), elevation keeps
+// the measurement (that number cannot be pinned down exactly from the data).
+// The file lives in public/assets so the tracker page uses the SAME rule:
+// the page must never display numbers different from the ones stored.
 import {
   chooseStoredDistanceKm,
   chooseStoredElevationGain,
@@ -72,8 +72,8 @@ const sanitizeRadioUser = (value: string) =>
     .replace(/[^a-zA-Z0-9_-]/g, "")
     .slice(0, 32) || "user";
 
-// Pembacaan nilai KV yang tidak boleh menjatuhkan seluruh request hanya karena
-// satu entri rusak atau ditulis dengan bentuk yang tidak terduga.
+// Reading a KV value must not bring the whole request down just because one
+// entry is corrupt or was written in an unexpected shape.
 const parseRadarEntry = (value: string | null) => {
   try {
     const parsed = JSON.parse(value || "{}");
@@ -83,13 +83,13 @@ const parseRadarEntry = (value: string | null) => {
   }
 };
 
-// Batas peserta per room ditarik jauh di atas kebutuhan wajar (TTL-nya hanya 60
-// detik) tetapi tetap di bawah batas subrequest Worker, supaya room yang
-// disalahgunakan tidak menjatuhkan endpoint untuk semua orang.
+// The per-room participant cap is set far above any sane need (the TTL is only
+// 60 seconds) but still below the Worker subrequest limit, so a room being
+// abused cannot take the endpoint down for everybody.
 const RADAR_MAX_PARTICIPANTS = 100;
 
-// Rekaman PTT tunggal wajar berukuran ratusan KB. Tanpa plafon, endpoint publik
-// ini bisa dipakai menitipkan file apa pun ke bucket.
+// A single PTT recording is normally a few hundred KB. Without a ceiling, this
+// public endpoint could be used to drop any file into the bucket.
 const RADIO_MAX_BYTES = 2 * 1024 * 1024;
 
 const normalizeIsoDate = (value: any, fallback: string) => {
@@ -674,11 +674,11 @@ const normalizeFinishReview = (value: any) => {
       value?.stats_after && typeof value.stats_after === "object"
         ? value.stats_after
         : {},
-    // Bukti bahwa angka jarak benar-benar datang dari tabel segmen bersama di
-    // perangkat, bukan dari perhitungan lama. Null berarti modul bersama tidak
-    // termuat, dan angka lama yang dipakai. Tanpa penanda ini, server tidak
-    // punya cara membedakan keduanya — dan fallback bisa lewat sebagai angka
-    // resmi tanpa ada yang tahu.
+    // Proof that the distance number really comes from the shared segment table
+    // on the device, not from the old calculation. Null means the shared module
+    // did not load and the old numbers were used. Without this marker the server
+    // cannot tell the two apart, and a fallback could pass as an official
+    // number with nobody the wiser.
     shared_segment_distance_km:
       value?.shared_segment_distance_km === null ||
       value?.shared_segment_distance_km === undefined
@@ -765,9 +765,9 @@ type ActivityDoctorPayloadInfo = {
   error?: string;
 };
 
-// Sebuah anomali selalu menunjuk ke satu tempat di dalam route, bukan sekadar
-// menambah hitungan. Tanpa lokasi, laporan seperti "4 segmen tidak wajar"
-// tidak bisa ditindaklanjuti.
+// An anomaly always points at one place inside the route, it does not just bump
+// a counter. Without a location, a report like "4 odd segments" cannot be
+// acted upon.
 type ActivityDoctorAnomalyCode =
   | "extreme_jump"
   | "suspicious_speed"
@@ -1170,10 +1170,10 @@ const dedupeDoctorPoints = (points: ActivityDoctorPoint[]) => {
   return { points: clean, removed };
 };
 
-// Deteksi blok istirahat ada di modul statistik supaya "bergerak" hanya punya
-// satu arti di seluruh aplikasi. Sebelumnya di sini ada salinan sendiri yang
-// memakai Math.floor(), sehingga jam yang dilaporkan untuk satu istirahat bisa
-// berbeda dari jam yang dilaporkan untuk aktivitasnya.
+// Rest block detection lives in the statistics module so "moving" has only one
+// meaning across the app. There used to be a local copy right here that used
+// Math.floor(), so the time reported for one rest could differ from the time
+// reported for its activity.
 const detectDoctorRestBlocks = (points: ActivityDoctorPoint[], activityType: string) =>
   normalizeRestBlocks(collectDoctorRestBlocks(points, activityType));
 
@@ -1223,9 +1223,9 @@ const buildDoctorStatTrust = (
   const timedSegmentCount = countDoctorTimedSegments(points);
   const elevationSampleCount = countDoctorElevationSamples(points);
   const limits = getDoctorSpeedLimits(activityType);
-  // Timeline yang mundur atau berisi timestamp rusak membuat moving time dan
-  // max speed hasil hitung ulang tidak bisa dipercaya, sekalipun jumlah
-  // timestamp-nya terlihat cukup banyak.
+  // A timeline that runs backwards or holds corrupt timestamps makes the
+  // recomputed moving time and max speed untrustworthy, even when the number
+  // of timestamps looks plentiful.
   const timelineSound =
     timeIntegrity.time_reversal_count === 0 && timeIntegrity.invalid_timestamp_count === 0;
   const isSparseRoute = pointCount > 0 && pointCount < DOCTOR_MIN_STATS_POINTS;
@@ -1250,9 +1250,9 @@ const buildDoctorStatTrust = (
   const jumpRatio = segmentCount > 0 ? rawStats.skipped_jump_count / segmentCount : 0;
   const distanceMismatchExtreme =
     distanceRatio !== null && (distanceRatio < 0.65 || distanceRatio > 1.35);
-  // Fail-closed: kalau moving time hasil hitung ulang menyimpang jauh dari D1,
-  // itu justru tanda doctor-nya yang salah, bukan D1-nya. Nilai D1 dipertahankan
-  // dan aktivitasnya ditandai untuk diperiksa manusia.
+  // Fail-closed: if the recomputed moving time drifts far from D1, that is a
+  // sign the doctor is wrong, not D1. The D1 value is kept and the activity is
+  // flagged for a human to look at.
   const movingComparison = compareDoctorMovingTime(
     current.moving_time,
     rawStats.moving_time,
@@ -1280,30 +1280,30 @@ const buildDoctorStatTrust = (
     hasEnoughTimedPoints &&
     rawStats.moving_time > 0 &&
     !movingTimeOutOfTolerance;
-  // --- Aturan moving time: jam live menang (dibalik 2026-09-25) ------------
+  // --- Moving time rule: the live clock wins (reversed 2026-09-25) ----------
   //
-  // Jam live adalah PENGUKURAN: ia berjalan di perangkat, tahu kapan pesepeda
-  // benar-benar berhenti (termasuk saat GPS tidak stabil), dan kehilangannya
-  // tercatat lewat live_clock. Angka hitung ulang adalah INFERENSI geometri:
-  // ia hanya melihat titik-titik yang tersimpan.
+  // The live clock is a MEASUREMENT: it runs on the device, it knows when the
+  // rider really stopped (including when GPS is unstable), and its losses are
+  // recorded through live_clock. The recomputed number is a geometric
+  // INFERENCE: it only sees the points that were stored.
   //
-  // Sebelumnya arahnya terbalik. Selama selisihnya masih di dalam toleransi
-  // plus-minus 15 persen, justru angka hitung ulang yang menimpa D1 — sehingga
-  // dua layar menampilkan dua moving time untuk gowes yang sama (4233 vs 4145),
-  // padahal doktor sendiri menyatakan selisih 2,1 persen itu masih wajar.
-  // Toleransi ada untuk MENOLAK angka yang tidak masuk akal, bukan untuk
-  // menggantikan sebuah pengukuran dengan sebuah inferensi.
+  // The direction used to be the other way round. As long as the difference
+  // stayed inside the plus-minus 15 percent tolerance, the recomputed number
+  // was the one overwriting D1, so two screens showed two moving times for the
+  // same gowes (4233 vs 4145), even though the doctor itself said the 2.1
+  // percent difference was still reasonable. Tolerance exists to REJECT numbers
+  // that make no sense, not to replace a measurement with an inference.
   //
-  // Sekarang: hitung ulang hanya menimpa kalau di LUAR toleransi, yaitu saat
-  // jamnya jelas rusak.
+  // Now: recomputation only overwrites when it is OUTSIDE tolerance, which is
+  // when the clock is clearly broken.
   const finalDistanceKm = distanceTrusted ? rawStats.distance_km : current.distance_km;
   const finalMovingTime = movingTimeOutOfTolerance ? rawStats.moving_time : current.moving_time;
 
-  // Average DIHITUNG dari pasangan yang benar-benar dipakai, bukan diambil dari
-  // rawStats. Kalau diambil mentah, average akan menggambarkan pasangan
-  // (jarak, waktu) yang tidak pernah disimpan — dan layar lain yang menghitung
-  // ulang dari angka tersimpan akan menampilkan average berbeda. Artinya
-  // "dua kebenaran" cuma pindah dari moving time ke average, bukan hilang.
+  // Average is COMPUTED from the pair actually used, not taken from rawStats.
+  // If it were taken raw, the average would describe a (distance, time) pair
+  // that was never stored, and another screen recomputing from the stored
+  // numbers would show a different average. That means the "two truths" problem
+  // only moves from moving time to average, it does not disappear.
   const finalAverageSpeed =
     finalDistanceKm > 0 && finalMovingTime > 0
       ? finalDistanceKm / (finalMovingTime / 3600)
@@ -1316,18 +1316,18 @@ const buildDoctorStatTrust = (
     hasEnoughTimedPoints &&
     rawStats.max_speed > 0 &&
     !maxSpeedLooksLikeSpike;
-  // --- Aturan elevasi: pengukuran dipertahankan (dibalik 2026-09-26) -------
+  // --- Elevation rule: the measurement is kept (reversed 2026-09-26) -------
   //
-  // Arahnya KEBALIKAN dari jarak, dan itu bukan inkonsistensi. Untuk jarak,
-  // tabel segmen memang lebih benar: drift GPS saat berhenti (0,48 km/h di
-  // gowes 25 Sep 2026) bukan jarak yang ditempuh. Untuk elevasi tidak ada yang
-  // lebih benar — pada data nyata, taksirannya bergerak dari 167 m sampai
-  // 855 m hanya karena beda parameter filter, sementara selisih antara kedua
-  // angka cuma 75 m. Kalau tidak ada nilai yang benar, jangan menukar satu
-  // taksiran dengan taksiran lain; itu cuma memindahkan ketidakpastian.
+  // Its direction is the OPPOSITE of distance, and that is not an inconsistency.
+  // For distance the segment table really is more correct: GPS drift while
+  // stopped (0.48 km/h on the 25 Sep 2026 gowes) is not distance travelled. For
+  // elevation nothing is more correct: on real data the estimate moved from
+  // 167 m to 855 m just because of a different filter parameter, while the gap
+  // between the two numbers was only 75 m. When no value is right, do not swap
+  // one estimate for another; that only shifts the uncertainty around.
   //
-  // Jadi hitung ulang hanya boleh MENGISI kekosongan (live tidak punya angka),
-  // tidak pernah menimpa pengukuran yang ada.
+  // So recomputation may only FILL a gap (live has no number), it never
+  // overwrites an existing measurement.
   const elevationTrusted =
     hasEnoughElevationSamples &&
     Math.max(0, Number(current.total_elevation_gain) || 0) <= 0 &&
@@ -1347,12 +1347,12 @@ const buildDoctorStatTrust = (
     suspicious_speed_count: rawStats.suspicious_speed_count,
   };
 
-  // Rantai alasan ditulis sebagai if/else, bukan ternary bersarang, supaya tiap
-  // kondisi baru tidak menambah satu tingkat lekukan yang salah baca.
+  // The reasoning chain is written as if/else, not nested ternaries, so each new
+  // condition does not add another level of indentation that is hard to read.
   const movingTrustReason = (() => {
     if (movingTrusted) {
-      // Semua kondisi sehat. Jam live yang dipertahankan; angka hitung ulang
-      // hanya berperan sebagai pemeriksa silang.
+      // Every condition is healthy. The live clock is kept; the recomputed
+      // number only acts as a cross-check.
       return "Jam live dipertahankan sebagai sumber kebenaran; hitung ulang moving time masih di dalam toleransi.";
     }
     if (!timelineSound) {
@@ -1988,11 +1988,11 @@ const buildActivityDoctorScan = (
     });
   }
 
-  // repair_history sengaja TIDAK dihitung sebagai metadata hilang. Field itu
-  // hanya ditulis oleh auto repair sendiri, jadi kehadirannya tidak pernah
-  // jadi syarat data yang sehat: memasukkannya ke sini membuat setiap
-  // aktivitas baru selalu berstatus "repairable" sehingga repair berjalan
-  // hanya untuk menulis tanda bahwa repair pernah berjalan.
+  // repair_history is deliberately NOT counted as missing metadata. That field
+  // is only ever written by auto repair itself, so its presence was never a
+  // condition for healthy data: counting it here made every new activity sit
+  // in "repairable" status, so repair only ran in order to write a note that
+  // repair had run.
   const missingMetadata: string[] = [];
   if (!metadata?.source) missingMetadata.push("source");
   if (!metadata?.activity_type) missingMetadata.push("activity_type");
@@ -2132,8 +2132,8 @@ const buildActivityDoctorScan = (
   const dangerCount = issues.filter((issue) => issue.severity === "danger").length;
   const warningCount = issues.filter((issue) => issue.severity === "warning").length;
   const hasUntrustedStatDelta = statTrust.untrusted_fields.length > 0;
-  // "repairable" hanya untuk kasus yang memang punya action. Catatan info tanpa
-  // action tidak boleh memakai label yang menjanjikan perbaikan.
+  // "repairable" only for cases that really have an action. Info notes without
+  // an action must not use a label that promises a fix.
   const status =
     dangerCount > 0
       ? "broken"
@@ -2246,7 +2246,7 @@ const buildActivityDoctorScan = (
     issues,
     changes,
     repair_plan: repairPlan,
-    // Lokasi tiap anomali, bukan hanya jumlahnya.
+    // The location of each anomaly, not just the count.
     anomalies: rawRecalculated.anomalies,
     anomaly_counts: rawRecalculated.anomaly_counts,
     time_integrity: timeIntegrity,
@@ -2280,10 +2280,10 @@ const buildActivityDoctorScan = (
   };
 };
 
-// Menjalankan repair di memori lebih dulu, lalu membandingkan hasilnya dengan
-// kondisi sebelum repair. Tanpa langkah ini urutannya adalah tulis backup →
-// tulis R2 → tulis D1 → baru scan ulang, dan hasil scan ulang itu tidak pernah
-// dipakai untuk membatalkan apa pun.
+// Run the repair in memory first, then compare the result with the condition
+// before the repair. Without this step the order was write backup, then write
+// R2, then write D1, then rescan, and that rescan result was never used to
+// cancel anything.
 const validateActivityDoctorRepair = (
   before: ReturnType<typeof buildActivityDoctorScan>,
   after: ReturnType<typeof buildActivityDoctorScan>,
@@ -2334,9 +2334,9 @@ const validateActivityDoctorRepair = (
     });
   }
 
-  // Penjaga terakhir terhadap repair yang hanya memenuhi dirinya sendiri:
-  // kalau tidak ada satu pun perubahan nyata dan status tidak membaik, repair
-  // ini tidak layak ditulis ke R2 maupun D1.
+  // The last guard against a repair that only satisfies itself: if not a single
+  // real change happened and the status did not improve, this repair does not
+  // deserve to be written to R2 or D1.
   if (
     before.changes.length === 0 &&
     after.healthy === before.healthy &&
@@ -2834,13 +2834,13 @@ const normalizeORSRoute = (data: any, options: {
 };
 
 // ==========================================
-// MIDDLEWARE PERTAHANAN API
+// API DEFENCE MIDDLEWARE
 // ==========================================
-// Perisai Anti-CSRF: Mencegah serangan pemalsuan permintaan silang.
-// Memastikan aksi POST/DELETE murni dikirim dari dalam markas Gaspool.
+// Anti-CSRF shield: stops cross-site request forgery attacks.
+// Makes sure POST/DELETE actions really come from inside the Gaspool base.
 api.use("*", csrf());
 
-// Middleware untuk mem-proteksi API (hanya Kapten yang bisa Save, Edit, Delete)
+// Middleware to protect the API (only Kapten can Save, Edit, Delete)
 const protectAPI = async (c: any, next: any) => {
   const token = getCookie(c, "gaspool_session");
 
@@ -2869,7 +2869,7 @@ const protectAPI = async (c: any, next: any) => {
   }
 };
 
-// 1a. Geocoding: cari lokasi via OpenRouteService, API key tetap di server
+// 1a. Geocoding: look up a location via OpenRouteService, API key stays on the server
 api.get("/geocode", protectAPI, async (c) => {
   try {
     if (!c.env.ORS_API_KEY) {
@@ -2958,7 +2958,7 @@ api.get("/geocode", protectAPI, async (c) => {
   }
 });
 
-// 1. Tarik Data Dashboard
+// 1. Fetch Dashboard Data
 api.get("/rides", protectAPI, async (c) => {
   const f = c.req.query("filter") || "all";
   const visibility = String(c.req.query("visibility") || "all").toLowerCase();
@@ -3086,11 +3086,11 @@ api.get("/rides", protectAPI, async (c) => {
   }
 });
 
-// 9b. MILESTONE JARAK SEUMUR HIDUP (kelipatan 1000 km)
+// 9b. LIFETIME DISTANCE MILESTONE (multiples of 1000 km)
 //
-// Sengaja terpisah dari /api/rides: statistik di sana mengikuti filter yang
-// sedang aktif (bulan, tahun, pencarian), sedangkan pencapaian seumur hidup
-// tidak boleh berubah hanya karena layar sedang difilter ke bulan ini.
+// Deliberately separate from /api/rides: the statistics there follow the filter
+// currently active (month, year, search), while a lifetime achievement must not
+// change just because the screen is filtered down to this month.
 api.get("/milestones", protectAPI, async (c) => {
   try {
     const lifetime: any = await c.env.DB.prepare(
@@ -3301,7 +3301,7 @@ api.get("/personal_bests", protectAPI, async (c) => {
   }
 });
 
-// 2. Route Planner: generate rute via OpenRouteService, simpan JSON ke R2, metadata ke D1
+// 2. Route Planner: generate a route via OpenRouteService, store JSON in R2, metadata in D1
 api.post("/route_plan", protectAPI, async (c) => {
   try {
     if (!c.env.ORS_API_KEY) {
@@ -3914,7 +3914,7 @@ api.delete("/route_plan/:id", protectAPI, async (c) => {
   }
 });
 
-// 2. Simpan Rekaman Baru (Save Ride Chunking) ke R2 dan D1
+// 2. Save a New Recording (Save Ride Chunking) to R2 and D1
 api.post("/save_ride", protectAPI, async (c) => {
   try {
     const b = await c.req.json();
@@ -3941,10 +3941,10 @@ api.post("/save_ride", protectAPI, async (c) => {
       0,
       Math.floor(Number(b.skipped_clock_gap_seconds || 0)),
     );
-    // Akuntansi jam live dari halaman tracker. Sampai sekarang field ini
-    // dikirim tetapi tidak pernah dibaca, jadi kehilangan waktu hanya bisa
-    // disimpulkan dari absennya peringatan — bukan dari angka. `null` berarti
-    // instrumentasi tidak sempat dimuat, dan itu disimpan apa adanya.
+    // Live clock accounting from the tracker page. Until now this field was
+    // sent but never read, so lost time could only be inferred from the absence
+    // of a warning, not from a number. `null` means instrumentation never got
+    // loaded, and that is stored as it is.
     const liveClockRecord = normalizeLiveClockRecord(b.live_clock);
     const savedAtIso = new Date().toISOString();
     const startDateIso = normalizeIsoDate(b.start_date, savedAtIso);
@@ -3979,16 +3979,16 @@ api.post("/save_ride", protectAPI, async (c) => {
       );
     }
 
-    // Simpan potongan (chunk) ke ruang transit KV sementara. Beri batas kedaluwarsa 1 hari (86400 detik)
+    // Store the chunk in temporary KV transit space. Give it a 1 day expiry (86400 seconds)
     await c.env.GASPOOL_RADAR.put(
       `CHUNK:${uuid}:${chunk_index}`,
       JSON.stringify(points || []),
       { expirationTtl: 86400 },
     );
 
-    // Cek apakah ini potongan terakhir yang dikirim
+    // Check whether this is the last chunk that was sent
     if (chunk_index === total_chunks - 1) {
-      // Pastikan semua chunk sudah tiba
+      // Make sure every chunk has arrived
       for (let i = 0; i < total_chunks; i++) {
         const exists = await c.env.GASPOOL_RADAR.get(`CHUNK:${uuid}:${i}`);
 
@@ -4004,19 +4004,19 @@ api.post("/save_ride", protectAPI, async (c) => {
       let fullPolyline: any[] = [];
       const mergedChunks: any[] = [];
 
-      // Tarik semua potongan dari KV dan satukan
+      // Pull every chunk out of KV and merge them
       for (let i = 0; i < total_chunks; i++) {
         const chunkData = await c.env.GASPOOL_RADAR.get(`CHUNK:${uuid}:${i}`);
 
         if (chunkData) {
           mergedChunks.push(...JSON.parse(chunkData));
 
-          // Bersihkan potongan dari KV
+          // Clean the chunks out of KV
           await c.env.GASPOOL_RADAR.delete(`CHUNK:${uuid}:${i}`);
         }
       }
 
-      // Hardening: buang titik korup
+      // Hardening: drop corrupt points
       fullPolyline = mergedChunks.filter(
         (p) => p && typeof p.lat === "number" && typeof p.lng === "number",
       );
@@ -4031,19 +4031,19 @@ api.post("/save_ride", protectAPI, async (c) => {
         );
       }
 
-      // --- Angka apa yang DISIMPAN -------------------------------------
+      // --- Which numbers get STORED -------------------------------------
       //
-      // Sebelum ini, halaman finish sudah menghitung jarak dari tabel segmen
-      // bersama dan menampilkannya, tetapi yang tersimpan ke D1 tetap angka
-      // mentah dari jam live. Pada gowes 25 Sep 2026 selisihnya 1651 m drift
-      // GPS (345 segmen "diam", rata-rata 0,48 km/h) yang ikut dihitung
-      // sebagai jarak yang ditempuh — dan angka itulah yang dipakai kartu
-      // milestone seumur hidup.
+      // Before this, the finish page already computed distance from the shared
+      // segment table and displayed it, but what got stored in D1 was still the
+      // raw number from the live clock. On the 25 Sep 2026 gowes the gap was
+      // 1651 m of GPS drift (345 "stopped" segments, 0.48 km/h on average) that
+      // was counted as distance travelled, and that number is what the lifetime
+      // milestone card used.
       //
-      // Aturannya sekarang ada di modul murni src/api/stored-ride-stats.ts
-      // supaya bisa diuji tanpa Worker, dan supaya arahnya eksplisit:
-      // jarak memakai tabel segmen bersama (drift bukan jarak), elevasi
-      // mempertahankan pengukuran (angka ini tidak bisa ditentukan pasti).
+      // The rule now lives in the pure module src/api/stored-ride-stats.ts so it
+      // can be tested without a Worker, and so the direction is explicit:
+      // distance uses the shared segment table (drift is not distance), elevation
+      // keeps the measurement (this number cannot be pinned down exactly).
       const storedDistance = chooseStoredDistanceKm({
         declaredKm: distance,
         cleanKm: finishReview.stats_after?.distance_km,
@@ -4073,16 +4073,16 @@ api.post("/save_ride", protectAPI, async (c) => {
           activity_type: activity_type || "ride",
           distance_km: storedDistanceKm,
           moving_time: duration || 0,
-          // Stat turunan ikut disimpan. D1 memegang angka yang sama, tetapi
-          // tanpa salinan di sini sebuah aktivitas kehilangan rata-rata
-          // kecepatan dan elevasinya begitu baris D1 hilang, dan yang tersisa
-          // hanya titik-titik yang mungkin sudah rusak.
+          // Derived stats are stored too. D1 holds the same numbers, but
+          // without a copy here an activity loses its average speed and
+          // elevation the moment the D1 row is gone, and what is left is only
+          // points that may already be corrupt.
           average_speed: Number(avgSpeed.toFixed(2)),
           max_speed: Number(Number(b.max_speed || 0).toFixed(2)),
           total_elevation_gain: storedElevationM,
-          // Dari mana angka tersimpan berasal, dan berapa angka yang
-          // dilaporkan perangkat. Tanpa ini, angka mentah yang dibuang tidak
-          // bisa ditelusuri lagi setelah baris D1 ditulis.
+          // Where the stored numbers came from, and how many numbers the
+          // device reported. Without this, raw numbers that were discarded can
+          // no longer be traced once the D1 row is written.
           distance_declared_km: storedDistance.declared_km,
           distance_clean_km: storedDistance.clean_km,
           distance_source: storedDistance.source,
@@ -4091,9 +4091,9 @@ api.post("/save_ride", protectAPI, async (c) => {
           time_context: timeContext,
           rest_summary: restSummary,
           skipped_clock_gap_seconds: skippedClockGapSeconds,
-          // Bukti ke mana waktu pergi selama gowes berjalan. Disimpan di sini
-          // supaya bisa dibuktikan dari berkasnya sendiri, tanpa harus menyalakan
-          // worker atau membuka layar finish.
+          // Evidence of where the time went while the gowes was running. Stored
+          // here so it can be proven from the file itself, without having to
+          // start a worker or open the finish screen.
           live_clock: liveClockRecord,
           nutrition_summary: {
             enabled: nutritionSummary.enabled,
@@ -4107,7 +4107,7 @@ api.post("/save_ride", protectAPI, async (c) => {
         },
       };
 
-      // Upload Rute Utuh ke R2
+      // Upload the Whole Route to R2
       await c.env.R2_BUCKET.put(fileName, JSON.stringify(routePayload), {
         httpMetadata: {
           contentType: "application/json",
@@ -4159,7 +4159,7 @@ api.post("/save_ride", protectAPI, async (c) => {
       });
     }
 
-    // Jika bukan chunk terakhir, kirim status aman
+    // If this is not the last chunk, report a safe status
     return c.json({
       success: true,
       message: `Chunk ${chunk_index + 1}/${total_chunks} aman direkam.`,
@@ -4338,8 +4338,8 @@ api.post("/activity_doctor/:id/apply", protectAPI, async (c) => {
     const backupKey = buildDoctorBackupKey(id);
     const publicUrl = `${getR2PublicBaseUrl(c.env)}/${targetKey}`;
 
-    // Simulasi dijalankan sebelum satu byte pun ditulis. Payload hasil repair
-    // di-scan ulang di memori, lalu dibandingkan dengan kondisi awal.
+    // The simulation runs before a single byte is written. The repaired payload
+    // is rescanned in memory, then compared against the initial condition.
     const simulatedRide = {
       ...ride,
       distance: repair.stats.distance_km,
@@ -4440,8 +4440,8 @@ api.post("/activity_doctor/:id/apply", protectAPI, async (c) => {
       updateFailureMessage = updateError?.message || String(updateError);
     }
 
-    // R2 sudah berubah tetapi D1 belum: kembalikan R2 ke kondisi semula supaya
-    // tidak ada perbedaan diam-diam antara keduanya.
+    // R2 already changed but D1 did not: put R2 back to its previous state so
+    // there is no silent difference between the two.
     if (updateFailed) {
       let rollbackNote = "";
 
@@ -4510,7 +4510,7 @@ api.post("/activity_doctor/:id/apply", protectAPI, async (c) => {
   }
 });
 
-// 3. Edit Judul dan Catatan Aktivitas
+// 3. Edit Activity Title and Notes
 api.post("/edit_ride/:id", protectAPI, async (c) => {
   const id = Number(c.req.param("id"));
 
@@ -5139,7 +5139,7 @@ api.delete("/segments/:id", protectAPI, async (c) => {
   }
 });
 
-// 4. Hapus Aktivitas
+// 4. Delete Activity
 api.delete("/delete_ride/:id", protectAPI, async (c) => {
   const id = Number(c.req.param("id"));
 
@@ -5164,9 +5164,9 @@ api.delete("/delete_ride/:id", protectAPI, async (c) => {
       );
     }
 
-    // Host dibandingkan dengan helper yang sama yang dipakai doctor, bukan
-    // string ".r2.dev/" yang kebetulan cocok. Domain publik bucket bisa
-    // dikonfigurasi, dan pencocokan substring bisa tertipu URL seperti
+    // The host is compared with the same helper the doctor uses, not with a
+    // ".r2.dev/" string that happens to match. The bucket's public domain is
+    // configurable, and substring matching can be fooled by a URL like
     // "https://contoh.com/x.r2.dev/y".
     const r2Hostname = getR2PublicHostname(c.env);
     let objectKey = "";
@@ -5183,8 +5183,8 @@ api.delete("/delete_ride/:id", protectAPI, async (c) => {
       }
     }
 
-    // Hanya objek di dalam namespace aplikasi yang boleh dihapus. Tanpa batas
-    // ini, polyline yang dibuat-buat bisa menunjuk objek lain di bucket.
+    // Only objects inside the app namespace may be deleted. Without this limit,
+    // a crafted polyline could point at another object in the bucket.
     if (objectKey && !objectKey.startsWith("gaspool/")) {
       console.warn("R2 cleanup: object key di luar namespace gaspool, dilewati:", objectKey);
       objectKey = "";
@@ -5198,8 +5198,8 @@ api.delete("/delete_ride/:id", protectAPI, async (c) => {
       }
     }
 
-    // Backup hasil auto repair ikut dihapus. Sebelumnya aktivitas dihapus tetapi
-    // backup-nya tertinggal di bucket tanpa apa pun yang menunjuk ke sana.
+    // The auto repair backup is deleted as well. Previously the activity was
+    // deleted but its backup stayed in the bucket with nothing pointing at it.
     const backupPrefix = `gaspool/repair-backups/ride_${id}_`;
 
     try {
@@ -5228,22 +5228,22 @@ api.delete("/delete_ride/:id", protectAPI, async (c) => {
   }
 });
 
-// 5. RADAR SYNC (Cloudflare KV) - Terbuka untuk Tamu (Bebas Token)
-// --- Live share untuk gowes SOLO -------------------------------------------
+// 5. RADAR SYNC (Cloudflare KV) - Open to Guests (No Token Required)
+// --- Live share for SOLO gowes ---------------------------------------------
 //
-// Di mode Peleton, nama room berfungsi ganda: ia menyatukan peserta sekaligus
-// menjadi alamat link yang dibagikan. Untuk gowes solo tidak ada peserta lain
-// yang perlu disatukan, dan justru di situlah masalahnya: room Peleton dipilih
-// sendiri oleh pemakainya, jadi "JEANNES" atau "GOWESJUMAT" bisa ditebak siapa
-// saja. Karena /radar/<room> bisa dibuka tanpa login, nama yang mudah ditebak
-// berarti lokasi pemiliknya juga ikut terbaca orang asing.
+// In Peleton mode the room name does double duty: it groups the participants
+// and at the same time becomes the address of the link that gets shared. For a
+// solo gowes there are no other participants to group, and that is exactly the
+// problem: a Peleton room is named by its own user, so "JEANNES" or
+// "GOWESJUMAT" can be guessed by anyone. Because /radar/<room> opens without a
+// login, an easy to guess name means the owner's location is readable by strangers.
 //
-// Karena itu siaran solo memakai token acak, bukan nama. Bentuk dan sifat token
-// ada di src/api/live-share.ts, dikunci oleh tests/live-share.mjs.
+// Solo broadcasts therefore use a random token, not a name. The shape and
+// properties of the token live in src/api/live-share.ts, locked by tests/live-share.mjs.
 //
-// Catatan sesinya juga disimpan, bukan hanya tokennya: halaman penonton perlu
-// tahu bahwa sebuah tautan adalah siaran solo (bukan room Peleton) supaya bisa
-// menyapa dengan benar, dan supaya token acak tidak dipamerkan di layar.
+// The session record is stored too, not just the token: the viewer page needs
+// to know that a link is a solo broadcast (not a Peleton room) so it can greet
+// the viewer correctly and so the random token is not shown on screen.
 api.post("/live_start", async (c) => {
   try {
     const body = await c.req.json().catch(() => ({}));
@@ -5262,20 +5262,20 @@ api.post("/live_start", async (c) => {
 api.post("/radar_sync", async (c) => {
   try {
     const { room, user, lat, lng, speed } = await c.req.json();
-    // `room` diambil dari klien dan dipakai langsung sebagai prefix KV. Tanpa
-    // sanitasi, nilai seperti "A:B" atau "\n" bisa menulis ke namespace room
-    // lain, sama seperti yang sudah dicegah di endpoint /radio.
+    // `room` comes from the client and is used directly as a KV prefix. Without
+    // sanitising, a value like "A:B" or "\n" could write into another room's
+    // namespace, the same thing already prevented in the /radio endpoint.
     const safeRoom = sanitizeRoomId(room);
     const safeUser = sanitizeRadioUser(user);
     if (!safeRoom || safeRoom === "SINGLE_MODE")
       return c.json({ success: true, participants: [], radios: [] });
 
-    // Simpan koordinat lokasi ke Radar, sekaligus menyambung jejaknya.
+    // Store the location coordinates in Radar, and extend the trail with them.
     //
-    // Jejak dititipkan di nilai yang sama, bukan di kunci terpisah, karena
-    // daftar peserta dibaca lewat prefix `room:` dan nama pengguna diambil dari
-    // potongan setelah titik dua pertama — kunci seperti `ROOM:user:trail` akan
-    // terbaca sebagai peserta kedua.
+    // The trail rides in the same value, not in a separate key, because the
+    // participant list is read via the `room:` prefix and the user name is taken
+    // from the part after the first colon: a key like `ROOM:user:trail` would be
+    // read as a second participant.
     const radarKey = `${safeRoom}:${safeUser}`;
     const previousEntry = parseRadarEntry(await c.env.GASPOOL_RADAR.get(radarKey));
     const trail = appendRadarTrailPoint(previousEntry.trail, {
@@ -5292,14 +5292,14 @@ api.post("/radar_sync", async (c) => {
         speed,
         time: Date.now(),
         trail,
-        // Titik awal perjalanan disimpan sekali dan tidak ikut bergeser, supaya
-        // penonton tahu dari mana perjalanan ini dimulai.
+        // The trip's starting point is stored once and never shifts, so the
+        // viewer knows where this trip began.
         trail_start: previousEntry.trail_start || trail[0] || null,
       }),
       { expirationTtl: 60 },
     );
 
-    // Ambil daftar teman satu room
+    // Get the list of friends in the same room
     const list = await c.env.GASPOOL_RADAR.list({ prefix: safeRoom + ":" });
     const participants = await Promise.all(
       list.keys.slice(0, RADAR_MAX_PARTICIPANTS).map(async (k: { name: string }) => {
@@ -5308,7 +5308,7 @@ api.post("/radar_sync", async (c) => {
       }),
     );
 
-    // Telinga Satelit: Dengarkan apakah ada file radio (suara) baru di room ini
+    // Satellite Ear: listen for any new radio (voice) file in this room
     const radioList = await c.env.GASPOOL_RADAR.list({
       prefix: `RADIO:${safeRoom}:`,
     });
@@ -5349,9 +5349,9 @@ api.post("/radio", async (c) => {
       );
     }
 
-    // Endpoint ini memang terbuka untuk tamu peleton, jadi batasnya bukan token
-    // melainkan ukuran dan jenis berkas: tanpa plafon, siapa pun bisa memakai
-    // bucket sebagai tempat menitipkan file sembarang.
+    // This endpoint really is open to peloton guests, so the limit is not a
+    // token but the size and type of the file: without a ceiling, anyone could
+    // use the bucket as a place to drop arbitrary files.
     if (audioFile.size > RADIO_MAX_BYTES) {
       return c.json(
         {
@@ -5374,26 +5374,26 @@ api.post("/radio", async (c) => {
       );
     }
 
-    // `user` dipakai dua kali: sebagai bagian object key DAN sebagai bagian key
-    // KV di bawah. Nilai mentah di key KV memecah format `${room}:${user}`
-    // sehingga pembacaan kembali oleh radar salah menebak pemiliknya.
+    // `user` is used twice: as part of the object key AND as part of the KV key
+    // below. A raw value in the KV key breaks the `${room}:${user}` format, so
+    // the radar reading it back guesses the owner wrong.
     const user = sanitizeRadioUser(rawUser);
 
-    // Generate nama file unik agar tidak bertabrakan
+    // Generate a unique file name so nothing collides
     const objectKey = `gaspool/audio/${room}/radio_${user}_${Date.now()}.webm`;
 
-    // Konversi file suara menjadi ArrayBuffer untuk diunggah
+    // Convert the voice file into an ArrayBuffer for upload
     const arrayBuffer = await audioFile.arrayBuffer();
 
-    // Tembakkan file suara ke Satelit R2
+    // Fire the voice file into the R2 Satellite
     await c.env.R2_BUCKET.put(objectKey, arrayBuffer, {
       httpMetadata: { contentType: audioFile.type || "audio/webm" },
     });
 
-    // URL Publik file suara
+    // Public URL of the voice file
     const publicUrl = `${getR2PublicBaseUrl(c.env)}/${objectKey}`;
 
-    // Catat link suara ke Radar KV agar teman di room bisa mendengarnya
+    // Record the voice link in Radar KV so friends in the room can hear it
     await c.env.GASPOOL_RADAR.put(
       `RADIO:${room}:${user}`,
       JSON.stringify({
@@ -5472,9 +5472,9 @@ api.get("/public_rides/:username", async (c) => {
     return c.json({ error: "Public profile not found" }, 404);
 
   try {
-    // Kolom dipilih satu per satu, bukan SELECT *: endpoint ini publik dan
-    // `notes` berisi catatan pribadi pemilik aktivitas (mis. kondisi kesehatan)
-    // yang tidak pernah ditampilkan halaman profil publik.
+    // Columns are listed one by one, not SELECT *: this endpoint is public and
+    // `notes` holds the activity owner's private notes (for example health
+    // conditions) that the public profile page never displays.
     const { results: rides } = await c.env.DB.prepare(
       `SELECT id, name, start_date, distance, moving_time, total_elevation_gain,
               average_speed, max_speed, polyline, activity_type, participants,
@@ -5492,7 +5492,7 @@ api.get("/public_rides/:username", async (c) => {
   }
 });
 
-// 8. RADAR SPECTATOR (Hanya Membaca Data Peleton untuk Keluarga)
+// 8. RADAR SPECTATOR (Read Peleton Data Only, for Family)
 api.get("/radar_view/:room", async (c) => {
   const room = sanitizeRoomId(c.req.param("room"));
   if (!room) return c.json({ success: true, participants: [], live: null });
@@ -5506,9 +5506,9 @@ api.get("/radar_view/:room", async (c) => {
       }),
     );
 
-    // `live` bukan null berarti room ini adalah siaran solo, bukan room Peleton.
-    // Penonton memakainya untuk menyapa dengan benar dan untuk tahu ini gowes
-    // siapa, tanpa perlu menebak dari bentuk nama room.
+    // A non-null `live` means this room is a solo broadcast, not a Peleton room.
+    // The viewer uses it to greet correctly and to know whose gowes this is,
+    // without having to guess from the shape of the room name.
     const live = await readLiveSession(c.env.GASPOOL_RADAR, room);
 
     return c.json({ success: true, participants, live });
@@ -5517,16 +5517,16 @@ api.get("/radar_view/:room", async (c) => {
   }
 });
 
-// 9. SATELIT CUACA (Open-Meteo Proxy)
+// 9. WEATHER SATELLITE (Open-Meteo Proxy)
 api.get("/weather", async (c) => {
-  // Nilai dari klien dipakai menyusun URL upstream, jadi harus berupa angka
-  // dalam rentang koordinat. Tanpa ini, parameter tambahan seperti "&foo=bar"
-  // ikut terbawa ke Open-Meteo dari proxy publik kita.
+  // Client values are used to build the upstream URL, so they must be numbers
+  // inside the coordinate range. Without this, extra parameters such as
+  // "&foo=bar" would ride along to Open-Meteo through our public proxy.
   const rawLat = c.req.query("lat");
   const rawLng = c.req.query("lng");
 
-  // Number("") bernilai 0, jadi parameter kosong harus ditolak lebih dulu —
-  // kalau tidak, "lat=&lng=" diam-diam berubah menjadi koordinat (0, 0).
+  // Number("") is 0, so an empty parameter must be rejected first, otherwise
+  // "lat=&lng=" silently turns into the coordinate (0, 0).
   if (!String(rawLat ?? "").trim() || !String(rawLng ?? "").trim()) {
     return c.json({ temp: null });
   }

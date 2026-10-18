@@ -1,37 +1,37 @@
 /**
- * Milestone jarak tempuh seumur hidup — kelipatan 1000 km.
+ * Lifetime distance milestones: multiples of 1000 km.
  *
- * Kenapa dipisah jadi modul murni: angka yang dipakai di kartu bagikan ini
- * menyatakan pencapaian seseorang, dan kartunya akan dikirim ke orang lain.
- * Perhitungan seperti itu sebaiknya bisa diuji tanpa menyalakan Worker atau
- * mengambil data dari D1 — cukup dengan angka.
+ * Why it is split out as a pure module: the numbers on this share card
+ * state someone's achievement, and the card will be sent to other people.
+ * That kind of calculation should be testable without booting the Worker or
+ * reading data from D1, with nothing but numbers.
  *
- * Modul ini tidak mengimpor apa pun supaya test bisa memuatnya lewat TypeScript
- * type stripping Node (lihat tests/milestones.mjs).
+ * This module imports nothing so the test can load it through Node's TypeScript
+ * type stripping (see tests/milestones.mjs).
  */
 
-/** Milestone dihitung per 1000 km (keputusan pemilik, 2026-09-24). */
+/** Milestones are counted per 1000 km (owner's decision, 2026-09-24). */
 export const MILESTONE_STEP_KM = 1000;
 
 export type MilestoneProgress = {
   step_km: number;
   total_km: number;
-  /** Berapa milestone yang sudah tercapai. 0 berarti belum sampai 1000 km. */
+  /** How many milestones have been reached. 0 means not yet 1000 km. */
   reached_count: number;
-  /** Milestone terakhir yang tercapai; 0 kalau belum ada. */
+  /** The last milestone reached; 0 when there is none yet. */
   last_reached_km: number;
-  /** Milestone berikutnya yang belum tercapai. */
+  /** The next milestone not yet reached. */
   next_km: number;
-  /** Sisa jarak menuju milestone berikutnya. */
+  /** Remaining distance to the next milestone. */
   remaining_km: number;
-  /** Kemajuan di dalam segmen yang sedang berjalan, 0..1. */
+  /** Progress inside the segment currently running, 0..1. */
   progress_ratio: number;
 };
 
 /**
- * Bawa angka apa pun ke bentuk yang aman dipakai berhitung.
- * D1 bisa mengembalikan NULL, dan klien bisa mengirim string; keduanya tidak
- * boleh menghasilkan kartu bagikan yang berisi "NaN km".
+ * Bring any number into a shape that is safe to use in arithmetic.
+ * D1 can return NULL, and the client can send a string; neither may
+ * produce a share card that reads "NaN km".
  */
 const safeKm = (value: unknown) => {
   const n = Number(value);
@@ -63,22 +63,22 @@ export const computeMilestoneProgress = (
     last_reached_km: lastReached,
     next_km: next,
     remaining_km: remaining,
-    // Selalu di dalam [0, 1). Dibulatkan agar klien tidak perlu menebak presisi.
+    // Always inside [0, 1). Rounded so the client does not have to guess precision.
     progress_ratio: Number(Math.min(0.999999, Math.max(0, withinSegment / step)).toFixed(6)),
   };
 };
 
 /**
- * Milestone yang DILEWATI antara dua pembacaan jarak total.
+ * Milestones CROSSED between two readings of total distance.
  *
- * Dipakai setelah sebuah aktivitas disimpan: kalau jarak seumur hidup berpindah
- * dari 2.940 km ke 3.050 km, maka 3.000 km baru saja terlewati dan kartunya
- * perlu ditawarkan. Membandingkan "jarak sebelum" dan "jarak sesudah" lebih
- * dapat dipercaya daripada menghitung di klien, karena penyimpanan bisa diulang
- * atau dibatalkan.
+ * Used after an activity is stored: if lifetime distance moves
+ * from 2,940 km to 3,050 km, then 3,000 km was just crossed and its card
+ * needs to be offered. Comparing "distance before" and "distance after" is
+ * more trustworthy than computing on the client, because the save can be replayed
+ * or cancelled.
  *
- * Mengembalikan array karena satu aktivitas bisa melewati lebih dari satu
- * milestone ketika muatan lama ditambahkan sekaligus.
+ * Returns an array because a single activity can cross more than one
+ * milestone when older payloads are added all at once.
  */
 export const crossedMilestones = (
   beforeKm: unknown,
@@ -103,7 +103,7 @@ export const crossedMilestones = (
   return crossed;
 };
 
-/** Format jarak untuk ditampilkan, mis. 2847.3 -> "2.847,3". */
+/** Format a distance for display, e.g. 2847.3 -> "2.847,3". */
 export const formatMilestoneKm = (value: unknown, decimals = 1) => {
   const n = safeKm(value);
   return n.toLocaleString("id-ID", {

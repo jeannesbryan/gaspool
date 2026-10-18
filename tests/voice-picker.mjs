@@ -1,19 +1,19 @@
 /**
- * Test untuk pemilih suara panduan arah.
+ * Test for the navigation voice picker.
  *
- * Kenapa ada: suara tidak datang dari repo ini, jadi yang bisa dijamin benar
- * adalah CARA MEMILIH di antara suara yang tersedia di perangkat. Versi lama
- * memakai find() sederhana dan mengambil suara Indonesia pertama — bisa pria,
- * bisa berkualitas rendah — dan yang paling parah: kalau perangkat tidak punya
- * suara Indonesia sama sekali, kata Indonesia tetap dilafalkan memakai suara
- * bawaan peramban, yang biasanya Inggris. Itulah keluhan "aksennya jelek".
+ * Why it exists: the voices do not come from this repo, so what can be
+ * guaranteed correct is HOW TO CHOOSE among the voices a device offers.
+ * The old version used a plain find() and took the first Indonesian voice, which
+ * could be male or low quality, and worst of all: if the device has no Indonesian
+ * voice at all, Indonesian words are still spoken with the browser default
+ * voice, usually English. That is the "the accent is bad" complaint.
  *
- * Daftar suara di bawah adalah tiruan dari yang umum ada di perangkat nyata,
- * jadi test ini berjalan di CI mana pun tanpa peramban.
+ * The voice list below is a copy of what commonly exists on real devices,
+ * so this test runs on any CI without a browser.
  *
  *   node tests/voice-picker.mjs
  *
- * Exit code 0 = semua assertion lewat.
+ * Exit code 0 = all assertions passed.
  */
 import {
   describeVoice,
@@ -27,7 +27,7 @@ import {
 const results = [];
 const check = (name, passed, detail = "") => results.push({ name, passed: Boolean(passed), detail });
 
-// Tiruan daftar suara pada perangkat Android + Chrome.
+// Copy of the voice list on an Android + Chrome device.
 const ANDROID_VOICES = [
   { name: "English (United States)", lang: "en-US", localService: false, default: true },
   { name: "Google Bahasa Indonesia", lang: "id-ID", localService: false },
@@ -37,7 +37,7 @@ const ANDROID_VOICES = [
   { name: "English (United Kingdom)", lang: "en-GB", localService: true },
 ];
 
-// ------------------------------------------------- pemilihan yang benar
+// ------------------------------------------------- picking the right voice
 {
   const best = pickBestVoice(ANDROID_VOICES);
   check(
@@ -58,7 +58,7 @@ const ANDROID_VOICES = [
   );
 }
 
-// ------------------------------------ yang paling penting: tidak ada suara ID
+// ------------------------------------ the crucial one: there is no ID voice
 {
   const onlyForeign = [
     { name: "English (United States)", lang: "en-US", localService: true, default: true },
@@ -88,10 +88,10 @@ const ANDROID_VOICES = [
   );
 }
 
-// ------------------------------------------------- preferensi pemakai
+// ----------------------------------------------------- user preference
 {
-  // Pemakai sebelumnya memilih suara pria karena suaranya lebih jelas di
-  // perangkatnya. Pilihan itu harus dihormati, bukan ditimpa oleh skor.
+  // The user previously picked a male voice because it is clearer on their
+  // device. That choice has to be respected, not overridden by the score.
   const preferred = pickBestVoice(ANDROID_VOICES, "Microsoft Andika Online");
   check(
     "pilihan pemakai dihormati walau skornya lebih rendah",
@@ -99,7 +99,7 @@ const ANDROID_VOICES = [
     `terpilih=${preferred ? preferred.name : "null"}`,
   );
 
-  // Perangkat bisa kehilangan suara setelah pembaruan sistem.
+  // A device can lose a voice after a system update.
   const gone = pickBestVoice(ANDROID_VOICES, "Suara Yang Sudah Tidak Ada");
   check(
     "pilihan yang sudah hilang jatuh kembali ke pemilihan otomatis",
@@ -114,7 +114,7 @@ const ANDROID_VOICES = [
   );
 }
 
-// ------------------------------------------------------------ skor
+// ------------------------------------------------------------ scoring
 {
   check(
     "suara Indonesia mengalahkan suara asing",
@@ -147,7 +147,7 @@ const ANDROID_VOICES = [
   );
 }
 
-// ------------------------------------------------------------ ketahanan
+// ------------------------------------------------------------ resilience
 {
   const weird = [null, undefined, {}, { name: null, lang: null }, { lang: "id" }];
   const survived = rankVoices(weird).length === weird.filter((v) => v).length;
@@ -168,7 +168,7 @@ const ANDROID_VOICES = [
   );
 }
 
-// ---------------------------------------------------------------- laporan
+// ----------------------------------------------------------------- report
 let failed = 0;
 for (const item of results) {
   if (!item.passed) failed += 1;

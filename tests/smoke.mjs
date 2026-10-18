@@ -17,8 +17,8 @@ import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-// Modul yang sama yang dipakai halaman tracker. Dipakai di sini supaya payload
-// jam live yang diuji benar-benar dibangun oleh satu sumber, bukan disalin.
+// The same module the tracker page uses. Pulled in here so the live clock
+// payload under test is genuinely built by one source, not copied.
 import * as LiveClock from "../public/assets/live-clock.js";
 
 const ROOT = join(import.meta.dirname, "..");
@@ -119,10 +119,10 @@ const get = async (path, init = {}) => {
 };
 
 /**
- * Cari teks di berkas yang ditulis penyimpanan emulasi (R2 lokal) pada
- * `persistDir`. Dipakai untuk MEMBUKA apa yang benar-benar tersimpan, bukan
- * menebak dari respons endpoint: field yang dikirim tetapi tidak pernah dibaca
- * server lolos dari uji yang cuma memeriksa balasan HTTP.
+ * Find text in a file written by the emulated storage (local R2) under
+ * `persistDir`. Used to OPEN what is really stored, instead of guessing from
+ * the endpoint response: a field that is sent but never read by the server
+ * slips past a test that only inspects the HTTP reply.
  */
 const findPersistedText = (fragment) => {
   const stack = [persistDir];
@@ -558,9 +558,9 @@ const main = async () => {
   }
 
   // --- B17: Finish Review shows SEBELUM -> SESUDAH -------------------------
-  // Keputusan "simpan apa adanya" atau "perbaiki dulu" dulu diambil tanpa
-  // angka: modal hanya menampilkan statistik live dan daftar perubahan berupa
-  // teks. Sekarang perbandingannya harus ada di halaman, tepat di atas tombol.
+  // The decision "save as is" or "repair first" used to be made without
+  // numbers: the modal only showed live stats and a list of changes as text.
+  // The comparison must now be on the page, right above the buttons.
   const trackerPage = await get("/record?type=ride", {
     headers: { cookie: `gaspool_session=${token}` },
   });
@@ -596,9 +596,9 @@ const main = async () => {
       trackerHtml.includes("'TIDAK BERUBAH'"),
     "the modal must say so when nothing differs from what the live clock reported",
   );
-  // Kolom kanan adalah angka yang BENAR-BENAR tersimpan, bukan sekadar usulan.
-  // Sebelumnya labelnya "Setelah diperbaiki", dan jarak bersih hanya tersimpan
-  // kalau AUTO REPAIR ditekan — sehingga kolom itu memang cuma usulan.
+  // The right column holds the numbers that are ACTUALLY stored, not a proposal.
+  // It used to be labelled "Setelah diperbaiki", and the clean distance was only
+  // stored when AUTO REPAIR was pressed, so that column was truly a proposal.
   check(
     "B17 the right column is labelled as what actually gets stored",
     trackerHtml.includes("<span>Disimpan</span>"),
@@ -609,10 +609,10 @@ const main = async () => {
     trackerHtml.includes("masuk ke riwayat"),
     "nothing tells the rider which column is the one being saved",
   );
-  // Halaman harus memuat aturan yang SAMA dengan server. Kalau modul ini tidak
-  // dimuat, halaman akan menampilkan angka live sementara server menyimpan
-  // angka bersih — persis "dua kebenaran" yang dulu terjadi, hanya kali ini
-  // tersembunyi di berkas.
+  // The page must load the SAME rules as the server. If this module is not
+  // loaded, the page shows live numbers while the server stores the clean
+  // numbers: exactly the "two truths" that used to happen, only this time
+  // hidden inside a file.
   check(
     "B17 the page loads the same stored-stat rules the server uses",
     trackerHtml.includes("/assets/ride-stat-rules.js") &&
@@ -624,9 +624,9 @@ const main = async () => {
     trackerHtml.includes("storedRideStatsFor"),
     "the headline distance is still the raw live number",
   );
-  // Server hanya bisa memutuskan kalau tahu angka bersih datang dari tabel
-  // bersama. Kalau field ini berhenti dikirim, fallback akan lewat sebagai
-  // angka resmi tanpa ada yang tahu.
+  // The server can only decide if it knows the clean number came from the shared
+  // table. If this field stops being sent, a fallback passes as the official
+  // number without anyone noticing.
   check(
     "B17 the payload tells the server the clean distance came from the shared table",
     trackerHtml.includes("shared_segment_distance_km: doctor.shared_segment_distance_km"),
@@ -673,12 +673,12 @@ const main = async () => {
     "a submit button here would send the form",
   );
 
-  // --- B20: siaran solo benar-benar mengirim posisi ------------------------
-  // Bug yang pernah lolos: gate siaran sudah memakai liveRoom, tapi payload
-  // /radar_sync masih mengirim roomID. Di gowes solo roomID = "SINGLE_MODE" dan
-  // server menolak room itu, sehingga tidak ada satu pun posisi yang tersimpan
-  // dan penonton cuma melihat peta kosong. Test lama tidak menangkapnya karena
-  // tidak ada yang memeriksa isi payload.
+  // --- B20: a solo broadcast really sends the position ---------------------
+  // Bug that used to slip through: the broadcast gate already used liveRoom, but
+  // the /radar_sync payload still sent roomID. In a solo ride roomID = "SINGLE_MODE"
+  // and the server rejects that room, so not one position was stored and the
+  // spectator only saw an empty map. The old test missed it because nothing
+  // inspected the contents of the payload.
   check(
     "B20 solo broadcast posts to the live room, not to roomID",
     trackerHtml.includes("room: liveRoom, user: userName, lat: lastP.lat"),
@@ -690,7 +690,7 @@ const main = async () => {
     "radar must stay silent until the rider presses BAGIKAN LIVE",
   );
 
-  // Endpoint yang benar-benar menerima room itu, diuji terhadap Worker.
+  // The endpoint that actually accepts that room, exercised against the Worker.
   const readJson = (result) => {
     try {
       return JSON.parse(result.text);
@@ -699,16 +699,16 @@ const main = async () => {
     }
   };
 
-  // Nama sengaja tanpa spasi: sanitizeRadioUser membuang karakter di luar
-  // [A-Za-z0-9_-], jadi "Smoke Rider" tersimpan sebagai "SmokeRider" dan
-  // perbandingan yang memakai spasi akan gagal karena alasan yang salah.
+  // The name deliberately has no spaces: sanitizeRadioUser strips characters
+  // outside [A-Za-z0-9_-], so "Smoke Rider" is stored as "SmokeRider" and a
+  // comparison using spaces would fail for the wrong reason.
   const soloUser = "SmokeRider";
   const soloStart = readJson(await postJson("/api/live_start", { user: soloUser }));
   const soloToken = String(soloStart.token || "");
   check("B20 live_start returns a token used as the radar room", Boolean(soloToken));
 
   if (soloToken) {
-    // roomID gowes solo: server harus menolaknya (inilah sebab peta kosong dulu).
+    // solo-ride roomID: the server has to reject it (this is why the map was empty).
     const rejected = readJson(
       await postJson("/api/radar_sync", {
         room: "SINGLE_MODE",
@@ -745,7 +745,7 @@ const main = async () => {
     );
   }
 
-  // --- B21: halaman penonton menampilkan dua titik -------------------------
+  // --- B21: the spectator page shows two dots ------------------------------
   const radarPage = await get("/radar/" + (soloToken || "SMOKEROOM"));
   const radarHtml = radarPage.text;
 
@@ -788,7 +788,7 @@ const main = async () => {
     "permission errors must be visible to the viewer",
   );
 
-  // --- B22: kartu milestone transparan ------------------------------------
+  // --- B22: milestone card is transparent ---------------------------------
   const cardPage = await get("/", { headers: { cookie: `gaspool_session=${token}` } });
   check(
     "B22 the milestone card is rendered with a transparent background",
@@ -806,10 +806,10 @@ const main = async () => {
     "numbers need a shadow or they vanish on bright photos",
   );
 
-  // --- B23: satu tabel segmen untuk halaman dan server ---------------------
-  // Keluhan yang memicu ini: gowes yang sama menghasilkan 18,741 km di halaman
-  // dan 18,506 km di studio, karena halaman punya aturan "bergerak" sendiri.
-  // Sekarang keduanya memakai public/assets/doctor-core.js.
+  // --- B23: one segment table for page and server --------------------------
+  // The complaint that started this: the same ride produced 18.741 km on the page
+  // and 18.506 km in the studio, because the page had its own "moving" rule.
+  // Both now use public/assets/doctor-core.js.
   const coreRes = await get("/assets/doctor-core.js");
   check(
     "B23 the shared segment table is served to the browser",
@@ -838,7 +838,7 @@ const main = async () => {
     "if the module fails to load the record must say so",
   );
 
-  // Sisi server: aritmatikanya benar-benar sudah dipindah, bukan disalin.
+  // Server side: the arithmetic has genuinely moved, it was not copied.
   const statsSource = readFileSync(`${ROOT}/src/api/activity-doctor-stats.ts`, "utf8");
   check(
     "B23 the server module imports the shared table instead of redefining it",
@@ -858,23 +858,23 @@ const main = async () => {
     );
   }
 
-  // --- B24: catatan jam live ikut TERSIMPAN di berkas aktivitas -----------
-  // Halaman tracker sudah mengirim `live_clock` sejak lama, tetapi server tidak
-  // pernah membacanya, jadi pertanyaan "jamnya hilang berapa detik?" hanya bisa
-  // dijawab dari absennya sebuah peringatan. Uji ini menyimpan aktivitas
-  // sungguhan lalu MEMBUKA berkas tersimpannya — bukan mencocokkan teks sumber,
-  // yang tidak akan menangkap field yang dikirim tapi tidak pernah dibaca.
+  // --- B24: live clock record is STORED in the activity file --------------
+  // The tracker page has been sending `live_clock` for a long time, but the server
+  // never read it, so the question "how many seconds did the clock lose?" could
+  // only be answered by the absence of a warning. This test stores a real
+  // activity and then OPENS its stored file, not matching source text, which
+  // would not catch a field that is sent but never read.
   const liveClockPoints = [
     { lat: -6.2, lng: 106.8, time: "2026-09-26T01:00:00.000Z", speed: 18 },
     { lat: -6.201, lng: 106.801, time: "2026-09-26T01:05:00.000Z", speed: 19 },
     { lat: -6.202, lng: 106.802, time: "2026-09-26T01:10:00.000Z", speed: 17 },
   ];
 
-  // Payload-nya dibangun dengan modul yang SAMA yang dipakai halaman
-  // (public/assets/live-clock.js), bukan disalin tangan. Kalau bentuk yang
-  // dikirim halaman berubah, uji ini ikut berubah — dan bukan sebaliknya.
-  // Umpan waktunya: 60 tick normal, 1 tick terlambat 25 s, 1 sistem berhenti
-  // 300 s. Angka ini persis yang dulu diukur di browser sungguhan.
+  // The payload is built with the SAME module the page uses
+  // (public/assets/live-clock.js), not copied by hand. If the shape the page
+  // sends changes, this test changes with it, and not the other way around.
+  // Time feed: 60 normal ticks, 1 tick 25 s late, 1 system that stops for
+  // 300 s. These numbers are exactly the ones once measured in a real browser.
   const clockAccounting = LiveClock.createLiveClockAccounting(10, 120);
   for (let i = 0; i < 60; i += 1) LiveClock.recordLiveClockTick(clockAccounting, 1, {});
   LiveClock.recordLiveClockTick(clockAccounting, 25, {});
@@ -911,7 +911,7 @@ const main = async () => {
     withClock.text.slice(0, 200),
   );
 
-  // R2 lokal menulis objeknya ke disk, jadi berkasnya bisa dibuka langsung.
+  // Local R2 writes its objects to disk, so the file can be opened directly.
   const persistedBlob = findPersistedText(`"distance_km":1.23`);
   check(
     "B24 the live clock record reaches the stored activity file",
@@ -947,9 +947,9 @@ const main = async () => {
     );
   }
 
-  // Aktivitas tanpa instrumentasi harus menyimpan null, bukan nol: nol adalah
-  // nilai yang sah ("tidak ada waktu yang hilang") dan tidak boleh dipakai
-  // untuk mewakili "tidak ada data".
+  // An activity without instrumentation must store null, not zero: zero is a
+  // valid value ("no time was lost") and must not be used to stand for
+  // "no data".
   const withoutClock = await postJson(
     "/api/save_ride",
     {
@@ -981,14 +981,14 @@ const main = async () => {
     );
   }
 
-  // --- B25: jarak & elevasi yang DISIMPAN, bukan hanya yang ditampilkan ----
-  // Halaman finish sudah menghitung jarak dari tabel segmen bersama
-  // (stats_after.distance_km) dan menampilkannya, tetapi D1 tetap menyimpan
-  // angka mentah. Akibatnya kartu milestone seumur hidup memakai angka yang
-  // sudah kita tahu salah: pada gowes 25 Sep 2026 itu 1651 m drift GPS
-  // (345 segmen "diam", rata-rata 0,48 km/h) yang ikut dihitung sebagai jarak
-  // yang ditempuh. Uji ini memeriksa angka yang TERSIMPAN, bukan yang dikirim
-  // klien: respons HTTP yang benar tidak membuktikan apa pun tentang D1.
+  // --- B25: distance & elevation that are STORED, not just shown -----------
+  // The finish page already computes distance from the shared segment table
+  // (stats_after.distance_km) and displays it, but D1 still stores the raw
+  // number. As a result the lifetime milestone card uses a number we already
+  // know is wrong: on the 25 Sep 2026 ride it was 1651 m of GPS drift
+  // (345 "stationary" segments, 0.48 km/h average) counted as distance
+  // travelled. This test inspects the number that is STORED, not the one the
+  // client sends: a correct HTTP response proves nothing about D1.
   const statPoints = [
     { lat: -6.3, lng: 106.9, time: "2026-09-26T03:00:00.000Z", speed: 20, ele: 100 },
     { lat: -6.301, lng: 106.901, time: "2026-09-26T03:05:00.000Z", speed: 21, ele: 130 },
@@ -1004,7 +1004,7 @@ const main = async () => {
       total_chunks: 1,
       points: statPoints,
       name: statRideName,
-      // Angka mentah seperti yang dilaporkan jam live di perangkat.
+      // Raw numbers as reported by the live clock on the device.
       distance: 10.0,
       duration: 3600,
       total_elevation: 561,
@@ -1019,7 +1019,7 @@ const main = async () => {
         changes: [],
         stats_before: { distance_km: 10.0, moving_time: 3600, avg_speed: 10, max_speed: 21 },
         stats_after: { distance_km: 9.7, moving_time: 3600, avg_speed: 9.7, max_speed: 21 },
-        // Bukti bahwa angka bersih datang dari tabel segmen bersama.
+        // Proof that the clean number came from the shared segment table.
         shared_segment_distance_km: 9.7,
       },
     },
@@ -1031,7 +1031,7 @@ const main = async () => {
     storedStat.text.slice(0, 200),
   );
 
-  // Baca D1 lewat endpoint yang dipakai dashboard, bukan lewat berkas R2.
+  // Read D1 through the endpoint the dashboard uses, not through the R2 file.
   const ridesAfterStat = JSON.parse(
     (await get("/api/rides?sort=latest", { headers: { cookie: `gaspool_session=${token}` } })).text,
   );
@@ -1082,8 +1082,8 @@ const main = async () => {
     );
   }
 
-  // Kalau tabel bersama tidak dimuat di perangkat, jarak mentah dipertahankan
-  // dan itu harus terlihat — fallback tidak boleh diam-diam jadi angka resmi.
+  // If the shared table is not loaded on the device, the raw distance is kept
+  // and that must be visible: a fallback must not quietly become the official number.
   const fallbackName = `Fallback Stat Ride ${Date.now()}`;
   await postJson(
     "/api/save_ride",
@@ -1118,12 +1118,12 @@ const main = async () => {
     "jarak fallback tidak ditandai, jadi angka lama bisa lewat sebagai angka resmi",
   );
 
-  // --- B26: peta yang gagal dimuat mengatakannya, bukan diam --------------
-  // Semua peta jejak mengambil titiknya dari objek R2 lewat fetch() di sisi
-  // KLIEN. Kalau fetch itu gagal (jaringan memblokir r2.dev, DNS ISP dihijack,
-  // kuota habis), halaman dulu hanya menulis console.error lalu petanya kosong.
-  // Dua halaman yang paling sering dilihat — dashboard dan detail aktivitas —
-  // harus mengatakan apa yang terjadi, dan menyebut bahwa angkanya tidak hilang.
+  // --- B26: a map that fails to load says so, not silence -----------------
+  // Every ride map takes its points from an R2 object via fetch() on the
+  // CLIENT side. When that fetch fails (network blocks r2.dev, ISP DNS is
+  // hijacked, quota runs out), the page used to only write console.error and
+  // leave the map empty. The two most frequently viewed pages, dashboard and
+  // activity detail, have to say what happened and that the numbers are not lost.
   const noticeRes = await get("/assets/map-notice.js");
   check(
     "B26 the map notice module is served to the browser",
@@ -1162,11 +1162,11 @@ const main = async () => {
     "drawMap masih menelan kegagalan fetch diam-diam",
   );
 
-  // --- B27: dua peta sisanya juga tidak boleh diam -------------------------
-  // Heatmap menggabungkan SEMUA jejak: sebagian bisa gagal sementara sisanya
-  // tergambar. "Peta sebagian" tidak bisa dibedakan dari "peta penuh", jadi
-  // jumlah yang gagal harus diucapkan. Halaman video (video_flex) menggambar
-  // satu jejak seperti halaman detail.
+  // --- B27: the other two maps must not stay silent either -----------------
+  // The heatmap merges ALL rides: some can fail while the rest still draws.
+  // A "partial map" cannot be told apart from a "full map", so the number that
+  // failed has to be spoken. The video page (video_flex) draws one ride, like
+  // the detail page.
   const b27Heat = await get("/heatmap", { headers: { cookie: `gaspool_session=${token}` } });
   const b27HeatHtml = b27Heat.text;
   check(

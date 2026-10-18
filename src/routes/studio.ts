@@ -662,9 +662,9 @@ studio.get("/detail/:id", async (c) => {
                   box-shadow: 0 10px 26px rgba(20, 184, 166, 0.16);
               }
 
-              /* Tombol footer doctor memakai background inline, sehingga aturan
-                 disabled harus menang lewat !important. Tanpa ini tombol yang
-                 sudah disabled tetap terlihat hijau dan siap diklik. */
+              /* The doctor footer buttons use an inline background, so the
+                 disabled rule has to win through !important. Without this, a
+                 button that is already disabled still looks green and clickable. */
               #doctor-apply-btn:disabled,
               #doctor-rescan-btn:disabled {
                   background: #1e293b !important;
@@ -1641,10 +1641,10 @@ studio.get("/detail/:id", async (c) => {
           }
 
           /**
-           * Katakan apa adanya saat peta jejak gagal dimuat. Pesannya disusun
-           * modul bersama /assets/map-notice.js supaya kalimatnya sama dengan
-           * dashboard. Kalau modul itu sendiri gagal termuat, kita masih
-           * memberi tahu — jalur mundur sengaja terlihat, bukan diam.
+           * Say it plainly when the track map fails to load. The message is built
+           * by the shared module /assets/map-notice.js so the wording matches the
+           * dashboard. If that module itself fails to load, we still
+           * tell the user; the fallback path is deliberately visible, not silent.
            */
           function showMapFailure(containerId, sourceUrl, err) {
               const el = document.getElementById(containerId);
@@ -1656,7 +1656,7 @@ studio.get("/detail/:id", async (c) => {
               alert('Peta jejak tidak bisa dimuat. Angka aktivitas ini tetap aman dan tersimpan.');
           }
 
-          /** Bersihkan pesan lama begitu peta berhasil digambar. */
+          /** Clear the old message once the map draws successfully. */
           function clearMapFailure(containerId) {
               const el = document.getElementById(containerId);
               if (el && window.MapNotice && typeof window.MapNotice.clearMapNotice === 'function') {
@@ -1718,8 +1718,8 @@ studio.get("/detail/:id", async (c) => {
                       loadActivitySegments();
                       clearMapFailure('map');
                   } else {
-                      // Jejak tidak terbaca: kosong, terlalu pendek, atau fetch ke
-                      // penyimpanan gagal. Jangan biarkan peta kosong tanpa kata.
+                      // Track unreadable: empty, too short, or the fetch to
+                      // storage failed. Do not leave the map blank without a word.
                       showMapFailure('map', rawUrl, null);
                   }
               } catch (e) {
@@ -2782,7 +2782,7 @@ studio.get("/detail/:id", async (c) => {
 });
 
 // ==========================================
-// 2. VIDEO FLEXING (Satelit Sinematik FULL)
+// 2. VIDEO FLEXING (FULL Cinematic Satellite)
 // ==========================================
 studio.get("/video_flex/:id", async (c) => {
   const token = getCookie(c, "gaspool_session");
@@ -3392,12 +3392,12 @@ studio.get("/video_flex/:id", async (c) => {
         return [0, 0];
     }
 
-    // Khusus 2 orang: kiri-kanan agar BR dan MA pasti kelihatan.
+    // Exactly 2 people: left and right so BR and MA are always visible.
     if (count === 2) {
         return index === 0 ? [-34, 0] : [34, 0];
     }
 
-    // 3 orang ke atas: bentuk lingkaran kecil di sekitar titik utama.
+    // 3 people or more: a small circle around the main point.
     const radius = count <= 5 ? 34 : 42;
     const angle = -Math.PI / 2 + (Math.PI * 2 * index) / count;
 
@@ -3466,9 +3466,9 @@ function spreadPeletonMarkers(baseLatLng) {
           }
 
           /**
-           * Katakan apa adanya saat jejak untuk video gagal dimuat. Tombol yang
-           * berubah jadi "GAGAL DIMUAT" saja tidak memberi tahu sebabnya dan
-           * tidak menegaskan bahwa angka aktivitasnya tidak hilang.
+           * Say it plainly when the track for the video fails to load. A button that
+           * merely turns into "GAGAL DIMUAT" does not say why, and
+           * does not confirm that the activity numbers are not lost.
            */
           function showMapFailure(containerId, sourceUrl, err) {
               const el = document.getElementById(containerId);
@@ -3480,7 +3480,7 @@ function spreadPeletonMarkers(baseLatLng) {
               alert('Peta jejak tidak bisa dimuat. Angka aktivitas ini tetap aman dan tersimpan.');
           }
 
-          /** Bersihkan pesan lama begitu jejak berhasil dimuat. */
+          /** Clear the old message once the track loads successfully. */
           function clearMapFailure(containerId) {
               const el = document.getElementById(containerId);
               if (el && window.MapNotice && typeof window.MapNotice.clearMapNotice === 'function') {
@@ -3488,10 +3488,10 @@ function spreadPeletonMarkers(baseLatLng) {
               }
           }
 
-          // Pesan gagal di halaman ini menempel di lapisan kontrol (id=controls),
-          // BUKAN di dalam peta: lapisan kontrol menutupi seluruh layar dengan
-          // latar gelap (z-index 2000), jadi pesan yang ditaruh di peta tertimbun
-          // di bawahnya dan nyaris tidak terbaca.
+          // The failure message on this page sticks to the control layer (id=controls),
+          // NOT inside the map: the control layer covers the whole screen with a
+          // dark background (z-index 2000), so a message placed in the map is buried
+          // under it and is barely readable.
           const FAILURE_HOST = 'controls';
 
           async function loadRouteData() {
@@ -3712,8 +3712,8 @@ function spreadPeletonMarkers(baseLatLng) {
         );
     }
 
-    // Marker disebar berdasarkan pixel layar setelah map bergerak.
-    // Ini mencegah BR/MA/anggota lain saling menimpa.
+    // Markers are spread by screen pixel after the map moves.
+    // This stops BR/MA/other members from overlapping one another.
     spreadPeletonMarkers(lastPoint);
 
     document.getElementById('v-dist').innerText = (progress * totalDistTarget).toFixed(2);

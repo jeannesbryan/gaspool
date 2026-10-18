@@ -50,7 +50,7 @@ const getPublicProfile = (env: Bindings) => ({
 });
 
 // ==========================================
-// 1. DASHBOARD UTAMA (Pusat Komando PWA)
+// 1. MAIN DASHBOARD (PWA Command Centre)
 // ==========================================
 dashboard.get("/", async (c) => {
   const token = getCookie(c, "gaspool_session");
@@ -95,7 +95,7 @@ dashboard.get("/", async (c) => {
           .stat-value { font-size: 26px; font-weight: 900; color: var(--primary); margin: 5px 0; font-style: italic; }
           .stat-label { font-size: 9px; color: #94a3b8; font-weight: 900; letter-spacing: 1.5px; text-transform: uppercase; }
 
-          /* --- Milestone seumur hidup (kelipatan 1000 km) --- */
+          /* --- Lifetime milestones (multiples of 1000 km) --- */
           .milestone-card { background: var(--card); border: 1px solid rgba(255,255,255,0.08); border-radius: 20px; padding: 18px 16px; margin-bottom: 25px; backdrop-filter: blur(15px); position: relative; overflow: hidden; }
           .milestone-card::after { content: ''; position: absolute; top: 0; left: 0; width: 4px; height: 100%; background: var(--primary); }
           .milestone-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 12px; }
@@ -109,23 +109,23 @@ dashboard.get("/", async (c) => {
           .milestone-actions { margin-top: 14px; }
           .milestone-actions .btn { width: 100%; padding: 12px; font-size: 10px; background: var(--primary); }
 
-          /* Kartu yang dirender jadi PNG. Disimpan di luar layar supaya bisa
-              digambar html2canvas tanpa terlihat mengganggu. */
+          /* The card that is rendered to PNG. Kept off-screen so html2canvas
+              can draw it without it being visible and in the way. */
           .share-stage { position: fixed; left: -10000px; top: 0; pointer-events: none; }
-          /* Kartu dibagikan sebagai PNG TRANSPARAN supaya bisa ditempel di atas
-             foto sebelum diunggah ke media sosial. Karena itu latar kartunya
-             dibuat tembus pandang, dan supaya angkanya tetap terbaca di atas
-             foto apa pun (langit terang, aspal gelap) setiap teks diberi
-             bayangan tipis. Tanpa bayangan, angka oranye akan lenyap di foto
-             yang terang. */
+          /* The card is shared as a TRANSPARENT PNG so it can be placed over a
+             photo before being uploaded to social media. That is why the card
+             background is see-through, and, so that the numbers stay readable
+             over any photo (bright sky, dark asphalt), every text gets a soft
+             shadow. Without the shadow the orange numbers vanish on a bright
+             photo. */
           .share-card { width: 644px; background: transparent; padding: 22px; border-radius: 22px; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; }
           .share-card-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 18px; }
           .share-card-brand { font-size: 15px; font-weight: 900; letter-spacing: 4px; color: #ff5f00; text-shadow: 0 2px 8px rgba(0,0,0,0.85); }
           .share-card-tag { font-size: 11px; font-weight: 900; letter-spacing: 2px; color: #cbd5e1; text-transform: uppercase; text-shadow: 0 2px 8px rgba(0,0,0,0.85); }
           .share-card-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
-          /* Sel tetap punya latar tipis: kartu yang seluruhnya tembus pandang
-             akan menyulitkan angka dibaca di atas foto yang ramai. Kepekatan
-             0.55 membuat foto masih terlihat, tapi angkanya tetap menonjol. */
+          /* Each cell keeps a faint background: a fully transparent card makes
+             the numbers hard to read over a busy photo. An opacity of 0.55
+             keeps the photo visible while letting the numbers stand out. */
           .share-cell { position: relative; overflow: hidden; background: rgba(8,12,26,0.55); border: 1px solid rgba(255,255,255,0.22); border-radius: 16px; padding: 18px 14px; text-align: center; }
           .share-cell::after { content: ''; position: absolute; top: 0; left: 0; width: 4px; height: 100%; background: #ff5f00; }
           .share-cell-label { font-size: 10px; font-weight: 900; letter-spacing: 2px; color: #dbe3ee; text-transform: uppercase; text-shadow: 0 1px 6px rgba(0,0,0,0.9); }
@@ -513,7 +513,7 @@ dashboard.get("/", async (c) => {
             if (!val) { alert("Isi nama room dulu Kapten!"); return; }
             const room = val.replace(/[^A-Z0-9_]/ig, '').toUpperCase();
             const url = window.location.origin + '/record?type=ride&room=' + room;
-            // FIX: Hapus backtick
+            // FIX: remove the backtick
             const text = 'Ayo gabung Radar Peleton Gaspool!\\nRoom ID: *' + room + '*\\n\\nKlik link ini untuk join ikut merekam:\\n' + url;
             window.open('https://api.whatsapp.com/send?text=' + encodeURIComponent(text), '_blank');
           }
@@ -523,7 +523,7 @@ dashboard.get("/", async (c) => {
             if (!val) { alert("Isi nama room dulu Kapten!"); return; }
             const room = val.replace(/[^A-Z0-9_]/ig, '').toUpperCase();
             const url = window.location.origin + '/radar/' + room;
-            // FIX: Hapus backtick
+            // FIX: remove the backtick
             const text = 'Pantau pergerakan gowes Peleton secara live!\\nRoom: *' + room + '*\\n\\nBuka satelit radar di sini:\\n' + url;
             window.open('https://api.whatsapp.com/send?text=' + encodeURIComponent(text), '_blank');
           }
@@ -755,7 +755,7 @@ function escapeHTML(str) {
             });
           }
           
-          // ALAT PENERJEMAH SANDI STRAVA
+          // STRAVA PASSWORD DECODER TOOL
           function decodePolyline(str, precision = 5) {
               let index = 0, lat = 0, lng = 0, coordinates = [], shift = 0, result = 0, byte = null, factor = Math.pow(10, precision);
               while (index < str.length) {
@@ -1008,11 +1008,11 @@ function escapeHTML(str) {
           }
 
           /**
-           * Katakan apa adanya saat peta jejak gagal dimuat. Pesannya disusun
-           * modul bersama /assets/map-notice.js supaya dashboard dan halaman
-           * detail tidak punya dua versi kalimat. Kalau modul itu sendiri gagal
-           * termuat, kita MASIH memberi tahu — jalur mundur ini sengaja
-           * terlihat, bukan diam.
+           * Say it plainly when the track map fails to load. The message is built
+           * by the shared module /assets/map-notice.js so the dashboard and the detail
+           * page do not end up with two versions of the sentence. If that module itself fails
+           * to load, we STILL tell the user; this fallback path is deliberately
+           * visible, not silent.
            */
           function showMapFailure(containerId, rawUrl, err) {
             const el = document.getElementById(containerId);
@@ -1024,7 +1024,7 @@ function escapeHTML(str) {
             alert('Peta jejak tidak bisa dimuat. Angka aktivitas ini tetap aman dan tersimpan.');
           }
 
-          /** Bersihkan pesan lama begitu peta berhasil digambar. */
+          /** Clear the old message once the map draws successfully. */
           function clearMapFailure(containerId) {
             const el = document.getElementById(containerId);
             if (el && window.MapNotice && typeof window.MapNotice.clearMapNotice === 'function') {
@@ -1116,10 +1116,10 @@ function escapeHTML(str) {
               let routePayload = null;
               let urlStr = typeof url === 'string' ? url.trim() : '';
               
-              // 1. Hapus kutip ganda jika tersangkut dari Database
+              // 1. Strip stray double quotes that came from the Database
               if (urlStr.startsWith('"')) urlStr = urlStr.slice(1, -1).replace(/\\"/g, '"');
               
-              // 2. Deteksi format
+              // 2. Detect the format
               if (urlStr.startsWith('[') || urlStr.startsWith('{')) {
                   routePayload = JSON.parse(urlStr);
                   pts = routePayload;
@@ -1146,8 +1146,8 @@ function escapeHTML(str) {
                       modalMap.fitBounds(l.getBounds(), { padding: [25, 25] });
                   }, 100);
               } else {
-                  // Titiknya terbaca nol/terlalu pendek. Peta kosong tanpa
-                  // penjelasan tidak bisa dibedakan dari aplikasi yang rusak.
+                  // The points read as zero/too short. An empty map with
+                  // no explanation cannot be told apart from a broken app.
                   showMapFailure('map-modal', url, null);
               }
             } catch(e) {
@@ -1156,11 +1156,11 @@ function escapeHTML(str) {
             }
           }
           
-          // --- MILESTONE SEUMUR HIDUP (kelipatan 1000 km) ---
+          // --- LIFETIME MILESTONES (multiples of 1000 km) ---
           //
-          // Diambil dari /api/milestones, bukan dari angka di kartu statistik,
-          // karena kartu statistik itu mengikuti filter yang sedang aktif:
-          // begitu layar difilter ke bulan ini, angkanya bukan lagi seumur hidup.
+          // Taken from /api/milestones, not from the numbers on the stat cards,
+          // because those stat cards follow the filter currently active:
+          // once the screen is filtered to this month, the numbers are no longer lifetime.
           const MILESTONE_STEP_KM = 1000;
           let milestoneState = null;
 
@@ -1187,8 +1187,8 @@ function escapeHTML(str) {
               renderMilestone(data);
             } catch (err) {
               console.error(err);
-              // Kartu milestone bersifat tambahan: kalau gagal dimuat, dashboard
-              // tetap berguna tanpa bagian ini.
+              // The milestone card is an extra: if it fails to load, the dashboard
+              // is still useful without this section.
             }
           }
 
@@ -1218,9 +1218,9 @@ function escapeHTML(str) {
             if (!card) return;
             card.style.display = 'block';
 
-            // Badge menyebut pencapaian terakhir kalau sudah ada, dan menyebut
-            // target berikutnya kalau belum. Menulis "0 KM" akan terasa seperti
-            // kegagalan, padahal artinya baru mulai.
+            // The badge names the last achievement when there is one, and names
+            // the next target when there is not. Writing "0 KM" would feel like
+            // a failure, when it actually means just starting out.
             const badge = document.getElementById('milestoneBadge');
             if (badge) {
               badge.innerText = reachedCount > 0
@@ -1250,9 +1250,9 @@ function escapeHTML(str) {
             fillShareCard();
           }
 
-          // Isi kartu yang akan dirender jadi PNG. Dipisah dari renderMilestone
-          // supaya kartu selalu memakai angka terbaru, termasuk saat dibagikan
-          // lama setelah halaman dibuka.
+          // Fill the card that will be rendered to PNG. Split from renderMilestone
+          // so the card always uses the latest numbers, including when shared
+          // long after the page was opened.
           function fillShareCard() {
             if (!milestoneState) return;
 
@@ -1266,8 +1266,8 @@ function escapeHTML(str) {
             set('shareCardTime', String(milestoneState.movingHours));
             set('shareCardElev', formatKm(milestoneState.elevation, 0));
 
-            // Judul kartu menyebut milestone yang baru dicapai. Kalau belum ada,
-            // kartunya tetap jujur menyebut sedang menuju angka berapa.
+            // The card title names the milestone just reached. When there is none,
+            // the card still honestly says which number it is heading towards.
             set(
               'shareCardTag',
               milestoneState.reachedCount > 0
@@ -1292,9 +1292,9 @@ function escapeHTML(str) {
             try {
               fillShareCard();
               const canvas = await html2canvas(target, {
-                // null = tidak mengisi latar, sehingga PNG-nya benar-benar
-                // transparan dan bisa ditempel di atas foto. Kalau diisi warna,
-                // hasilnya kotak berwarna yang menutupi foto di belakangnya.
+                // null = no background fill, so the PNG is truly
+                // transparent and can be pasted over a photo. With a colour,
+                // the result is a coloured box covering the photo behind it.
                 backgroundColor: null,
                 scale: 2,
                 useCORS: true,
@@ -1305,8 +1305,8 @@ function escapeHTML(str) {
               const fileName = 'Gaspool_Milestone_' + Date.now() + '.png';
               const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
 
-              // Di ponsel, cara paling wajar membagikan gambar adalah lewat menu
-              // berbagi bawaan sistem — dari sana WhatsApp tinggal dipilih.
+              // On a phone, the most natural way to share an image is the system's
+              // built-in share sheet; from there WhatsApp is one tap away.
               const file = blob ? new File([blob], fileName, { type: 'image/png' }) : null;
               if (file && navigator.canShare && navigator.canShare({ files: [file] })) {
                 await navigator.share({
@@ -1315,8 +1315,8 @@ function escapeHTML(str) {
                   text: 'Pencapaian gowes saya di Gaspool'
                 });
               } else {
-                // Peramban tanpa berbagi berkas: unduh saja, pemakainya bisa
-                // mengirim sendiri.
+                // Browser without file sharing: just download it, the user can
+                // send it themselves.
                 const link = document.createElement('a');
                 link.download = fileName;
                 link.href = canvas.toDataURL('image/png');
@@ -1509,7 +1509,7 @@ let bunkerSyncRunning = false;
     }
 
 }
-          // Pantau jika HP tiba-tiba dapat sinyal dari mode Pesawat / No Service
+          // Watch for the phone suddenly getting a signal back after Airplane mode / No Service
           window.addEventListener('online', processBunker);
         </script>
       </body>
@@ -1522,7 +1522,7 @@ let bunkerSyncRunning = false;
 });
 
 // ==========================================
-// 2. FITUR: ROUTE PLAN BUILDER
+// 2. FEATURE: ROUTE PLAN BUILDER
 // ==========================================
 dashboard.get("/route_plan", async (c) => {
   const token = getCookie(c, "gaspool_session");
@@ -2483,7 +2483,7 @@ dashboard.get("/route_plan", async (c) => {
 });
 
 // ==========================================
-// 3. FITUR: ROUTE LIBRARY
+// 3. FEATURE: ROUTE LIBRARY
 // ==========================================
 dashboard.get("/routes", async (c) => {
   const token = getCookie(c, "gaspool_session");
@@ -3583,7 +3583,7 @@ dashboard.get("/route_import", async (c) => {
 });
 
 // ==========================================
-// 4. FITUR: HEATMAP OMNI-TRACKER
+// 4. FEATURE: HEATMAP OMNI-TRACKER
 // ==========================================
 dashboard.get("/heatmap", async (c) => {
   const token = getCookie(c, "gaspool_session");
@@ -3639,7 +3639,7 @@ dashboard.get("/heatmap", async (c) => {
            pesan hasilnya terlihat "penuh" padahal kehilangan beberapa aktivitas. -->
       <script src="/assets/map-notice.js"></script>
       <script>
-          // ALAT PENERJEMAH SANDI STRAVA
+          // STRAVA PASSWORD DECODER TOOL
           function decodePolyline(str, precision = 5) {
               let index = 0, lat = 0, lng = 0, coordinates = [], shift = 0, result = 0, byte = null, factor = Math.pow(10, precision);
               while (index < str.length) {
@@ -3691,9 +3691,9 @@ dashboard.get("/heatmap", async (c) => {
           L.tileLayer(tileUrl, { maxZoom: 19, crossOrigin: 'anonymous' }).addTo(map);
 
           /**
-           * Kegagalan sebagian di heatmap lebih menyesatkan daripada peta
-           * kosong: gambarnya tetap jadi, jadi tidak ada yang terlihat salah
-           * padahal beberapa aktivitas hilang. Hitung yang gagal, lalu ucapkan.
+           * A partial failure in the heatmap misleads more than an empty
+           * map: the image still renders, so nothing looks wrong
+           * while several activities are missing. Count the failures, then say it.
            */
           function showHeatmapFailure(total, failed, storageBlocked) {
               const el = document.getElementById('map');
@@ -3736,9 +3736,9 @@ dashboard.get("/heatmap", async (c) => {
                           }
                           
                           const coords = normalizeRoutePoints(pts);
-                          // Jejak yang terbaca tapi terlalu pendek untuk digambar
-                          // juga tidak akan pernah muncul di peta — itu pun
-                          // kegagalan yang harus dihitung, bukan cuma error fetch.
+                          // A track that reads fine but is too short to draw
+                          // will never appear on the map either; that is a
+                          // failure to count too, not just a fetch error.
                           if (coords.length <= 1) {
                               return { coords: null, storage: window.MapNotice ? window.MapNotice.isPublicStorageHost(urlStr) : false };
                           }
@@ -3788,7 +3788,7 @@ dashboard.get("/heatmap", async (c) => {
 });
 
 // ==========================================
-// 3. FITUR: CLIENT-SIDE GPX IMPORTER
+// 3. FEATURE: CLIENT-SIDE GPX IMPORTER
 // ==========================================
 dashboard.get("/gpx_import", async (c) => {
   const token = getCookie(c, "gaspool_session");
@@ -3858,7 +3858,7 @@ dashboard.get("/gpx_import", async (c) => {
                 let lastLat = null, lastLon = null, lastEle = null;
                 let startTime = null, endTime = null;
 
-                // EKSTRAK DATA: LAT, LON, ELEVASI, DAN WAKTU
+                // EXTRACT DATA: LAT, LON, ELEVATION, AND TIME
                 for(let i=0; i<trkpts.length; i++) {
                     const pt = trkpts[i];
                     const lat = parseFloat(pt.getAttribute("lat")); 
@@ -3890,7 +3890,7 @@ dashboard.get("/gpx_import", async (c) => {
                     lastLat = lat; lastLon = lon;
                 }
                 
-                // KALKULASI DURASI OTOMATIS DARI TAG <TIME>
+                // AUTOMATIC DURATION CALCULATION FROM THE <TIME> TAG
                 let duration = 0;
                 if(startTime && endTime) { duration = Math.floor((endTime - startTime) / 1000); }
 
@@ -3900,7 +3900,7 @@ dashboard.get("/gpx_import", async (c) => {
                 const nameNode = xml.querySelector("name"); 
                 const rideName = nameNode ? nameNode.textContent : "Import GPX " + new Date().toLocaleDateString('id-ID');
 
-                // --- PROSES CHUNKING KE API (SINKRON DENGAN BACKEND BARU) ---
+                // --- CHUNKING PROCESS TO THE API (IN SYNC WITH THE NEW BACKEND) ---
                 const CHUNK_SIZE = 500;
                 const totalChunks = Math.ceil(points.length / CHUNK_SIZE);
                 const rideUUID = "GPX_" + Date.now() + "_" + Math.floor(Math.random() * 1000);
@@ -3930,7 +3930,7 @@ dashboard.get("/gpx_import", async (c) => {
                     });
                     
                     if(!res.ok) { uploadSuccess = false; break; }
-                    // FIX: Hapus backtick
+                    // FIX: remove the backtick
                     btn.textContent = "🚀 MENGUNGGAH... (" + Math.round(((i+1)/totalChunks)*100) + "%)";
                 }
 
@@ -3955,7 +3955,7 @@ dashboard.get("/gpx_import", async (c) => {
 });
 
 // ==========================================
-// 4. FITUR: STRAVA SYNC (OAuth 2.0 FULL)
+// 4. FEATURE: STRAVA SYNC (OAuth 2.0 FULL)
 // ==========================================
 dashboard.get("/sync_strava", async (c) => {
   const token = getCookie(c, "gaspool_session");
@@ -4164,7 +4164,7 @@ dashboard.post("/sync_strava", async (c) => {
 });
 
 // ==========================================
-// 5. FITUR: PUBLIC TIMELINE (single-owner showcase)
+// 5. FEATURE: PUBLIC TIMELINE (single-owner showcase)
 // ==========================================
 dashboard.get("/:username", async (c, next) => {
   const username = normalizePublicProfileSlug(c.req.param("username"));
@@ -4436,7 +4436,7 @@ dashboard.get("/:username", async (c, next) => {
                 div.className = 'ride-card';
                 div.onclick = () => openPublicMapModal(r);
                 
-                // FIX: Hapus backtick, gunakan string concatenation murni
+                // FIX: remove the backtick, use plain string concatenation
                 div.innerHTML = '<div class="ride-icon">' + icon + '</div>' +
                                 '<div class="ride-info"><div class="ride-name">' + escapeHTML(r.name) + '</div>' +
                                 '<div class="ride-meta">' + parseFloat(r.distance).toFixed(2) + ' KM • ' + new Date(r.start_date).toLocaleDateString('id-ID') + '</div></div>' +

@@ -1,14 +1,14 @@
 /**
- * Test untuk jejak radar.
+ * Tests for the radar trail.
  *
- * Kenapa ada: jejak ini disimpan di dalam nilai KV milik peserta dan dikirim ke
- * halaman penonton, jadi kesalahan di sini terlihat langsung oleh orang lain —
- * polyline yang menyeberang laut karena koordinat rusak, atau jejak yang tumbuh
- * tanpa batas sampai nilai KV membengkak.
+ * Why this exists: the trail is stored inside each participant's KV value and
+ * sent to the viewer page, so a mistake here is seen directly by other people:
+ * a polyline crossing the ocean because of a bad coordinate, or a trail that
+ * keeps growing until the KV value bloats.
  *
  *   node tests/radar-trail.mjs
  *
- * Exit code 0 = semua assertion lewat.
+ * Exit code 0 = every assertion passed.
  */
 import {
   appendRadarTrailPoint,
@@ -26,7 +26,7 @@ const METER_IN_DEG_LAT = 180 / (Math.PI * 6371000);
 const BASE = { lat: -7.3685135, lng: 112.7113094 };
 const at = (meters, t) => ({ lat: BASE.lat + meters * METER_IN_DEG_LAT, lng: BASE.lng, t });
 
-// ------------------------------------------------------------- jarak
+// ---------------------------------------------------------- distance
 {
   check(
     "jarak antara dua titik dihitung wajar",
@@ -54,7 +54,7 @@ const at = (meters, t) => ({ lat: BASE.lat + meters * METER_IN_DEG_LAT, lng: BAS
   );
 }
 
-// ------------------------------------------------- diam tidak memanjangkan
+// ------------------------------------------ staying still does not extend it
 {
   let trail = appendRadarTrailPoint([], at(0, 1000));
   trail = appendRadarTrailPoint(trail, at(3, 2000)); // hanya bergoyang 3 m
@@ -72,7 +72,7 @@ const at = (meters, t) => ({ lat: BASE.lat + meters * METER_IN_DEG_LAT, lng: BAS
   );
 }
 
-// ------------------------------------------------------------ batas panjang
+// ------------------------------------------------------- length limit
 {
   let trail = [];
   for (let i = 0; i < RADAR_TRAIL_MAX_POINTS + 40; i++) {
@@ -91,7 +91,7 @@ const at = (meters, t) => ({ lat: BASE.lat + meters * METER_IN_DEG_LAT, lng: BAS
   );
 }
 
-// ------------------------------------------- nilai rusak tidak merusak peta
+// -------------------------------------- corrupt value does not break the map
 {
   const dirty = [
     null,
@@ -122,7 +122,7 @@ const at = (meters, t) => ({ lat: BASE.lat + meters * METER_IN_DEG_LAT, lng: BAS
   );
 }
 
-// ------------------------------------------- masukan rusak dari klien
+// ------------------------------------ corrupt input from the client
 {
   const trail = appendRadarTrailPoint([], { lat: "bukan angka", lng: null });
   check("titik baru yang tidak sah diabaikan", trail.length === 0, JSON.stringify(trail));

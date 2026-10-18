@@ -1,14 +1,14 @@
 /**
- * Test untuk public/assets/doctor-core.js — tabel segmen bersama.
+ * Test for public/assets/doctor-core.js, the shared segment table.
  *
- * Berkas ini menguji SATU berkas yang dipakai tiga tempat: halaman tracker,
- * modul server (src/api/activity-doctor-stats.ts), dan test ini. Itulah
- * intinya: aritmatika "bergerak" sudah dua kali disalin lalu diperbaiki hanya
- * di satu salinan, dan setiap kali itu terjadi, dua layar menampilkan dua
- * angka berbeda untuk gowes yang sama.
+ * This file tests ONE file that three places use: the tracker page, the server
+ * module (src/api/activity-doctor-stats.ts), and this test. That is the whole
+ * point: the "moving" arithmetic was copied twice and then fixed in only one
+ * copy, and every time that happened, two screens showed two different numbers
+ * for the same ride.
  *
- * Jalankan: node tests/doctor-core.mjs
- * Dengan data asli (opsional):
+ * Run: node tests/doctor-core.mjs
+ * With real data (optional):
  *   GASPOOL_REAL_GPX=~/Downloads/Gaspool_Route.gpx node tests/doctor-core.mjs
  */
 
@@ -31,14 +31,14 @@ const check = (name, passed, detail) => results.push({ name, passed: Boolean(pas
 const LAT_PER_M = 1 / 111320;
 const T0 = Date.parse("2026-09-24T11:00:00.000Z");
 
-/** Bangun titik sintetis: `plan` = daftar { seconds, metersPerSecond } per fase. */
+/** Build synthetic points: `plan` = list of { seconds, metersPerSecond } per phase. */
 function buildTrack(phases) {
   const points = [];
   let ms = 0;
   let lat = -7.372;
   for (const phase of phases) {
     if (phase.hold) {
-      // Diam di tempat dengan GPS mengembara (amplitudo meter).
+      // Standing still while GPS wanders (amplitude in metres).
       const base = lat;
       const amp = (phase.wanderMeters || 3) * LAT_PER_M;
       for (let i = 0; i < phase.seconds; i++) {
@@ -81,11 +81,11 @@ function buildTrack(phases) {
   check("haversine: titik yang sama = 0 m", getDistanceMeters(a, a) === 0);
 }
 
-// ------------------------------- regresi Math.floor: 2 Hz tidak kehilangan waktu
+// ------------------------------- Math.floor regression: 2 Hz loses no time
 {
-  // Rekaman lebih rapat dari 1 detik. Versi lama memakai Math.floor pada selisih
-  // detik, sehingga segmen ini menyumbang jarak tetapi NOL waktu — dan 45 menit
-  // menguap tanpa jejak.
+  // Recording closer than 1 second. The old version used Math.floor on the second
+  // difference, so these segments contributed distance but ZERO time, and 45
+  // minutes evaporated without a trace.
   const points = [];
   for (let i = 0; i < 200; i++) {
     points.push({
@@ -109,7 +109,7 @@ function buildTrack(phases) {
   );
 }
 
-// ------------------------------------ berhenti dibuktikan lewat radius, bukan gap
+// ------------------------------------ stopping proven by radius, not by a gap
 {
   const points = buildTrack([
     { seconds: 60, metersPerSecond: 5 },        // bergerak 300 m
@@ -132,18 +132,18 @@ function buildTrack(phases) {
     `mentah ${(all / 1000).toFixed(3)} km vs ditempuh ${(moved / 1000).toFixed(3)} km`,
   );
 
-  // Yang diuji di sini BUKAN "harus tepat 600 m".
+  // What is tested here is NOT "it must be exactly 600 m".
   //
-  // Jarak sebenarnya 2 x 300 m = 600 m. Angka yang keluar lebih kecil (~530 m)
-  // karena ada EFEK BATAS yang sudah menjadi sifat rancangan ini: titik mana pun
-  // yang dalam 60 detik berikutnya tidak berpindah lebih dari satu radius
-  // (33 m) ditandai "diam". Artinya sekitar satu radius di ekor gerakan sebelum
-  // berhenti, dan satu radius di awal gerakan sesudahnya, ikut terbuang.
+  // The real distance is 2 x 300 m = 600 m. The number that comes out is smaller
+  // (~530 m) because of a BOUNDARY EFFECT that is part of this design: any point
+  // that does not move more than one radius (33 m) within the next 60 seconds is
+  // marked "stationary". That means about one radius at the tail of the movement
+  // before the stop, and one radius at the start of the movement after it, is lost.
   //
-  // Efek itu disengaja dan sudah ada sebelum modul ini dipisah — menyeragamkan
-  // aritmatika TIDAK boleh mengubah perilakunya. Yang perlu dijaga di sini:
-  // modul bersama jauh lebih dekat ke kebenaran daripada menjumlahkan semua
-  // segmen (yang ikut menghitung ~400 m drift).
+  // The effect is deliberate and existed before this module was split out;
+  // unifying the arithmetic must NOT change its behaviour. What has to hold here:
+  // the shared module is far closer to the truth than summing every
+  // segment (which also counts ~400 m of drift).
   const naiveError = Math.abs(all - 600);
   const sharedError = Math.abs(moved - 600);
   check(
@@ -158,7 +158,7 @@ function buildTrack(phases) {
   );
 }
 
-// -------------------------------------- jarak dan waktu dari himpunan segmen SAMA
+// -------------------------------------- distance and time from the SAME segment set
 {
   const points = buildTrack([
     { seconds: 120, metersPerSecond: 6 },
@@ -179,7 +179,7 @@ function buildTrack(phases) {
     Math.abs(doctorMovingSeconds(points, "ride") - secondsFromSegments) < 1e-9,
   );
 
-  // Kecepatan rata-rata dari kedua angka itu harus masuk akal untuk pesepeda.
+  // The average speed from those two numbers has to be plausible for a cyclist.
   const avg = movedFromSegments / 1000 / (secondsFromSegments / 3600);
   check(
     "average speed dari pasangan angka itu wajar (15-30 km/h)",
@@ -188,7 +188,7 @@ function buildTrack(phases) {
   );
 }
 
-// ------------------------------------------------- tidak ada detik yang hilang
+// ------------------------------------------------- no second goes missing
 {
   const points = buildTrack([
     { seconds: 90, metersPerSecond: 4 },
@@ -232,7 +232,7 @@ function buildTrack(phases) {
   check("durasi minimum berhenti 60 s", DOCTOR_STOP_MIN_SECONDS === 60);
 }
 
-// -------------------------------------------------------------- kasus tepi
+// -------------------------------------------------------------- edge cases
 {
   check("titik kosong tidak meledak", buildDoctorSegments([], "ride").count === 0);
   check("satu titik tidak meledak", buildDoctorSegments([{ lat: 0, lng: 0 }], "ride").count === 0);
@@ -244,7 +244,7 @@ function buildTrack(phases) {
   );
 }
 
-// ------------------------------------------------------- data gowes sungguhan
+// -------------------------------------------------- real ride data
 const realPath = process.env.GASPOOL_REAL_GPX;
 if (realPath) {
   const raw = readFileSync(realPath, "utf8");
@@ -279,10 +279,10 @@ if (realPath) {
     `berhenti ${driftSeconds.toFixed(0)} s; regresi lama melaporkan 29,08 km/h`,
   );
 
-  // Bukti bahwa yang dibuang memang pesepeda yang diam, bukan gerakan sungguhan
-  // yang salah dibuang: kecepatan rata-rata di segmen "stopped" harus di bawah
-  // ambang auto-pause (2 km/h untuk sepeda). Kalau angka ini melampaui ambang,
-  // berarti ada gerakan nyata yang ikut terbuang dan itu bug.
+  // Proof that what is dropped really is a stationary rider, not real movement
+  // discarded by mistake: the average speed of the "stopped" segments must be
+  // below the auto-pause threshold (2 km/h for a bicycle). If that number crosses
+  // the threshold, real movement is being thrown away, and that is a bug.
   const stoppedMeters = seg.distanceM.filter((_, i) => seg.kind[i] === "stopped").reduce((a, b) => a + b, 0);
   const stoppedSpeedKmh = driftSeconds > 0 ? stoppedMeters / driftSeconds * 3.6 : 0;
   check(
