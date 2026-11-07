@@ -1200,6 +1200,60 @@ const main = async () => {
     "masih ada halaman peta yang bisa diam saat gagal",
   );
 
+  // --- B28: the consistency calendar is its own page, not the route heatmap --
+  const b28Anon = await get("/calendar", { redirect: "manual" });
+  check(
+    "B28 /calendar sends an anonymous visitor to the login page",
+    b28Anon.res.status === 302 && (b28Anon.res.headers.get("location") || "").includes("/login"),
+    `status ${b28Anon.res.status}, location ${b28Anon.res.headers.get("location")}`,
+  );
+
+  const b28 = await get("/calendar", { headers: { cookie: `gaspool_session=${token}` } });
+  const b28Html = b28.text;
+  check(
+    "B28 /calendar renders the consistency page",
+    b28.res.status === 200 && b28Html.includes("KONSISTENSI"),
+    `status ${b28.res.status}`,
+  );
+  check(
+    "B28 the page explains it is not the route heatmap",
+    b28Html.includes("Kalau mau lihat rutenya, buka Heatmap"),
+    "tanpa kalimat ini dua halaman berbeda terlihat seperti duplikat",
+  );
+  check(
+    "B28 the grid renders one column per week with seven cells each",
+    (b28Html.match(/class="col"/g) || []).length === 53 &&
+      (b28Html.match(/class="cell /g) || []).length >= 53 * 7,
+    `columns ${(b28Html.match(/class="col"/g) || []).length}, cells ${(b28Html.match(/class="cell /g) || []).length}`,
+  );
+  check(
+    "B28 every cell carries a date the browser can read",
+    (b28Html.match(/data-date="20[0-9]{2}-[0-9]{2}-[0-9]{2}"/g) || []).length >= 300,
+    "tanpa tanggal, tooltip tidak bisa mengabarkan isi kotak",
+  );
+  check(
+    "B28 the streak settles before the page is built",
+    /Streak Sekarang/.test(b28Html) && /(Belum ada|[0-9]+ hari)/.test(b28Html),
+    "kartu streak kosong atau berisi NaN",
+  );
+  check(
+    "B28 the page never renders NaN or undefined",
+    !/NaN|undefined/.test(b28Html),
+    "angka rusak bocor ke halaman",
+  );
+  check(
+    "B28 the grid does not date any cell after today",
+    (() => {
+      const dates = [...b28Html.matchAll(/data-date="(20[0-9]{2}-[0-9]{2}-[0-9]{2})"/g)].map((m) => m[1]);
+      const today = new Date().toISOString().slice(0, 10);
+      // Allow a day of slack: the Worker and the rider can be in different
+      // timezones, and the grid follows the rider.
+      const limit = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+      return dates.every((d) => d <= limit) && dates.length > 0 && today.length === 10;
+    })(),
+    "ada kotak bertanggal masa depan",
+  );
+
   // --- B6: delete_ride id validation -------------------------------------
   const badDelete = await get("/api/delete_ride/abc", {
     method: "DELETE",

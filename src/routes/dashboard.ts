@@ -3,6 +3,7 @@ import { getCookie, setCookie, deleteCookie } from "hono/cookie";
 import { verify } from "hono/jwt";
 import { Bindings } from "../index";
 import { FAVICON_LINKS } from "../favicon";
+import { buildConsistencyCalendar, formatStreak } from "../consistency-calendar";
 
 const dashboard = new Hono<{ Bindings: Bindings }>();
 const DEFAULT_PUBLIC_PROFILE_SLUG = "rider";
@@ -247,7 +248,8 @@ dashboard.get("/", async (c) => {
             <button class="btn btn-orange" style="grid-column: span 2;" onclick="openModal('runModal')">🏃 PACE MODE</button>
             <button class="btn btn-outline" onclick="window.location.href='/sync_strava'">🧡 STRAVA SYNC</button>
             <button class="btn btn-outline" onclick="window.location.href='/gpx_import'">📥 GPX IMPORT</button>
-            <button class="btn btn-outline" style="grid-column: span 2;" onclick="window.location.href='/heatmap'">🔥 HEATMAP</button>
+            <button class="btn btn-outline" onclick="window.location.href='/heatmap'">🔥 HEATMAP</button>
+            <button class="btn btn-outline" style="border-color: #2ecc71; color: #2ecc71;" onclick="window.location.href='/calendar'">📅 KONSISTENSI</button>
           </div>
 
           <div class="stats-grid">
@@ -4182,9 +4184,13 @@ dashboard.get("/:username", async (c, next) => {
     "route_plan",
     "route_import",
     "heatmap",
+    "calendar",
     "gpx_import",
     "sync_strava",
   ];
+  // Without this entry /calendar would be treated as a public profile slug and
+  // answered with "Satelit tidak menemukan agen ini" (404), because this
+  // wildcard route is registered before the calendar page.
   if (reserved.includes(username)) return next();
   if (username !== publicProfile.slug)
     return c.text("Satelit tidak menemukan agen ini.", 404);
@@ -4455,6 +4461,182 @@ dashboard.get("/:username", async (c, next) => {
     `);
   } catch (err) {
     return c.text("Gagal memuat timeline.", 500);
+  }
+});
+
+/**
+ * Consistency calendar: one cell per day, GitHub contribution style.
+ *
+ * This is deliberately not the /heatmap page. /heatmap draws the polylines on a
+ * map and answers "where do I ride"; this answers "how often, and did I keep
+ * going". The existing page is a MapLibre view that needs network tiles, so it
+ * is useless for judging consistency.
+ *
+ * Rendered on the server with no client-side fetch, because the whole grid is
+ * a few hundred spans. Pulling it through an API would add a loading state, a
+ * failure mode, and code that has to be kept in sync for no benefit.
+ */
+dashboard.get("/calendar", async (c) => {
+  const token = getCookie(c, "gaspool_session");
+  if (!token) return c.redirect("/login");
+
+  try {
+    const { results } = await c.env.DB.prepare(
+      "SELECT start_date, distance FROM rides WHERE start_date IS NOT NULL",
+    ).all();
+
+    // The offset is a query parameter so the grid can follow the rider's clock
+    // rather than the Worker's. Defaults to WIB, where this instance is used.
+    const offsetParam = Number(c.req.query("tz"));
+    const offset =
+      Number.isFinite(offsetParam) && Math.abs(offsetParam) <= 840 ? offsetParam : 420;
+
+    const { weeks, stats, level_thresholds_km } = buildConsistencyCalendar(
+      (results || []) as any[],
+      { utc_offset_minutes: offset },
+    );
+
+    const monthNames = ["JAN", "FEB", "MAR", "APR", "MEI", "JUN", "JUL", "AGU", "SEP", "OKT", "NOV", "DES"];
+
+    // Month labels above the grid. A label is placed on the first week whose
+    // Sunday falls in a new month, which keeps them roughly aligned to the
+    // month boundaries without overlapping when months are short.
+    let lastMonth = -1;
+    const monthLabels = weeks.map((week) => {
+      const month = Number(week.week_start.slice(5, 7)) - 1;
+      if (month !== lastMonth && weeks.indexOf(week) > 0) {
+        lastMonth = month;
+        return monthNames[month] || "";
+      }
+      if (weeks.indexOf(week) === 0) {
+        lastMonth = month;
+        return monthNames[month] || "";
+      }
+      return "";
+    });
+
+    const grid = weeks
+      .map(
+        (week) =>
+          `<div class="col">${week.cells
+            .map((cell) => {
+              if (!cell) return `<span class="cell blank"></span>`;
+              const label = cell.ride_count
+                ? `${cell.date}: ${cell.distance_km.toFixed(2)} km (${cell.ride_count} ride)`
+                : `${cell.date}: tidak gowes`;
+              return `<span class="cell lvl-${cell.level}" title="${escapeHTML(label)}" data-date="${cell.date}"></span>`;
+            })
+            .join("")}</div>`,
+      )
+      .join("");
+
+    const legend = level_thresholds_km
+      .map((km, i) => `<span class="cell lvl-${i + 1}"></span><span class="lg-label">${km}+</span>`)
+      .join("");
+
+    const statCards = [
+      { label: "Streak Sekarang", value: formatStreak(stats.current_streak), tone: "hot" },
+      { label: "Streak Terpanjang", value: formatStreak(stats.longest_streak), tone: "gold" },
+      { label: "Hari Aktif", value: `${stats.active_days}`, tone: "green" },
+      { label: "Total", value: `${stats.total_km.toFixed(1)} km`, tone: "blue" },
+    ]
+      .map(
+        (s) => `
+          <div class="stat ${s.tone}">
+            <div class="stat-value">${escapeHTML(s.value)}</div>
+            <div class="stat-label">${escapeHTML(s.label)}</div>
+          </div>`,
+      )
+      .join("");
+
+    return c.html(`
+      <!DOCTYPE html>
+      <html lang="id">
+      <head>
+        ${FAVICON_LINKS}
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Konsistensi - Gaspool</title>
+        <style>
+          :root { --primary: #FF5F00; --bg: #0a0a12; --card: rgba(255,255,255,0.06); --line: rgba(255,255,255,0.1); --muted: #94a3b8; --gold: #f1c40f; --green: #2ecc71; --blue: #3498db; }
+          * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+          body { margin: 0; min-height: 100vh; background: var(--bg); background-image: radial-gradient(circle at 50% 0%, rgba(46,204,113,0.16) 0%, #0a0a12 70%); color: #fff; font-family: 'Inter', sans-serif; padding: 18px; }
+          .wrap { max-width: 900px; margin: 0 auto; }
+          .topbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 6px; }
+          h1 { margin: 0; color: var(--green); font-style: italic; font-size: 1.8rem; font-weight: 950; letter-spacing: -1px; }
+          .back { color: #fff; text-decoration: none; border: 1px solid var(--line); background: var(--card); border-radius: 12px; padding: 12px 14px; font-weight: 900; font-size: 0.76rem; white-space: nowrap; }
+          .subtitle { color: var(--muted); font-size: 0.74rem; font-weight: 800; margin: 6px 0 18px; line-height: 1.5; }
+          .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 18px; }
+          .stat { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 14px 12px; box-shadow: 0 14px 35px rgba(0,0,0,0.22); }
+          .stat-value { font-size: 1.15rem; font-weight: 950; font-style: italic; letter-spacing: -0.5px; }
+          .stat-label { color: var(--muted); font-size: 0.6rem; font-weight: 900; text-transform: uppercase; letter-spacing: 0.7px; margin-top: 5px; }
+          .stat.hot .stat-value { color: var(--primary); }
+          .stat.gold .stat-value { color: var(--gold); }
+          .stat.green .stat-value { color: var(--green); }
+          .stat.blue .stat-value { color: var(--blue); }
+          .card { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 16px; box-shadow: 0 14px 35px rgba(0,0,0,0.22); }
+          .card-title { font-size: 0.66rem; font-weight: 950; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin-bottom: 12px; }
+          .grid-scroll { overflow-x: auto; overflow-y: hidden; padding-bottom: 6px; }
+          .months { display: grid; grid-auto-flow: column; gap: 3px; margin-left: 26px; margin-bottom: 4px; }
+          .months span { font-size: 0.52rem; font-weight: 900; color: var(--muted); letter-spacing: 0.5px; height: 12px; }
+          .cal { display: flex; gap: 3px; }
+          .daylabels { display: grid; grid-template-rows: repeat(7, 12px); gap: 3px; margin-right: 6px; }
+          .daylabels span { font-size: 0.5rem; font-weight: 900; color: var(--muted); line-height: 12px; }
+          .col { display: grid; grid-template-rows: repeat(7, 12px); gap: 3px; }
+          .cell { width: 12px; height: 12px; border-radius: 3px; background: rgba(255,255,255,0.055); display: block; }
+          .cell.blank { background: transparent; }
+          .cell.lvl-1 { background: rgba(46,204,113,0.30); }
+          .cell.lvl-2 { background: rgba(46,204,113,0.52); }
+          .cell.lvl-3 { background: rgba(46,204,113,0.76); }
+          .cell.lvl-4 { background: #2ecc71; box-shadow: 0 0 8px rgba(46,204,113,0.55); }
+          .legend { display: flex; align-items: center; gap: 5px; margin-top: 14px; flex-wrap: wrap; }
+          .legend .lg-label { font-size: 0.55rem; font-weight: 900; color: var(--muted); margin-right: 4px; }
+          .legend-title { font-size: 0.55rem; font-weight: 900; color: var(--muted); text-transform: uppercase; letter-spacing: 0.7px; margin-right: 6px; }
+          .footnote { color: var(--muted); font-size: 0.66rem; font-weight: 800; margin-top: 14px; line-height: 1.6; }
+          @media (max-width: 620px) {
+            .stats { grid-template-columns: repeat(2, 1fr); }
+            h1 { font-size: 1.4rem; }
+            body { padding: 14px; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="wrap">
+          <div class="topbar">
+            <h1>KONSISTENSI</h1>
+            <a class="back" href="/dashboard">&larr; DASHBOARD</a>
+          </div>
+          <div class="subtitle">Satu kotak untuk satu hari. Makin terang, makin jauh jarak hari itu. Kalau mau lihat rutenya, buka Heatmap.</div>
+
+          <div class="stats">${statCards}</div>
+
+          <div class="card">
+            <div class="card-title">SETAHUN TERAKHIR &middot; ${stats.active_weeks} minggu aktif dari ${weeks.length}</div>
+            <div class="grid-scroll">
+              <div class="months">${monthLabels.map((l) => `<span>${l}</span>`).join("")}</div>
+              <div class="cal">
+                <div class="daylabels"><span></span><span>SEN</span><span></span><span>RAB</span><span></span><span>JUM</span><span></span></div>
+                ${grid}
+              </div>
+            </div>
+            <div class="legend">
+              <span class="legend-title">Jarak per hari</span>
+              <span class="cell"></span><span class="lg-label">kosong</span>
+              ${legend}
+            </div>
+          </div>
+
+          <div class="footnote">
+            Hari aktif: ${stats.active_days} dari ${stats.tracked_days} hari.
+            Rata-rata ${stats.average_active_day_km.toFixed(1)} km per hari aktif, terjauh ${stats.max_day_km.toFixed(1)} km dalam sehari.
+            Streak dihitung dari hari ini mundur; kalau hari ini belum gowes, hitungan mulai dari kemarin.
+          </div>
+        </div>
+      </body>
+      </html>
+    `);
+  } catch (err) {
+    return c.text("Gagal memuat kalender konsistensi.", 500);
   }
 });
 
